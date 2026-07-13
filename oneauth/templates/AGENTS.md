@@ -24,7 +24,7 @@ Owns page structure and presentation. Route behavior and template context are ow
 
 - **Application shell** — Shared metadata, navigation, static design links, content slot, and footer. Start: `base.html`.
 - **Admin login** — Renders credential input and authentication errors. Start: `login.html`. Files: `base.html`.
-- **User management** — Lists target states and provides create/edit/password/status/delete/retry controls. Start: `users.html`. Files: `user_form.html`, `base.html`.
+- **User lifecycle management** — Lists target and retry states and provides create/edit/password/status/soft-delete/restore/purge/manual-retry controls. Start: `users.html`. Files: `user_form.html`, `base.html`.
 - **Target dashboard** — Shows connector reachability and the user sync matrix. Start: `status.html`. Files: `base.html`.
 - **Audit history** — Shows administrative and synchronization events. Start: `audit.html`. Files: `base.html`.
 

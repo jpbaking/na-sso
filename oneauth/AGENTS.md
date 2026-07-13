@@ -14,6 +14,8 @@ Owns the Python application package, persistence model, routes, synchronization,
 - Configuration comes from `ONEAUTH_*` settings, normally supplied through `.config/.env`; never commit live credentials.
 - Plaintext managed-user passwords are never persisted. Pending propagation secrets are Fernet-encrypted and cleared only after all enabled targets succeed.
 - User changes fan out through `sync.py`; each target result must update `SyncState` and produce an audit event.
+- Failed target operations persist attempt and retry timing metadata; the single-process recovery worker replays the user's persisted desired action.
+- Deletion is soft locally: remote deletion completion sets `deleted_at`; only an explicit, guarded purge removes the row. Restore requires a new password.
 - SQLite access goes through `db.py`; schema entities live in `models.py`.
 
 ## Verification
@@ -25,8 +27,8 @@ Owns the Python application package, persistence model, routes, synchronization,
 
 - **Application startup** — Initializes the database, bootstraps the admin account, mounts static assets, and registers routers. Start: `main.py`. Files: `config.py`, `db.py`, `models.py`.
 - **Admin authentication** — Provides signed-cookie login/logout and bcrypt password verification. Start: `auth.py`. Files: `security.py`, `models.py`. Detail in `./templates`.
-- **Managed-user administration** — Creates, updates, disables, deletes, and retries managed accounts while maintaining pending target states. Start: `users.py`. Files: `models.py`, `security.py`, `sync.py`. Detail in `./templates` and `./connectors`.
-- **Synchronization** — Fans user operations out to enabled connectors, persists target results, and clears pending secrets after complete success. Start: `sync.py`. Files: `models.py`, `audit.py`. Detail in `./connectors`.
+- **Managed-user lifecycle** — Creates, updates, disables, soft-deletes, restores, explicitly purges, and retries managed accounts. Start: `users.py`. Files: `models.py`, `security.py`, `sync.py`. Detail in `./templates` and `./connectors`.
+- **Synchronization and recovery** — Fans desired operations out to enabled connectors, persists capped retry schedules, automatically replays due failures, and clears pending secrets after complete success. Start: `sync.py`. Files: `models.py`, `audit.py`. Detail in `./connectors`.
 - **Target status dashboard** — Probes enabled targets and displays the user-by-target state matrix. Start: `status.py`. Files: `models.py`. Detail in `./templates` and `./connectors`.
 - **Audit trail** — Records administrative and connector actions and serves the audit page. Start: `audit.py`. Files: `models.py`. Detail in `./templates`.
 - **Mock target demo** — Emulates all three target APIs so the real application and connectors can demonstrate complete workflows without external systems. Start: `mock_targets/app.py`. Detail in `./mock_targets`.

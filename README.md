@@ -10,9 +10,10 @@ target's user-management API and records the result independently.
 - Provides a session-protected admin UI for creating, editing, disabling, and
   deleting managed users.
 - Generates passwords or accepts operator-supplied passwords.
-- Propagates user changes to every enabled target in a background task.
+- Propagates user changes to every enabled target and automatically retries failures.
 - Shows per-user, per-target pending, successful, and failed states.
-- Supports retrying one failed target without repeating successful targets.
+- Persists capped exponential-backoff schedules across application restarts and also supports immediate manual retry.
+- Soft-deletes users locally after remote deletion, with restore and explicit purge controls.
 - Records admin actions and connector results in an audit log.
 
 The SQLite database stores admin passwords as bcrypt hashes. A managed user's
@@ -83,9 +84,10 @@ SQLite database on the `oneauth-data` volume. Connector implementations use
 - Nexus Repository: `/service/rest/v1/security/users/*`
 - Nextcloud: `/ocs/v1.php/cloud/users/*`
 
-Operations run after the HTTP response as FastAPI background tasks. This is
-suited to a single application process. For higher availability or multiple
-workers, move propagation jobs to a durable external queue before scaling out.
+Initial operations run after the HTTP response as FastAPI background tasks. A
+single in-process recovery worker scans persisted retry schedules and replays
+due target operations. This is suited to one application process; use a
+distributed lock and durable external queue before scaling to multiple workers.
 
 ## Configuration
 
@@ -103,6 +105,9 @@ Core variables:
 | `ONEAUTH_ADMIN_USERNAME` | Local One Auth administrator username. |
 | `ONEAUTH_ADMIN_BOOTSTRAP_PASSWORD` | Creates the initial admin when the database has no admin. Changing it later does not rotate an existing account. |
 | `ONEAUTH_DATABASE_PATH` | SQLite path; `/data/oneauth.db` is correct for Compose. |
+| `ONEAUTH_RETRY_SCAN_SECONDS` | Frequency of the single-process recovery scan; default `5`. |
+| `ONEAUTH_RETRY_BASE_SECONDS` | First automatic retry delay; default `5`. |
+| `ONEAUTH_RETRY_MAX_SECONDS` | Cap for exponential retry delay; default `300`. |
 
 Target variables:
 
@@ -170,8 +175,12 @@ check **Targets** before creating users. A normal operator flow is:
 4. Inspect a failed cell's detail and use **Retry** after fixing the target.
 5. Review **Audit** for the admin action and connector result.
 
-Deleting a managed user deletes that account on every enabled target. If any
-target fails, the local record remains so the operation can be retried.
+Deleting a managed user marks it for deletion and deletes the account on every
+enabled target. Failures retry automatically with capped exponential backoff;
+the UI also offers immediate target retry. The local record remains after all
+targets succeed as a soft-deleted audit record. Restore requires a new password
+and reprovisions all enabled targets. Permanent local removal requires the
+explicit **Purge** action, available only after remote deletion completes.
 
 To stop the service while preserving the database:
 

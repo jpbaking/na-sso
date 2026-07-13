@@ -293,9 +293,14 @@ def test_application_demo_workflow_with_failure_and_retry(
         status_page = client.get("/status")
         assert "demo_user" in status_page.text and "failed" in status_page.text
 
-        assert client.post(
-            f"/users/{user_id}/retry/nexus", follow_redirects=False
-        ).status_code == 303
+        with db.get_session() as session:
+            user = session.get(ManagedUser, user_id)
+            nexus_state = next(item for item in user.sync_states if item.target == "nexus")
+            nexus_state.next_retry_at = nexus_state.next_retry_at.replace(year=2000)
+            session.commit()
+        import asyncio
+        from oneauth.sync import retry_due
+        assert asyncio.run(retry_due()) == 1
         with db.get_session() as session:
             user = session.get(ManagedUser, user_id)
             assert user.pending_secret is None
@@ -325,7 +330,7 @@ def test_application_demo_workflow_with_failure_and_retry(
         audit_page = client.get("/audit")
         assert all(
             event in audit_page.text
-            for event in ("user.create", "user.update", "sync.retry", "user.delete")
+            for event in ("user.create", "user.update", "auto-retry", "user.delete")
         )
 
     config.get_settings.cache_clear()
