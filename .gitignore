@@ -1,1 +1,6 @@
 .tmp-agent-scratch/
+.venv/
+data/
+__pycache__/
+*.egg-info/
+.config/.env

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block nav %}
+<!-- the page's ONE amber element -->
+<li><a href="/users" class="nav-link active">Users</a></li>
+<li><a href="/status" class="nav-link">Targets</a></li>
+<li><a href="/audit" class="nav-link">Audit</a></li>
+{% endblock %}
+{% block content %}
+<section class="section container">
+  <div class="section-head">
+    <div class="section-kicker">// Managed accounts</div>
+    <h1 class="section-title">Users</h1>
+    <a class="section-all" href="/users/new">Add user</a>
+  </div>
+  {% if users %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Username</th><th>Name</th><th>Status</th>
+          <th>OPNsense</th><th>Nexus</th><th>Nextcloud</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        {% set states = {} %}
+        {% for s in u.sync_states %}{% if states.update({s.target: s}) %}{% endif %}{% endfor %}
+        <tr>
+          <td><a href="/users/{{ u.id }}">{{ u.username }}</a></td>
+          <td>{{ u.display_name or "—" }}</td>
+          <td>
+            {% if u.status == "active" %}<span class="badge badge-live">active</span>
+            {% else %}<span class="badge badge-danger">disabled</span>{% endif %}
+          </td>
+          {% for t in ["opnsense", "nexus", "nextcloud"] %}
+          {% set s = states.get(t) %}
+          <td>
+            {% if s and s.state == "ok" %}<span class="badge badge-shipped">ok</span>
+            {% elif s and s.state == "failed" %}
+            <span class="badge badge-danger" title="{{ s.detail }}">failed</span>
+            <form method="post" action="/users/{{ u.id }}/retry/{{ t }}">
+              <button type="submit" class="btn btn-quiet btn-sm">Retry</button>
+            </form>
+            {% else %}<span class="badge badge-planned">pending</span>{% endif %}
+          </td>
+          {% endfor %}
+          <td>
+            <form method="post" action="/users/{{ u.id }}/delete"
+                  onsubmit="return confirm('Delete {{ u.username }} everywhere?')">
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-info">
+    <div class="alert-title">No users yet</div>
+    Create the first managed account and it will be provisioned to every enabled target.
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

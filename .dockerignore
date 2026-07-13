@@ -1,0 +1,6 @@
+.venv
+data
+.git
+.tmp-agent-scratch
+tests
+__pycache__

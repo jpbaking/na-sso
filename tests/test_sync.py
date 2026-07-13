@@ -1,0 +1,165 @@
+from oneauth.connectors.base import Connector, SyncResult
+from oneauth.models import ManagedUser
+from oneauth.security import encrypt_secret
+
+
+class StubConnector(Connector):
+    def __init__(self, name: str, ok: bool = True):
+        self.name = name
+        self.ok = ok
+        self.calls = []
+
+    async def ensure_user(self, user, password):
+        self.calls.append(("ensure", user.username, password))
+        return SyncResult(self.ok, "saved" if self.ok else "offline")
+
+    async def disable_user(self, user):
+        self.calls.append(("disable", user.username))
+        return SyncResult(self.ok, "disabled" if self.ok else "offline")
+
+    async def delete_user(self, user):
+        self.calls.append(("delete", user.username))
+        return SyncResult(self.ok, "deleted" if self.ok else "offline")
+
+    async def probe(self):
+        return SyncResult(self.ok)
+
+
+def _stored_user():
+    from oneauth.db import get_session
+
+    with get_session() as db:
+        user = ManagedUser(
+            username="syncme",
+            display_name="Sync Me",
+            email="sync@example.test",
+            pending_secret=encrypt_secret("secret-42"),
+        )
+        db.add(user)
+        db.commit()
+        return user.id
+
+
+async def test_sync_success_clears_pending_secret(client, monkeypatch):
+    first = StubConnector("opnsense")
+    second = StubConnector("nexus")
+    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [first, second])
+    user_id = _stored_user()
+
+    from oneauth.sync import sync_user
+
+    await sync_user(user_id)
+
+    from oneauth.db import get_session
+
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        assert user.pending_secret is None
+        assert {state.target: state.state for state in user.sync_states} == {
+            "opnsense": "ok",
+            "nexus": "ok",
+        }
+    assert first.calls == [("ensure", "syncme", "secret-42")]
+
+
+async def test_sync_partial_failure_keeps_secret_and_retry_succeeds(client, monkeypatch):
+    good = StubConnector("opnsense")
+    flaky = StubConnector("nexus", ok=False)
+    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [good, flaky])
+    user_id = _stored_user()
+
+    from oneauth.sync import sync_user
+
+    await sync_user(user_id)
+    from oneauth.db import get_session
+
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        assert user.pending_secret is not None
+        assert {state.target: state.state for state in user.sync_states} == {
+            "opnsense": "ok",
+            "nexus": "failed",
+        }
+
+    flaky.ok = True
+    await sync_user(user_id, target="nexus")
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        assert user.pending_secret is None
+        assert all(state.state == "ok" for state in user.sync_states)
+
+
+async def test_sync_disable_and_delete(client, monkeypatch):
+    connector = StubConnector("nextcloud")
+    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [connector])
+    user_id = _stored_user()
+    from oneauth.db import get_session
+
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        user.status = "disabled"
+        db.commit()
+
+    from oneauth.sync import sync_user
+
+    await sync_user(user_id)
+    assert connector.calls[-1] == ("disable", "syncme")
+    await sync_user(user_id, action="delete")
+    with get_session() as db:
+        assert db.get(ManagedUser, user_id) is None
+    assert connector.calls[-1] == ("delete", "syncme")
+
+
+def test_retry_endpoint_runs_only_selected_target(admin_client, monkeypatch):
+    first = StubConnector("opnsense")
+    second = StubConnector("nexus")
+    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [first, second])
+    user_id = _stored_user()
+
+    response = admin_client.post(
+        f"/users/{user_id}/retry/nexus", follow_redirects=False
+    )
+
+    assert response.status_code == 303
+    assert first.calls == []
+    assert second.calls == [("ensure", "syncme", "secret-42")]
+
+
+def test_status_dashboard_reflects_sync_state(admin_client):
+    user_id = _stored_user()
+    from oneauth.db import get_session
+    from oneauth.models import SyncState
+
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        db.add(SyncState(user=user, target="nexus", state="failed", detail="offline"))
+        db.commit()
+
+    response = admin_client.get("/status")
+
+    assert response.status_code == 200
+    assert "syncme" in response.text
+    assert "failed" in response.text and "offline" in response.text
+
+
+def test_audit_page_lists_admin_and_sync_events(admin_client, monkeypatch):
+    connector = StubConnector("opnsense")
+    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [connector])
+
+    response = admin_client.post(
+        "/users/new",
+        data={
+            "username": "audited",
+            "display_name": "Audit User",
+            "email": "audit@example.test",
+            "password": "secret-12345",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+
+    response = admin_client.get("/audit")
+    assert response.status_code == 200
+    assert "user.create" in response.text
+    assert "sync.ensure" in response.text
+    assert "audited" in response.text

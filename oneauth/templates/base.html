@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}One Auth{% endblock %} — One Auth (Non-SSO)</title>
+  <meta name="description" content="Centralised local accounts, propagated to OPNsense, Nexus and Nextcloud.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/design/styles.css">
+  <link rel="stylesheet" href="/design/components.css">
+</head>
+<body>
+
+<header class="nav-wrap">
+  <nav class="nav container" aria-label="Main navigation">
+    <a href="/users" class="brand" aria-label="One Auth — home">
+      <img src="/design/assets/logo-mark.svg" alt="">
+      <span class="brand-name">One Auth</span>
+    </a>
+    <ul class="nav-links" role="list">
+      {% block nav %}{% endblock %}
+      {% if admin %}
+      <li>
+        <form method="post" action="/logout">
+          <button type="submit" class="btn btn-quiet btn-sm">Sign out</button>
+        </form>
+      </li>
+      {% endif %}
+    </ul>
+  </nav>
+</header>
+
+<main>
+{% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+  <div class="footer-inner container">
+    <div class="foot-brand">One Auth (Non-SSO)</div>
+    <div class="foot-copy">Accounts are provisioned to each target over its API.</div>
+  </div>
+</footer>
+
+</body>
+</html>

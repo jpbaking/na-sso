@@ -1,0 +1,20 @@
+services:
+  # BUILDER: produces the local image; never runs.
+  oneauth-builder:
+    profiles: ["build"]
+    build:
+      context: .
+    image: oneauth:local
+
+  # RUNTIME: consumes the built image.
+  oneauth:
+    image: oneauth:local
+    restart: unless-stopped
+    env_file: .config/.env
+    ports:
+      - "8000:8000"
+    volumes:
+      - oneauth-data:/data
+
+volumes:
+  oneauth-data:

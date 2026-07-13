@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ user.username if user else "New user" }}{% endblock %}
+{% block nav %}
+<!-- the page's ONE amber element -->
+<li><a href="/users" class="nav-link active">Users</a></li>
+<li><a href="/status" class="nav-link">Targets</a></li>
+<li><a href="/audit" class="nav-link">Audit</a></li>
+{% endblock %}
+{% block content %}
+<section class="section container-narrow">
+  <div class="section-head">
+    <div class="section-kicker">// {{ "Edit account" if user else "New account" }}</div>
+    <h1 class="section-title">{{ user.username if user else "Add user" }}</h1>
+  </div>
+  {% if error %}
+  <div class="alert alert-danger"><div class="alert-title">Not saved</div>{{ error }}</div>
+  {% endif %}
+  <form method="post" action="{{ '/users/' ~ user.id if user else '/users/new' }}" class="stack-3">
+    {% if not user %}
+    <div class="field">
+      <label class="label" for="username">Username</label>
+      <input class="input" id="username" name="username" required>
+      <div class="field-hint">Lowercase letters, digits and underscores. Used on every target.</div>
+    </div>
+    {% endif %}
+    <div class="field">
+      <label class="label" for="display_name">Display name</label>
+      <input class="input" id="display_name" name="display_name"
+             value="{{ user.display_name if user else '' }}">
+    </div>
+    <div class="field">
+      <label class="label" for="email">Email</label>
+      <input class="input" id="email" name="email" type="email"
+             value="{{ user.email if user else '' }}">
+    </div>
+    <div class="field">
+      <label class="label" for="password">{{ "New password (leave blank to keep)" if user else "Password" }}</label>
+      <input class="input" id="password" name="password"
+             value="{{ '' if user else suggested }}" {{ '' if user else 'required' }}>
+      <div class="field-hint">Suggested: <span class="mono-label">{{ suggested }}</span></div>
+    </div>
+    {% if user %}
+    <div class="field">
+      <label class="label" for="status">Status</label>
+      <select class="select" id="status" name="status">
+        <option value="active" {{ "selected" if user.status == "active" else "" }}>active</option>
+        <option value="disabled" {{ "selected" if user.status == "disabled" else "" }}>disabled</option>
+      </select>
+    </div>
+    {% endif %}
+    <div class="hero-actions">
+      <button type="submit" class="btn btn-primary">{{ "Save changes" if user else "Create user" }}</button>
+      <a href="/users" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+  {% if user %}
+  <div class="stack-3"></div>
+  <div class="data-list">
+    {% for s in user.sync_states %}
+    <div class="data-row">
+      <div class="data-key">{{ s.target }}</div>
+      <div class="data-value">{{ s.state }}{{ " — " ~ s.detail if s.detail else "" }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

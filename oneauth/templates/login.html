@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<section class="section container-narrow">
+  <div class="section-head">
+    <!-- the page's ONE amber element -->
+    <div class="kicker">// Admin access</div>
+    <h1 class="section-title">Sign in</h1>
+  </div>
+  {% if error %}
+  <div class="alert alert-danger"><div class="alert-title">Sign-in failed</div>{{ error }}</div>
+  {% endif %}
+  <form method="post" action="/login" class="stack-3">
+    <div class="field">
+      <label class="label" for="username">Username</label>
+      <input class="input" id="username" name="username" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label class="label" for="password">Password</label>
+      <input class="input" id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Sign in</button>
+  </form>
+</section>
+{% endblock %}
