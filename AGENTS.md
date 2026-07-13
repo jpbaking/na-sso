@@ -218,10 +218,13 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ## Project rules (imported)
 
-### Agent rules (lazyway-io boilerplate)
+### Agent rules
 
-Read and follow every markdown file in `.agents/rules/` — they are always-on
-rules for this project. On-demand skills live in `.agents/skills/` (Agent
-Skills standard). Ignore other harnesses' config trees (`.cline/`,
-`.clinerules/`, `.claude/`, `CLAUDE.md`) — they carry these same rules,
-retuned for other agents.
+Use the configuration native to the active agent harness:
+
+- Codex: `.agents/`
+- Cline: `.cline/` and `.clinerules/`
+- Claude: `.claude/` and `CLAUDE.md`
+
+Do not load another harness's duplicate configuration unless explicitly
+requested.
