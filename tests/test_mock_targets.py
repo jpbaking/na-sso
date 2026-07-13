@@ -320,7 +320,8 @@ def test_application_demo_workflow_with_failure_and_retry(
             f"/users/{user_id}/delete", follow_redirects=False
         ).status_code == 303
         with db.get_session() as session:
-            assert session.get(ManagedUser, user_id) is None
+            user = session.get(ManagedUser, user_id)
+            assert user is not None and user.deleted_at is not None
         audit_page = client.get("/audit")
         assert all(
             event in audit_page.text

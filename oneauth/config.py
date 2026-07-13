@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     admin_username: str = "admin"
     admin_bootstrap_password: str = "change-me"
     database_path: str = "data/oneauth.db"
+    retry_scan_seconds: float = 5.0
+    retry_base_seconds: float = 5.0
+    retry_max_seconds: float = 300.0
 
     # OPNsense
     opnsense_enabled: bool = False

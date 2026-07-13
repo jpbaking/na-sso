@@ -30,7 +30,9 @@
           <td><a href="/users/{{ u.id }}">{{ u.username }}</a></td>
           <td>{{ u.display_name or "—" }}</td>
           <td>
-            {% if u.status == "active" %}<span class="badge badge-live">active</span>
+            {% if u.desired_action == "delete" and u.deleted_at %}<span class="badge badge-planned">deleted</span>
+            {% elif u.desired_action == "delete" %}<span class="badge badge-danger">deleting</span>
+            {% elif u.status == "active" %}<span class="badge badge-live">active</span>
             {% else %}<span class="badge badge-danger">disabled</span>{% endif %}
           </td>
           {% for t in ["opnsense", "nexus", "nextcloud"] %}
@@ -39,6 +41,7 @@
             {% if s and s.state == "ok" %}<span class="badge badge-shipped">ok</span>
             {% elif s and s.state == "failed" %}
             <span class="badge badge-danger" title="{{ s.detail }}">failed</span>
+            {% if s.next_retry_at %}<small>attempt {{ s.attempt_count }}; auto retry scheduled</small>{% endif %}
             <form method="post" action="/users/{{ u.id }}/retry/{{ t }}">
               <button type="submit" class="btn btn-quiet btn-sm">Retry</button>
             </form>
@@ -46,10 +49,18 @@
           </td>
           {% endfor %}
           <td>
-            <form method="post" action="/users/{{ u.id }}/delete"
+            {% if u.desired_action == "delete" %}
+            <form method="post" action="/users/{{ u.id }}/restore">
+              <input type="password" name="password" required placeholder="New password">
+              <button type="submit" class="btn btn-primary btn-sm">Restore</button>
+            </form>
+            {% if u.deleted_at %}<form method="post" action="/users/{{ u.id }}/purge" onsubmit="return confirm('Permanently purge {{ u.username }} locally?')">
+              <button type="submit" class="btn btn-danger btn-sm">Purge</button>
+            </form>{% endif %}
+            {% else %}<form method="post" action="/users/{{ u.id }}/delete"
                   onsubmit="return confirm('Delete {{ u.username }} everywhere?')">
               <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-            </form>
+            </form>{% endif %}
           </td>
         </tr>
         {% endfor %}

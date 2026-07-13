@@ -4,7 +4,7 @@ from fastapi.responses import RedirectResponse, Response
 from oneauth.auth import current_admin
 from oneauth.audit import record_audit
 from oneauth.db import get_session
-from oneauth.models import ManagedUser, SyncState
+from oneauth.models import ManagedUser, SyncState, utcnow
 from oneauth.security import encrypt_secret, generate_password
 from oneauth.sync import sync_user
 
@@ -38,6 +38,8 @@ def _set_pending(db, user: ManagedUser, password: str | None) -> None:
             db.add(state)
         state.state = "pending"
         state.detail = ""
+        state.attempt_count = 0
+        state.next_retry_at = None
 
 
 @router.get("/")
@@ -102,6 +104,7 @@ async def create_user(
         user = ManagedUser(
             username=username, display_name=display_name.strip(), email=email.strip()
         )
+        user.desired_action = "ensure"
         db.add(user)
         _set_pending(db, user, password)
         record_audit(db, admin, "user.create", username)
@@ -148,6 +151,7 @@ async def update_user(
         user.display_name = display_name.strip()
         user.email = email.strip()
         user.status = "disabled" if status == "disabled" else "active"
+        user.desired_action = "ensure"
         _set_pending(db, user, password.strip() or None)
         record_audit(db, admin, "user.update", user.username)
         db.commit()
@@ -165,6 +169,9 @@ async def delete_user(
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
         if user:
+            user.desired_action = "delete"
+            user.deletion_requested_at = utcnow()
+            user.deleted_at = None
             _set_pending(db, user, None)
             record_audit(db, admin, "user.delete", user.username, "requested")
             db.commit()
@@ -187,5 +194,39 @@ async def retry_user_target(
             return RedirectResponse("/users", status_code=303)
         record_audit(db, admin, "sync.retry", user.username, target)
         db.commit()
-    background_tasks.add_task(sync_user, user_id, "ensure", target)
+    background_tasks.add_task(sync_user, user_id, None, target, "manual-retry")
+    return RedirectResponse("/users", status_code=303)
+
+
+@router.post("/users/{user_id}/restore")
+async def restore_user(request: Request, user_id: int, background_tasks: BackgroundTasks, password: str = Form(...)):
+    admin = _guard(request)
+    if isinstance(admin, Response):
+        return admin
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        if not user or user.desired_action != "delete":
+            return RedirectResponse("/users", status_code=303)
+        user.desired_action = "ensure"
+        user.deletion_requested_at = None
+        user.deleted_at = None
+        user.status = "active"
+        _set_pending(db, user, password)
+        record_audit(db, admin, "user.restore", user.username)
+        db.commit()
+    background_tasks.add_task(sync_user, user_id)
+    return RedirectResponse("/users", status_code=303)
+
+
+@router.post("/users/{user_id}/purge")
+async def purge_user(request: Request, user_id: int):
+    admin = _guard(request)
+    if isinstance(admin, Response):
+        return admin
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        if user and user.desired_action == "delete" and user.deleted_at is not None:
+            record_audit(db, admin, "user.purge", user.username)
+            db.delete(user)
+            db.commit()
     return RedirectResponse("/users", status_code=303)

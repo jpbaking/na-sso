@@ -46,7 +46,7 @@
         {% set states = {} %}
         {% for s in u.sync_states %}{% if states.update({s.target: s}) %}{% endif %}{% endfor %}
         <tr>
-          <td><a href="/users/{{ u.id }}">{{ u.username }}</a></td>
+          <td><a href="/users/{{ u.id }}">{{ u.username }}</a>{% if u.desired_action == "delete" %} (deletion{% if u.deleted_at %} complete{% else %} pending{% endif %}){% endif %}</td>
           {% for target in ["opnsense", "nexus", "nextcloud"] %}
           {% set state = states.get(target) %}
           <td>

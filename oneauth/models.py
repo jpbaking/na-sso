@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from oneauth.db import Base
@@ -27,6 +27,9 @@ class ManagedUser(Base):
     display_name: Mapped[str] = mapped_column(String(128), default="")
     email: Mapped[str] = mapped_column(String(254), default="")
     status: Mapped[str] = mapped_column(String(16), default="active")  # active|disabled
+    desired_action: Mapped[str] = mapped_column(String(16), default="ensure")
+    deletion_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     # Fernet-encrypted password awaiting propagation; cleared once all targets sync.
     pending_secret: Mapped[str | None] = mapped_column(Text, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -48,6 +51,8 @@ class SyncState(Base):
     target: Mapped[str] = mapped_column(String(32))  # opnsense|nexus|nextcloud
     state: Mapped[str] = mapped_column(String(16), default="pending")  # pending|ok|failed
     detail: Mapped[str] = mapped_column(Text, default="")
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, onupdate=utcnow
     )

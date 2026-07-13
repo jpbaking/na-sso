@@ -106,8 +106,32 @@ async def test_sync_disable_and_delete(client, monkeypatch):
     assert connector.calls[-1] == ("disable", "syncme")
     await sync_user(user_id, action="delete")
     with get_session() as db:
-        assert db.get(ManagedUser, user_id) is None
+        user = db.get(ManagedUser, user_id)
+        assert user is not None and user.deleted_at is not None
     assert connector.calls[-1] == ("delete", "syncme")
+
+
+async def test_failed_delete_schedules_and_retries_delete(client, monkeypatch):
+    connector = StubConnector("nextcloud", ok=False)
+    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [connector])
+    user_id = _stored_user()
+    from oneauth.db import get_session
+    from oneauth.sync import retry_due, sync_user
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        user.desired_action = "delete"
+        db.commit()
+    await sync_user(user_id)
+    with get_session() as db:
+        state = db.get(ManagedUser, user_id).sync_states[0]
+        assert state.state == "failed" and state.attempt_count == 1 and state.next_retry_at
+        state.next_retry_at = state.next_retry_at.replace(year=2000)
+        db.commit()
+    connector.ok = True
+    assert await retry_due() == 1
+    assert connector.calls[-1] == ("delete", "syncme")
+    with get_session() as db:
+        assert db.get(ManagedUser, user_id).deleted_at is not None
 
 
 def test_retry_endpoint_runs_only_selected_target(admin_client, monkeypatch):

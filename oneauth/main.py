@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -36,7 +37,12 @@ def bootstrap_admin() -> None:
 async def lifespan(app: FastAPI):
     init_db()
     bootstrap_admin()
+    from oneauth.sync import retry_worker
+    worker = asyncio.create_task(retry_worker())
     yield
+    worker.cancel()
+    with suppress(asyncio.CancelledError):
+        await worker
 
 
 app = FastAPI(title="One Auth (Non-SSO)", version=__version__, lifespan=lifespan)

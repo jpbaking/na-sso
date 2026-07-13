@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from oneauth.config import get_settings
@@ -30,6 +30,23 @@ def init_db() -> None:
     import oneauth.models  # noqa: F401  (register mappings)
 
     Base.metadata.create_all(get_engine())
+    upgrades = {
+        "managed_users": {
+            "desired_action": "VARCHAR(16) NOT NULL DEFAULT 'ensure'",
+            "deletion_requested_at": "DATETIME",
+            "deleted_at": "DATETIME",
+        },
+        "sync_states": {
+            "attempt_count": "INTEGER NOT NULL DEFAULT 0",
+            "next_retry_at": "DATETIME",
+        },
+    }
+    with get_engine().begin() as connection:
+        for table, columns in upgrades.items():
+            existing = {item["name"] for item in inspect(connection).get_columns(table)}
+            for name, definition in columns.items():
+                if name not in existing:
+                    connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
 
 
 def get_session() -> Session:
