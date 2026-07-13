@@ -16,5 +16,56 @@ services:
     volumes:
       - oneauth-data:/data
 
+  # DEMO: runs One Auth against protocol-faithful in-memory mock targets.
+  mock-targets:
+    profiles: ["demo"]
+    image: oneauth:local
+    restart: unless-stopped
+    command:
+      ["uvicorn", "oneauth.mock_targets.app:app", "--host", "0.0.0.0", "--port", "9000"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:9000/healthz')",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  oneauth-demo:
+    profiles: ["demo"]
+    image: oneauth:local
+    restart: unless-stopped
+    depends_on:
+      mock-targets:
+        condition: service_healthy
+    environment:
+      ONEAUTH_SECRET_KEY: demo-only-secret-key
+      ONEAUTH_ADMIN_USERNAME: admin
+      ONEAUTH_ADMIN_BOOTSTRAP_PASSWORD: demo-password
+      ONEAUTH_DATABASE_PATH: /data/oneauth.db
+      ONEAUTH_OPNSENSE_ENABLED: "true"
+      ONEAUTH_OPNSENSE_BASE_URL: http://mock-targets:9000
+      ONEAUTH_OPNSENSE_API_KEY: demo-key
+      ONEAUTH_OPNSENSE_API_SECRET: demo-secret
+      ONEAUTH_OPNSENSE_VERIFY_TLS: "false"
+      ONEAUTH_NEXUS_ENABLED: "true"
+      ONEAUTH_NEXUS_BASE_URL: http://mock-targets:9000
+      ONEAUTH_NEXUS_ADMIN_USER: admin
+      ONEAUTH_NEXUS_ADMIN_PASSWORD: demo-password
+      ONEAUTH_NEXUS_DEFAULT_ROLES: nx-anonymous
+      ONEAUTH_NEXTCLOUD_ENABLED: "true"
+      ONEAUTH_NEXTCLOUD_BASE_URL: http://mock-targets:9000
+      ONEAUTH_NEXTCLOUD_ADMIN_USER: admin
+      ONEAUTH_NEXTCLOUD_ADMIN_PASSWORD: demo-password
+    ports:
+      - "8000:8000"
+    volumes:
+      - oneauth-demo-data:/data
+
 volumes:
   oneauth-data:
+  oneauth-demo-data:

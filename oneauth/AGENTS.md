@@ -6,7 +6,7 @@ FastAPI application for administering local users and propagating their credenti
 
 ## Ownership
 
-Owns the Python application package, persistence model, routes, synchronization, and bundled web assets. Connector-specific contracts belong to `connectors/`; page markup belongs to `templates/`; the copied design kit keeps its contract in `static/design/`.
+Owns the Python application package, persistence model, routes, synchronization, bundled web assets, and optional demo target service. Connector-specific contracts belong to `connectors/`; mock API contracts belong to `mock_targets/`; page markup belongs to `templates/`; the copied design kit keeps its contract in `static/design/`.
 
 ## Local Contracts
 
@@ -29,9 +29,11 @@ Owns the Python application package, persistence model, routes, synchronization,
 - **Synchronization** — Fans user operations out to enabled connectors, persists target results, and clears pending secrets after complete success. Start: `sync.py`. Files: `models.py`, `audit.py`. Detail in `./connectors`.
 - **Target status dashboard** — Probes enabled targets and displays the user-by-target state matrix. Start: `status.py`. Files: `models.py`. Detail in `./templates` and `./connectors`.
 - **Audit trail** — Records administrative and connector actions and serves the audit page. Start: `audit.py`. Files: `models.py`. Detail in `./templates`.
+- **Mock target demo** — Emulates all three target APIs so the real application and connectors can demonstrate complete workflows without external systems. Start: `mock_targets/app.py`. Detail in `./mock_targets`.
 
 ## Child DOX Index
 
 - `connectors/` — Connector interface, registry, and target API implementations.
+- `mock_targets/` — Stateful demo APIs for OPNsense, Nexus Repository, and Nextcloud connector contracts.
 - `templates/` — Jinja pages for authentication, users, target status, and audit history.
 - `static/design/` — Bundled lazyway.io design-system assets and their local contract.

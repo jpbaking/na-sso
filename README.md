@@ -20,6 +20,58 @@ plaintext password is never stored. While propagation is pending, the password
 is encrypted with Fernet using a key derived from `ONEAUTH_SECRET_KEY`; the
 encrypted value is removed after every enabled target succeeds.
 
+## Try the complete UI with mock targets
+
+The optional `demo` Compose profile runs the real One Auth application against
+stateful, protocol-faithful mock OPNsense, Nexus Repository, and Nextcloud
+APIs. It is intended for evaluation and UI/UX exploration only; it does not
+run or modify any real target system.
+
+If this is a fresh checkout, create the normal local environment file first.
+The demo service supplies its own target settings, so no target URLs or
+credentials need to be edited:
+
+```sh
+test -f .config/.env || cp .config/.env.example .config/.env
+./compose-helper.sh build
+./compose-helper.sh stop oneauth
+./compose-helper.sh --profile demo up -d oneauth-demo
+./compose-helper.sh --profile demo ps
+```
+
+Open `http://localhost:8000` and sign in with:
+
+- Username: `admin`
+- Password: `demo-password`
+
+The **Targets** page should show all three services as reachable. Create,
+edit, change the password of, disable, retry, and delete users through the
+normal UI; One Auth uses its production connector implementations for every
+operation.
+
+The demo is isolated from the normal runtime:
+
+- `oneauth-demo` has explicit demo-only settings and a separate
+  `oneauth-demo-data` volume. It never reads target credentials from
+  `.config/.env`.
+- `mock-targets` is reachable only inside the Compose network. Its reset and
+  failure-injection controls are intentionally not published to the host.
+- Mock target users live in memory and reset whenever `mock-targets` is
+  restarted. The One Auth demo database persists, so delete evaluated users
+  in the UI before restarting the mocks when you want both sides to remain in
+  sync.
+- The fixed credentials and secret key are public demo values. Never copy
+  them into a real deployment.
+
+To stop the demo without deleting its database:
+
+```sh
+./compose-helper.sh --profile demo stop oneauth-demo mock-targets
+```
+
+To return to a configured real-integration runtime, stop the demo first and
+then run `./compose-helper.sh start`.
+
 ## Architecture
 
 The FastAPI application serves Jinja templates and a bundled lazyway.io design
@@ -141,7 +193,8 @@ python -m venv .venv
 ```
 
 Connector tests use recorded API shapes and mocked HTTP responses, so they do
-not modify real targets. Before a production rollout, test create, password
+not modify real targets. The mock-target integration tests also open only a
+temporary loopback server. Before a production rollout, test create, password
 change, disable, retry, and delete against non-production instances of the same
 target versions.
 

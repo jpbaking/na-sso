@@ -11,7 +11,7 @@ Owns pytest fixtures and tests only. Production contracts and implementation rem
 ## Local Contracts
 
 - Tests use an isolated temporary SQLite database and clear cached settings between configurations.
-- External target calls are mocked with `respx`; the default suite must not contact or mutate real services.
+- External target calls use `respx` or the in-process loopback mock-target server; the default suite must not contact or mutate real services.
 - Assert both returned HTTP behavior and persisted security/sync state for workflows that cross route and database boundaries.
 
 ## Verification
@@ -24,6 +24,7 @@ Owns pytest fixtures and tests only. Production contracts and implementation rem
 - **Authentication and user workflows** — Covers login guards, CRUD, duplicate validation, status changes, and plaintext-secret exclusion. Start: `test_users.py`.
 - **Connector behavior** — Covers interface conformance, target API request/response shapes, probes, and status-page integration. Start: `test_connectors.py`.
 - **Synchronization behavior** — Covers full and partial success, retry targeting, disable/delete, dashboard state, and audit events. Start: `test_sync.py`.
+- **Mock target and demo integration** — Covers target API contracts, real-HTTP connector lifecycles, failure/retry UX, and the all-target application workflow. Start: `test_mock_targets.py`.
 
 ## Child DOX Index
 

@@ -11,5 +11,5 @@ COPY --from=build /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 USER oneauth
 WORKDIR /app
 ENV ONEAUTH_DATABASE_PATH=/data/oneauth.db
-EXPOSE 8000
+EXPOSE 8000 9000
 CMD ["uvicorn", "oneauth.main:app", "--host", "0.0.0.0", "--port", "8000"]
