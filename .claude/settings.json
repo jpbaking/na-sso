@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "deny": [
-      "Read(./.cline/**)",
-      "Read(./.clinerules/**)",
-      "Read(./.agents/**)"
-    ]
-  }
-}

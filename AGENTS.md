@@ -220,11 +220,13 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ### Agent rules
 
-Use the configuration native to the active agent harness:
+Load configuration native to the active agent harness only when at least one
+of its listed paths exists:
 
 - Codex: `.agents/`
 - Cline: `.cline/` and `.clinerules/`
 - Claude: `.claude/` and `CLAUDE.md`
 
-Do not load another harness's duplicate configuration unless explicitly
-requested.
+If none of the active harness's listed paths exist, load no harness-specific
+project rules and follow DOX alone. Do not load another harness's duplicate
+configuration unless explicitly requested.
