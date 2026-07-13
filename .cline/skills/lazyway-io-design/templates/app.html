@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>REPLACE-ME — what the tool does</title>
+  <meta name="description" content="REPLACE-ME: one plain sentence.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/design/styles.css">
+  <link rel="stylesheet" href="/design/components.css">
+</head>
+<!-- Single-function app shell (the url-shortener pattern):
+     blue top band + hero, one white action card, optional item list. -->
+<body class="app-page">
+
+<section class="app-hero" aria-labelledby="page-title">
+  <a class="app-brand" href="/" aria-label="REPLACE-ME — home">
+    <img src="/design/assets/logo-mark.svg" alt="">
+    <span class="app-wordmark">tool.example.com</span>
+  </a>
+  <!-- The kicker's amber bar is the page's ONE amber element -->
+  <p class="app-kicker">What this tool is</p>
+  <h1 class="app-title" id="page-title">The one question it answers.</h1>
+  <p class="app-tagline">One sentence of instructions.</p>
+</section>
+
+<section class="action-card" aria-label="REPLACE-ME action">
+  <form class="input-row" id="app-form">
+    <input class="input" id="app-input" placeholder="Paste something…" autofocus>
+    <button class="btn btn-primary" type="submit">Go</button>
+  </form>
+
+  <!-- Optional secondary options row:
+  <div class="option-row">
+    <span class="mono-label">Option</span>
+    <select class="select" style="width: 120px;"><option>A</option><option>B</option></select>
+  </div> -->
+
+  <div class="result-block" id="app-result" hidden>
+    <span class="mono-label">Result</span>
+    <div class="result-row">
+      <a class="result-link" href="#" id="app-answer">the-answer</a>
+      <button class="copy-btn" type="button" id="app-copy">Copy</button>
+    </div>
+  </div>
+</section>
+
+<!-- Optional list of previous items:
+<section class="item-list" aria-label="Recent items">
+  <div class="item-list-head">
+    <span class="mono-label">Recent items</span>
+    <span class="item-count">1</span>
+  </div>
+  <article class="item-card">
+    <div>
+      <a class="item-title" href="#">item-name</a>
+      <div class="item-sub">muted one-line detail</div>
+    </div>
+    <button class="copy-btn" type="button">Copy</button>
+    <div class="item-meta"><span>Created 2 Jul 2026</span><span>3 uses</span></div>
+  </article>
+</section> -->
+
+<footer class="app-foot">One quiet footer line.</footer>
+
+<script>
+  // Replace with the real call to your backend.
+  document.getElementById("app-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var v = document.getElementById("app-input").value.trim();
+    if (!v) return;
+    document.getElementById("app-answer").textContent = v;
+    document.getElementById("app-result").hidden = false;
+  });
+  document.getElementById("app-copy").addEventListener("click", function () {
+    navigator.clipboard.writeText(document.getElementById("app-answer").textContent);
+    var b = this; b.textContent = "Copied!";
+    setTimeout(function () { b.textContent = "Copy"; }, 2000);
+  });
+</script>
+
+</body>
+</html>
