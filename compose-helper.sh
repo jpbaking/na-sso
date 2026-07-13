@@ -87,6 +87,16 @@ Commands:
   restart  Stop then start detached (no pull/build)
   stop     Stop with ${DCH_STOP_TIMEOUT}s timeout, remove orphans
   down     Stop with ${DCH_STOP_TIMEOUT}s timeout, remove orphans and volumes
+  demo-up       Start the demo detached
+  demo-rebuild  Rebuild the local image, then start the demo detached
+  demo-build    Rebuild the local image only
+  demo-pull     Pull demo service images
+  demo-start    Start the demo detached (no pull/build)
+  demo-restart  Stop then start the demo detached (no pull/build)
+  demo-stop     Stop the demo; preserve demo data
+  demo-down     Remove demo containers and the demo database volume
+  demo-logs     Follow demo logs from the last ${DCH_LOGS_TAIL} lines
+  demo-ps       Show demo container status
   logs     Follow logs from last ${DCH_LOGS_TAIL} lines
   <other>  Pass-through to docker compose
 
@@ -142,6 +152,42 @@ case "${1:-}" in
     down)
         # -v removes named volumes — use when a clean-slate data reset is intended.
         run_dc down -t "$DCH_STOP_TIMEOUT" --remove-orphans -v
+        ;;
+    demo-up)
+        # Naming the demo runtime avoids also starting unprofiled services.
+        # Compose starts mock-targets automatically through depends_on.
+        run_dc --profile demo up -d oneauth-demo
+        ;;
+    demo-rebuild)
+        run_dc --profile build build --pull
+        run_dc --profile demo up -d --force-recreate oneauth-demo
+        ;;
+    demo-build)
+        run_dc --profile build build --pull
+        ;;
+    demo-pull)
+        run_dc --profile demo pull oneauth-demo mock-targets
+        ;;
+    demo-start)
+        run_dc --profile demo up -d oneauth-demo
+        ;;
+    demo-restart)
+        run_dc --profile demo stop -t "$DCH_STOP_TIMEOUT" oneauth-demo mock-targets
+        run_dc --profile demo up -d oneauth-demo
+        ;;
+    demo-stop)
+        run_dc --profile demo stop -t "$DCH_STOP_TIMEOUT" oneauth-demo mock-targets
+        ;;
+    demo-down)
+        run_dc --profile demo rm -f -s -v oneauth-demo mock-targets
+        # Remove only the named demo database volume. A missing volume is fine.
+        docker volume rm "${PROJECT_NAME}_oneauth-demo-data" 2>/dev/null || true
+        ;;
+    demo-logs)
+        run_dc --profile demo logs -f --tail="$DCH_LOGS_TAIL" oneauth-demo mock-targets
+        ;;
+    demo-ps)
+        run_dc --profile demo ps oneauth-demo mock-targets
         ;;
     logs)
         run_dc logs -f --tail="$DCH_LOGS_TAIL"

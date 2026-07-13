@@ -37,8 +37,8 @@ credentials need to be edited:
 test -f .config/.env || cp .config/.env.example .config/.env
 ./compose-helper.sh build
 ./compose-helper.sh stop oneauth
-./compose-helper.sh --profile demo up -d oneauth-demo
-./compose-helper.sh --profile demo ps
+./compose-helper.sh demo-up
+./compose-helper.sh demo-ps
 ```
 
 Open `http://localhost:8000` and sign in with:
@@ -75,8 +75,28 @@ The demo is isolated from the normal runtime:
 To stop the demo without deleting its database:
 
 ```sh
-./compose-helper.sh --profile demo stop oneauth-demo mock-targets
+./compose-helper.sh demo-stop
 ```
+
+To remove the demo containers and reset its database:
+
+```sh
+./compose-helper.sh demo-down
+```
+
+The complete demo command family is:
+
+| Command | Effect |
+| --- | --- |
+| `demo-up` / `demo-start` | Start the demo detached without building. |
+| `demo-rebuild` | Rebuild the local image and recreate the demo. |
+| `demo-build` | Rebuild the local image without starting the demo. |
+| `demo-pull` | Pull images used by the demo services. |
+| `demo-restart` | Stop and start the demo without rebuilding. |
+| `demo-stop` | Stop the demo while preserving its database. |
+| `demo-down` | Remove demo containers and reset its database. |
+| `demo-logs` | Follow logs for the demo application and mocks. |
+| `demo-ps` | Show status for the demo application and mocks. |
 
 To return to a configured real-integration runtime, stop the demo first and
 then run `./compose-helper.sh start`.

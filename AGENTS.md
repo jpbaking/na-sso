@@ -207,7 +207,7 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ## Feature Map
 
-- **Containerized application and demo** — Builds and runs One Auth with persistent SQLite storage, plus an opt-in mock-target UI/UX demo, through the compose-helper workflow. Start: `docker-compose.yaml`. Files: `Dockerfile`, `compose-helper.sh`, `compose-helper.env`, `.config/.env.example`. Detail in `./oneauth/mock_targets`.
+- **Containerized application and demo** — Builds and runs One Auth with persistent SQLite storage, plus an opt-in mock-target UI/UX demo with dedicated helper lifecycle commands. Start: `docker-compose.yaml`. Files: `Dockerfile`, `compose-helper.sh`, `compose-helper.env`, `.config/.env.example`. Detail in `./oneauth/mock_targets`.
 - **Python package and service** — FastAPI application implementing local administration and cross-target credential propagation. Start: `oneauth/main.py`. Files: `oneauth/`. Detail in `./oneauth`.
 - **Operator and developer runbook** — Documents configuration, target prerequisites, operation, and verification. Start: `README.md`. Files: `pyproject.toml`.
 
