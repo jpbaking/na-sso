@@ -121,7 +121,7 @@ async def edit_user_page(request: Request, user_id: int):
         return admin
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
-        if not user:
+        if not user or user.desired_action == "delete":
             return RedirectResponse("/users", status_code=303)
         user.sync_states
     return _render(
@@ -146,7 +146,7 @@ async def update_user(
         return admin
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
-        if not user:
+        if not user or user.desired_action == "delete":
             return RedirectResponse("/users", status_code=303)
         user.display_name = display_name.strip()
         user.email = email.strip()
@@ -205,13 +205,13 @@ async def restore_user(request: Request, user_id: int, background_tasks: Backgro
         return admin
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
-        if not user or user.desired_action != "delete":
+        if not user or user.desired_action != "delete" or not password.strip():
             return RedirectResponse("/users", status_code=303)
         user.desired_action = "ensure"
         user.deletion_requested_at = None
         user.deleted_at = None
         user.status = "active"
-        _set_pending(db, user, password)
+        _set_pending(db, user, password.strip())
         record_audit(db, admin, "user.restore", user.username)
         db.commit()
     background_tasks.add_task(sync_user, user_id)
