@@ -280,7 +280,7 @@ def test_application_demo_workflow_with_failure_and_retry(
                 "username": "demo_user",
                 "display_name": "Demo User",
                 "email": "demo@example.test",
-                "password": "first-secret",
+                "password": "V4lid!First-Secret-2026",
             },
             follow_redirects=False,
         ).status_code == 303
@@ -303,7 +303,7 @@ def test_application_demo_workflow_with_failure_and_retry(
             data={
                 "display_name": "Updated Demo User",
                 "email": "updated@example.test",
-                "password": "second-secret",
+                "password": "V4lid!Second-Secret-2026",
                 "status": "active",
             },
             follow_redirects=False,

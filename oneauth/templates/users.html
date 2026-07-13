@@ -19,7 +19,7 @@
       <thead>
         <tr>
           <th>Username</th><th>Name</th><th>Status</th>
-          <th>OPNsense</th><th>Nexus</th><th>Nextcloud</th><th></th>
+          {% for target in targets %}<th>{{ target.display_name }}</th>{% endfor %}<th></th>
         </tr>
       </thead>
       <tbody>
@@ -35,8 +35,9 @@
             {% elif u.status == "active" %}<span class="badge badge-live">active</span>
             {% else %}<span class="badge badge-danger">disabled</span>{% endif %}
           </td>
-          {% for t in ["opnsense", "nexus", "nextcloud"] %}
+          {% for target in targets %}{% set t = target.target_id %}
           {% set s = states.get(t) %}
+          {% if u.is_root %}<td><span class="muted">N/A</span></td>{% else %}
           <td data-sync-cell data-user-id="{{ u.id }}" data-target="{{ t }}">
             {% if s and s.state == "ok" %}<span class="badge badge-shipped">ok</span>
             {% elif s and s.state == "failed" %}
@@ -45,8 +46,12 @@
             <form method="post" action="/users/{{ u.id }}/retry/{{ t }}">
               <button type="submit" class="btn btn-quiet btn-sm">Retry</button>
             </form>
-            {% else %}<span class="badge badge-planned">pending</span>{% endif %}
+            {% elif s and s.state == "awaiting_credentials" %}<span class="badge badge-planned">awaiting credentials</span>
+            {% elif s and (s.state == "unassigned" or not s.assigned) %}<span class="badge badge-planned">unassigned; disabled</span>
+            {% elif s and s.retired %}<span class="badge badge-planned">retired</span>
+            {% else %}<span class="badge badge-planned">not assigned</span>{% endif %}
           </td>
+          {% endif %}
           {% endfor %}
           <td>
             {% if u.desired_action == "delete" %}

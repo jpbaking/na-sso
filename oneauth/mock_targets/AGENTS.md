@@ -25,7 +25,7 @@ Owns the optional mock-target FastAPI service and its in-memory target state. Pr
 
 ## Feature Map
 
-- **Stateful target API emulation** — Implements the connector-facing OPNsense Auth User, Nexus Security User, and Nextcloud OCS Provisioning routes. Start: `app.py`.
+- **Stateful target API emulation** — Implements the connector-facing OPNsense Auth User, Nexus Security User, and Nextcloud OCS Provisioning routes, including role/group membership payloads. Start: `app.py`.
 - **Demo controls and readiness** — Provides a browser page with independent whole-target availability switches plus deterministic health/reset and one-shot failures. Start: `app.py`.
 
 ## Child DOX Index

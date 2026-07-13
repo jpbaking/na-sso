@@ -189,7 +189,7 @@ def test_audit_page_lists_admin_and_sync_events(admin_client, monkeypatch):
             "username": "audited",
             "display_name": "Audit User",
             "email": "audit@example.test",
-            "password": "secret-12345",
+            "password": "V4lid!Sync-Secret-2026",
         },
         follow_redirects=False,
     )

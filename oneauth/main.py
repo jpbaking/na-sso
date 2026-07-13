@@ -16,21 +16,41 @@ templates = Jinja2Templates(directory=_PKG_DIR / "templates")
 
 
 def bootstrap_admin() -> None:
-    from oneauth.models import AdminAccount
+    from oneauth.models import AdminAccount, ManagedUser, utcnow
     from oneauth.security import hash_password
 
     s = get_settings()
     with get_session() as db:
-        if not db.query(AdminAccount).filter(
-            AdminAccount.username == s.admin_username
-        ).first():
+        legacy = db.query(AdminAccount).filter(AdminAccount.username == s.admin_username).first()
+        root = db.query(ManagedUser).filter(ManagedUser.role == "root").one_or_none()
+        collision = db.query(ManagedUser).filter(ManagedUser.username == s.admin_username).one_or_none()
+        if root is None and collision is None:
+            password_hash = legacy.password_hash if legacy else hash_password(s.admin_bootstrap_password)
+            db.add(ManagedUser(
+                id=0,
+                username=s.admin_username,
+                display_name="SUPERADMIN",
+                password_hash=password_hash,
+                role="root",
+                password_changed_at=utcnow(),
+                status="active",
+                desired_action="local_only",
+            ))
+        elif root is not None:
+            root.display_name = "SUPERADMIN"
+            root.status = "active"
+            root.desired_action = "local_only"
+            root.role = "root"
+            root.deletion_requested_at = None
+            root.deleted_at = None
+        if legacy is None:
             db.add(
                 AdminAccount(
                     username=s.admin_username,
                     password_hash=hash_password(s.admin_bootstrap_password),
                 )
             )
-            db.commit()
+        db.commit()
 
 
 @asynccontextmanager

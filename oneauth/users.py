@@ -3,12 +3,12 @@ from fastapi.responses import RedirectResponse, Response
 
 from oneauth.auth import current_admin
 from oneauth.audit import record_audit
+from oneauth.config import get_settings
 from oneauth.db import get_session
-from oneauth.models import ManagedUser, SyncState, utcnow
-from oneauth.security import encrypt_secret, generate_password
+from oneauth.models import ManagedUser, PasswordHistory, SyncState, utcnow
+from oneauth.security import encrypt_secret, generate_password, hash_password, validate_password
 from oneauth.sync import sync_user
-
-TARGETS = ["opnsense", "nexus", "nextcloud"]
+from oneauth.connectors import get_connectors, validate_for_targets
 
 router = APIRouter()
 
@@ -23,20 +23,41 @@ def _guard(request: Request) -> str | Response:
 def _render(request: Request, name: str, ctx: dict, **kw):
     from oneauth.main import templates
 
+    ctx.setdefault("targets", _targets_context())
+    ctx.setdefault("password_policy", get_settings().file.password_policy)
     return templates.TemplateResponse(request, name, ctx, **kw)
 
 
-def _set_pending(db, user: ManagedUser, password: str | None) -> None:
+def _targets_context() -> list:
+    return get_connectors()
+
+
+def _set_pending(db, user: ManagedUser, password: str | None, target_ids: set[str] | None = None) -> None:
     """Record a new pending credential and reset all target sync states."""
     if password is not None:
         user.pending_secret = encrypt_secret(password)
     existing = {s.target: s for s in user.sync_states}
-    for target in TARGETS:
+    connectors = {item.target_id: item for item in __import__("oneauth.connectors", fromlist=["get_connectors"]).get_connectors()}
+    legacy_mode = not get_settings().config_file
+    selected = set(connectors) if target_ids is None and (user.sync_states or legacy_mode) else (target_ids or set())
+    if user.is_root and selected:
+        raise ValueError("root account cannot have target assignments")
+    for state in user.sync_states:
+        if state.target not in selected and state.assigned:
+            state.assigned = False
+            state.state = "pending_disable"
+            state.next_retry_at = None
+    for target in selected:
         state = existing.get(target)
         if state is None:
-            state = SyncState(user=user, target=target)
+            connector = connectors[target]
+            state = SyncState(user=user, target=target, target_type=connector.target_type)
             db.add(state)
-        state.state = "pending"
+        newly_assigned = not state.assigned
+        state.assigned = True
+        state.retired = False
+        needs_password = connectors[target].capabilities.password
+        state.state = "awaiting_credentials" if newly_assigned and needs_password and password is None else "pending"
         state.detail = ""
         state.attempt_count = 0
         state.next_retry_at = None
@@ -56,7 +77,7 @@ async def list_users(request: Request):
         users = db.query(ManagedUser).order_by(ManagedUser.username).all()
         for u in users:
             u.sync_states  # eager-load for template
-    return _render(request, "users.html", {"users": users, "admin": admin})
+    return _render(request, "users.html", {"users": users, "admin": admin, "targets": _targets_context()})
 
 
 @router.get("/users/new")
@@ -67,7 +88,8 @@ async def new_user_page(request: Request):
     return _render(
         request,
         "user_form.html",
-        {"user": None, "admin": admin, "suggested": generate_password(), "error": None},
+        {"user": None, "admin": admin, "suggested": "", "error": None,
+         "targets": _targets_context(), "password_policy": get_settings().file.password_policy},
     )
 
 
@@ -79,6 +101,8 @@ async def create_user(
     display_name: str = Form(""),
     email: str = Form(""),
     password: str = Form(...),
+    role: str = Form("user"),
+    target_ids: list[str] = Form(default=[]),
 ):
     admin = _guard(request)
     if isinstance(admin, Response):
@@ -101,12 +125,26 @@ async def create_user(
                  "error": f"Username '{username}' already exists."},
                 status_code=422,
             )
+        validation = validate_password(password, username=username, email=email, display_name=display_name)
+        if not validation.valid:
+            return _render(request, "user_form.html", {"user": None, "admin": admin,
+                "suggested": password, "error": " ".join(validation.errors)}, status_code=422)
+        connectors = {item.target_id: item for item in get_connectors()}
+        if any(item not in connectors for item in target_ids):
+            return RedirectResponse("/users/new", status_code=303)
         user = ManagedUser(
-            username=username, display_name=display_name.strip(), email=email.strip()
+            username=username, display_name=display_name.strip(), email=email.strip(),
+            password_hash=hash_password(password), role="admin" if role == "admin" else "user",
+            password_decision_required=True, password_changed_at=utcnow(),
         )
+        identity = validate_for_targets(user, [connectors[item] for item in target_ids])
+        if not identity.ok:
+            return _render(request, "user_form.html", {"user": None, "admin": admin,
+                "suggested": "", "error": identity.detail, "targets": list(connectors.values()),
+                "password_policy": get_settings().file.password_policy}, status_code=422)
         user.desired_action = "ensure"
         db.add(user)
-        _set_pending(db, user, password)
+        _set_pending(db, user, password, None if not get_settings().config_file and not target_ids else set(target_ids))
         record_audit(db, admin, "user.create", username)
         db.commit()
         user_id = user.id
@@ -121,13 +159,14 @@ async def edit_user_page(request: Request, user_id: int):
         return admin
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
-        if not user or user.desired_action == "delete":
+        if not user or user.desired_action == "delete" or user.is_root:
             return RedirectResponse("/users", status_code=303)
         user.sync_states
     return _render(
         request,
         "user_form.html",
-        {"user": user, "admin": admin, "suggested": generate_password(), "error": None},
+        {"user": user, "admin": admin, "suggested": "", "error": None,
+         "targets": _targets_context(), "password_policy": get_settings().file.password_policy},
     )
 
 
@@ -140,19 +179,44 @@ async def update_user(
     email: str = Form(""),
     password: str = Form(""),
     status: str = Form("active"),
+    role: str = Form("user"),
+    target_ids: list[str] = Form(default=[]),
 ):
     admin = _guard(request)
     if isinstance(admin, Response):
         return admin
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
-        if not user or user.desired_action == "delete":
+        if not user or user.desired_action == "delete" or user.is_root:
             return RedirectResponse("/users", status_code=303)
-        user.display_name = display_name.strip()
-        user.email = email.strip()
+        connectors = {item.target_id: item for item in get_connectors()}
+        if any(item not in connectors for item in target_ids):
+            return RedirectResponse(f"/users/{user_id}", status_code=303)
+        proposed = ManagedUser(username=user.username, display_name=display_name.strip(), email=email.strip())
+        identity = validate_for_targets(proposed, [connectors[item] for item in target_ids])
+        if not identity.ok:
+            return _render(request, "user_form.html", {"user": user, "admin": admin,
+                "suggested": "", "error": identity.detail, "targets": list(connectors.values()),
+                "password_policy": get_settings().file.password_policy}, status_code=422)
+        user.display_name = proposed.display_name
+        user.email = proposed.email
         user.status = "disabled" if status == "disabled" else "active"
+        user.role = "admin" if role == "admin" else "user"
+        if password.strip():
+            history = tuple(row.password_hash for row in db.query(PasswordHistory).filter_by(user_id=user.id).order_by(PasswordHistory.created_at.desc()).limit(get_settings().file.password_policy.history_size).all())
+            validation = validate_password(password.strip(), username=user.username, email=user.email,
+                                           display_name=user.display_name, history_hashes=history)
+            if not validation.valid:
+                return _render(request, "user_form.html", {"user": user, "admin": admin,
+                    "suggested": password, "error": " ".join(validation.errors)}, status_code=422)
+            if user.password_hash:
+                db.add(PasswordHistory(user_id=user.id, password_hash=user.password_hash))
+            user.password_hash = hash_password(password.strip())
+            user.password_changed_at = utcnow()
+            user.password_decision_required = True
+            user.session_version += 1
         user.desired_action = "ensure"
-        _set_pending(db, user, password.strip() or None)
+        _set_pending(db, user, password.strip() or None, None if not get_settings().config_file and not target_ids else set(target_ids))
         record_audit(db, admin, "user.update", user.username)
         db.commit()
     background_tasks.add_task(sync_user, user_id)
@@ -168,7 +232,7 @@ async def delete_user(
         return admin
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
-        if user:
+        if user and not user.is_root:
             user.desired_action = "delete"
             user.deletion_requested_at = utcnow()
             user.deleted_at = None
@@ -186,11 +250,14 @@ async def retry_user_target(
     admin = _guard(request)
     if isinstance(admin, Response):
         return admin
-    if target not in TARGETS:
+    valid_targets = {item.target_id for item in __import__("oneauth.connectors", fromlist=["get_connectors"]).get_connectors()}
+    if not get_settings().config_file:
+        valid_targets.update({"opnsense", "nexus", "nextcloud"})
+    if target not in valid_targets:
         return RedirectResponse("/users", status_code=303)
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
-        if not user:
+        if not user or user.is_root:
             return RedirectResponse("/users", status_code=303)
         record_audit(db, admin, "sync.retry", user.username, target)
         db.commit()
@@ -205,12 +272,21 @@ async def restore_user(request: Request, user_id: int, background_tasks: Backgro
         return admin
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
-        if not user or user.desired_action != "delete" or not password.strip():
+        if not user or user.is_root or user.desired_action != "delete" or not password.strip():
             return RedirectResponse("/users", status_code=303)
+        validation = validate_password(password.strip(), username=user.username, email=user.email, display_name=user.display_name)
+        if not validation.valid:
+            return RedirectResponse(f"/users/{user_id}", status_code=303)
         user.desired_action = "ensure"
         user.deletion_requested_at = None
         user.deleted_at = None
         user.status = "active"
+        if user.password_hash:
+            db.add(PasswordHistory(user_id=user.id, password_hash=user.password_hash))
+        user.password_hash = hash_password(password.strip())
+        user.password_changed_at = utcnow()
+        user.password_decision_required = True
+        user.session_version += 1
         _set_pending(db, user, password.strip())
         record_audit(db, admin, "user.restore", user.username)
         db.commit()
@@ -225,7 +301,7 @@ async def purge_user(request: Request, user_id: int):
         return admin
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
-        if user and user.desired_action == "delete" and user.deleted_at is not None:
+        if user and not user.is_root and user.desired_action == "delete" and user.deleted_at is not None:
             record_audit(db, admin, "user.purge", user.username)
             db.delete(user)
             db.commit()

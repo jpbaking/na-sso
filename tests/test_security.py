@@ -1,0 +1,82 @@
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ed25519
+
+from oneauth.security import generate_password, public_key_from_private, validate_password
+
+
+def test_generated_password_satisfies_central_policy(client):
+    password = generate_password()
+    assert validate_password(password).valid
+
+
+def test_private_key_is_reduced_to_public_material():
+    key = ed25519.Ed25519PrivateKey.generate()
+    private = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+    public = public_key_from_private(private)
+    assert public.startswith("ssh-ed25519 ")
+    assert "PRIVATE" not in public
+
+
+def test_local_user_login_is_restricted_until_password_decision(admin_client):
+    password = "V4lid!Orbit-Cloud-2026"
+    response = admin_client.post("/users/new", data={
+        "username": "localuser", "display_name": "Local Person", "email": "local@example.test",
+        "password": password, "role": "user",
+    }, follow_redirects=False)
+    assert response.status_code == 303
+    admin_client.post("/logout")
+    response = admin_client.post("/login", data={"username": "localuser", "password": password}, follow_redirects=False)
+    assert response.headers["location"] == "/account/password-decision"
+    assert admin_client.get("/users", follow_redirects=False).status_code == 303
+    response = admin_client.post("/account/password-decision", data={
+        "choice": "keep", "current_password": password, "new_password": ""
+    }, follow_redirects=False)
+    assert response.headers["location"] == "/account"
+
+
+def test_root_cannot_be_mutated_through_user_routes(admin_client):
+    admin_client.post("/users/0/delete", follow_redirects=False)
+    from oneauth.db import get_session
+    from oneauth.models import ManagedUser
+    with get_session() as db:
+        root = db.get(ManagedUser, 0)
+        assert root.role == "root"
+        assert root.display_name == "SUPERADMIN"
+        assert root.status == "active"
+        assert root.desired_action == "local_only"
+
+
+def test_superadmin_target_cells_are_na(admin_client, monkeypatch):
+    from types import SimpleNamespace
+    target = SimpleNamespace(target_id="verified_target", target_type="ssh",
+                             display_name="Verified target")
+    monkeypatch.setattr("oneauth.users.get_connectors", lambda: [target])
+    response = admin_client.get("/users")
+    assert response.status_code == 200
+    assert "SUPERADMIN" in response.text
+    assert "N/A" in response.text
+    assert 'data-user-id="0"' not in response.text
+
+
+def test_private_key_enrollment_persists_only_public_key(admin_client):
+    password = "V4lid!Comet-Bridge-2026"
+    admin_client.post("/users/new", data={"username": "keyuser", "display_name": "Key Person",
+        "email": "key@example.test", "password": password})
+    admin_client.post("/logout")
+    admin_client.post("/login", data={"username": "keyuser", "password": password})
+    admin_client.post("/account/password-decision", data={"choice": "keep", "current_password": password})
+    key = ed25519.Ed25519PrivateKey.generate()
+    private = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                                serialization.NoEncryption()).decode()
+    response = admin_client.post("/account/ssh-key", data={"private_key": private}, follow_redirects=False)
+    assert response.status_code == 303
+    from oneauth.db import get_session
+    from oneauth.models import ManagedUser
+    with get_session() as db:
+        user = db.query(ManagedUser).filter_by(username="keyuser").one()
+        assert user.ssh_public_key.startswith("ssh-ed25519 ")
+        assert "PRIVATE" not in user.ssh_public_key

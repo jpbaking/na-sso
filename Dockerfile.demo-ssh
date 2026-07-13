@@ -1,0 +1,5 @@
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server sudo ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY demo-ssh.sh /usr/local/bin/demo-ssh
+RUN chmod 0755 /usr/local/bin/demo-ssh
+ENTRYPOINT ["/usr/local/bin/demo-ssh"]

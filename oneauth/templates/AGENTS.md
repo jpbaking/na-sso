@@ -14,6 +14,8 @@ Owns page structure and presentation. Route behavior and template context are ow
 - Follow the lazyway.io design rules from the root contract: documented classes first, no gradients, and exactly one amber accent per page.
 - Keep navigation consistent across authenticated pages: Users, Targets, Audit, and Sign out.
 - Render operator-visible connector errors safely; never render credentials or decrypted pending secrets.
+- Target credential forms are write-only: show readiness and safe probe detail, never stored values; SAVE persists and immediately probes the replacement as one operation.
+- Render the protected root as `SUPERADMIN` with `N/A` target cells and no live-sync cell attributes.
 - Pending and retrying target cells subscribe to authenticated `/events/sync` updates through the shared application shell; construct event-derived content with DOM text APIs.
 
 ## Verification
@@ -25,8 +27,9 @@ Owns page structure and presentation. Route behavior and template context are ow
 
 - **Application shell and live sync** — Shared metadata, navigation, static design links, content slot, footer, and SSE-driven target-cell updates. Start: `base.html`.
 - **Admin login** — Renders credential input and authentication errors. Start: `login.html`. Files: `base.html`.
-- **User lifecycle management** — Lists target and retry states and provides create/edit/password/status/soft-delete/restore/purge/manual-retry controls. Start: `users.html`. Files: `user_form.html`, `base.html`.
+- **User lifecycle management** — Renders registry-driven assignment matrices, select-all controls, live password compliance/generation, deferred/retired states, and lifecycle/retry actions. Start: `users.html`. Files: `user_form.html`, `base.html`.
 - **Target dashboard** — Shows connector reachability and the user sync matrix. Start: `status.html`. Files: `base.html`.
+- **Target onboarding** — Collects write-only API/admin/SSH management credentials, saves and probes them in one action, and displays one combined configuration/authentication status with safe probe detail as a tooltip. Start: `status.html`.
 - **Audit history** — Shows administrative and synchronization events. Start: `audit.html`. Files: `base.html`.
 
 ## Child DOX Index

@@ -35,9 +35,19 @@
     </div>
     <div class="field">
       <label class="label" for="password">{{ "New password (leave blank to keep)" if user else "Password" }}</label>
-      <input class="input" id="password" name="password"
-             value="{{ '' if user else suggested }}" {{ '' if user else 'required' }}>
-      <div class="field-hint">Suggested: <span class="mono-label">{{ suggested }}</span></div>
+      <input class="input" id="password" name="password" type="password" {{ '' if user else 'required' }}>
+      <button class="btn btn-secondary btn-sm" type="button" id="generate-password">Generate</button>
+      <div class="field-hint">Password history is checked securely when you submit.</div>
+      <div class="data-list" id="password-checks" aria-live="polite"></div>
+    </div>
+    <div class="field">
+      <div class="label">Target assignments</div>
+      <div class="hero-actions"><button class="btn btn-quiet btn-sm" type="button" id="select-all">Select all</button><button class="btn btn-quiet btn-sm" type="button" id="select-none">Unselect all</button></div>
+      {% set assigned = user.sync_states | selectattr('assigned') | map(attribute='target') | list if user else [] %}
+      {% for target in targets %}
+      <label class="checkbox"><input type="checkbox" name="target_ids" value="{{ target.target_id }}" {{ 'checked' if target.target_id in assigned else '' }}> {{ target.display_name }} <span class="muted">({{ target.target_type }})</span></label>
+      {% else %}<div class="field-hint">No active targets are configured. New users remain local-only.</div>{% endfor %}
+      <div class="field-hint">Unassigning disables the remote account; it does not delete it.</div>
     </div>
     {% if user %}
     <div class="field">
@@ -65,4 +75,14 @@
   </div>
   {% endif %}
 </section>
+<script>
+const password=document.getElementById('password');
+const boxes=[...document.querySelectorAll('input[name="target_ids"]')];
+document.getElementById('select-all').onclick=()=>boxes.forEach(x=>x.checked=true);
+document.getElementById('select-none').onclick=()=>boxes.forEach(x=>x.checked=false);
+const policy={{ password_policy.model_dump() | tojson }};
+function randomPassword(){const chars='abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789-_.!@#%+';const length=Math.max(20,policy.min_length);const bytes=crypto.getRandomValues(new Uint8Array(length-4));return [...bytes].map(x=>chars[x%chars.length]).join('')+'aA1!'}
+function checks(){const value=password.value;const rows=[['Minimum length',value.length>=policy.min_length],['Lowercase',!policy.require_lowercase||/[a-z]/.test(value)],['Uppercase',!policy.require_uppercase||/[A-Z]/.test(value)],['Digit',!policy.require_digit||/\d/.test(value)],['Symbol',!policy.require_symbol||/[^A-Za-z0-9]/.test(value)]];document.getElementById('password-checks').innerHTML=rows.map(([label,ok])=>`<div class="data-row"><div class="data-key">${label}</div><div class="data-value">${ok?'passed':'not yet'}</div></div>`).join('')}
+document.getElementById('generate-password').onclick=()=>{password.value=randomPassword();checks()};password.addEventListener('input',checks);checks();
+</script>
 {% endblock %}

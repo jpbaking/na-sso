@@ -1,20 +1,30 @@
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import httpx
 
-from oneauth.config import Settings
-from oneauth.connectors.base import Connector, SyncResult
+from oneauth.config import NextcloudTarget, Settings
+from oneauth.connectors.base import Connector, IdentityCapabilities, SyncResult
 from oneauth.models import ManagedUser
 
 
 class NextcloudConnector(Connector):
     """Nextcloud OCS User Provisioning API connector."""
 
-    name = "nextcloud"
+    capabilities = IdentityCapabilities(email=True, display_name=True)
 
-    def __init__(self, settings: Settings):
-        self._base = settings.nextcloud_base_url.rstrip("/")
-        self._auth = (settings.nextcloud_admin_user, settings.nextcloud_admin_password)
+    def __init__(self, settings: Settings | NextcloudTarget):
+        if isinstance(settings, NextcloudTarget):
+            self.target_id, self.target_type, self.display_name = settings.id, settings.type, settings.display_name
+            self._base = settings.base_url.rstrip("/")
+            self._auth = (settings.admin_user, settings.admin_password.get_secret_value())
+            self._verify = settings.verify_tls
+            self._groups = settings.default_groups
+        else:
+            self.target_id = self.target_type = "nextcloud"; self.display_name = "Nextcloud"
+            self._base = settings.nextcloud_base_url.rstrip("/")
+            self._auth = (settings.nextcloud_admin_user, settings.nextcloud_admin_password)
+            self._verify = True
+            self._groups = []
 
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
@@ -22,6 +32,7 @@ class NextcloudConnector(Connector):
             auth=self._auth,
             headers={"OCS-APIRequest": "true", "Accept": "application/json"},
             params={"format": "json"},
+            verify=self._verify,
             timeout=15,
         )
 
@@ -56,12 +67,17 @@ class NextcloudConnector(Connector):
                         return SyncResult(False, "nextcloud requires a password for a new user")
                     response = await client.post(
                         "/users",
-                        data={
-                            "userid": user.username,
-                            "password": password,
-                            "displayName": user.display_name or user.username,
-                            "email": user.email,
-                        },
+                        content=urlencode(
+                            {
+                                "userid": user.username,
+                                "password": password,
+                                "displayName": user.display_name or user.username,
+                                "email": user.email,
+                                "groups[]": self._groups,
+                            },
+                            doseq=True,
+                        ),
+                        headers={"Content-Type": "application/x-www-form-urlencoded"},
                     )
                     code, message = self._ocs(response)
                     if code != 100:
@@ -82,6 +98,28 @@ class NextcloudConnector(Connector):
                         )
                         if not result.ok:
                             return result
+
+                if self._groups:
+                    response = await client.get(f"{self._path(user.username)}/groups")
+                    response.raise_for_status()
+                    body = response.json().get("ocs", {})
+                    code = int(body.get("meta", {}).get("statuscode", 0))
+                    if code != 100:
+                        return SyncResult(False, "nextcloud could not read group memberships")
+                    current = set(body.get("data", {}).get("groups", []))
+                    for group in self._groups:
+                        if group in current:
+                            continue
+                        response = await client.post(
+                            f"{self._path(user.username)}/groups",
+                            data={"groupid": group},
+                        )
+                        code, message = self._ocs(response)
+                        if code != 100:
+                            return SyncResult(
+                                False,
+                                f"nextcloud rejected group {group}: {code} {message}",
+                            )
 
                 action = "disable" if user.status == "disabled" else "enable"
                 response = await client.put(f"{self._path(user.username)}/{action}")

@@ -14,7 +14,7 @@ def test_user_crud_roundtrip(admin_client):
     r = c.post(
         "/users/new",
         data={"username": "jdoe", "display_name": "J. Doe", "email": "j@d.oe",
-              "password": "Secret-123456789"},
+              "password": "V4lid!Jupiter-Cloud"},
         follow_redirects=False,
     )
     assert r.status_code == 303
@@ -42,9 +42,9 @@ def test_user_crud_roundtrip(admin_client):
 
 
 def test_soft_deleted_user_can_restore_with_new_password(admin_client):
-    admin_client.post("/users/new", data={"username": "restoreme", "display_name": "", "email": "", "password": "first-secret"})
+    admin_client.post("/users/new", data={"username": "restoreme", "display_name": "", "email": "", "password": "V4lid!First-Secret-2026"})
     admin_client.post("/users/1/delete")
-    response = admin_client.post("/users/1/restore", data={"password": "new-secret"}, follow_redirects=False)
+    response = admin_client.post("/users/1/restore", data={"password": "V4lid!New-Secret-2026"}, follow_redirects=False)
     assert response.status_code == 303
     from oneauth.db import get_session
     from oneauth.models import ManagedUser
@@ -52,12 +52,12 @@ def test_soft_deleted_user_can_restore_with_new_password(admin_client):
     with get_session() as db:
         user = db.get(ManagedUser, 1)
         assert user.desired_action == "ensure" and user.deleted_at is None
-        assert decrypt_secret(user.pending_secret) == "new-secret"
+        assert decrypt_secret(user.pending_secret) == "V4lid!New-Secret-2026"
 
 
 def test_duplicate_username_rejected(admin_client):
     c = admin_client
-    data = {"username": "dup", "display_name": "", "email": "", "password": "x-123456789"}
+    data = {"username": "dup", "display_name": "", "email": "", "password": "V4lid!Orbit-Cloud-2026"}
     assert c.post("/users/new", data=data, follow_redirects=False).status_code == 303
     assert c.post("/users/new", data=data).status_code == 422
 
@@ -66,10 +66,10 @@ def test_password_never_plaintext_in_db(admin_client, tmp_path):
     admin_client.post(
         "/users/new",
         data={"username": "sec", "display_name": "", "email": "",
-              "password": "SuperSecret-42x"},
+              "password": "V4lid!Orbit-Cloud"},
     )
     blob = (tmp_path / "test.db").read_bytes()
-    assert b"SuperSecret-42x" not in blob
+    assert b"V4lid!Orbit-Cloud" not in blob
 
     from oneauth.db import get_session
     from oneauth.models import ManagedUser
@@ -77,4 +77,4 @@ def test_password_never_plaintext_in_db(admin_client, tmp_path):
 
     with get_session() as db:
         u = db.query(ManagedUser).filter(ManagedUser.username == "sec").one()
-        assert decrypt_secret(u.pending_secret) == "SuperSecret-42x"
+        assert decrypt_secret(u.pending_secret) == "V4lid!Orbit-Cloud"

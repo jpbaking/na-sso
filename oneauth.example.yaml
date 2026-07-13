@@ -1,0 +1,49 @@
+version: 1
+
+password_policy:
+  min_length: 14
+  max_length: 128
+  require_lowercase: true
+  require_uppercase: true
+  require_digit: true
+  require_symbol: true
+  max_repeated_characters: 3
+  max_numeric_sequence: 3
+  min_identity_distance: 4
+  reject_identity_terms: true
+  history_size: 3
+  expires_after_days: 90
+
+ssh_key_policy:
+  allowed_algorithms: [ed25519, rsa]
+  rsa_min_bits: 3072
+  browser_generation: true
+  allow_server_fallback: false
+
+targets:
+  - id: firewall_primary
+    type: opnsense
+    display_name: Primary firewall
+    base_url: https://opnsense.example.lan
+    verify_tls: true
+    default_groups: [vpn-users]
+  - id: nexus_primary
+    type: nexus
+    display_name: Nexus Repository
+    base_url: https://nexus.example.lan
+    default_roles: [nx-anonymous]
+  - id: cloud_primary
+    type: nextcloud
+    display_name: Nextcloud
+    base_url: https://nextcloud.example.lan
+    default_groups: [employees]
+  - id: ssh_debian
+    type: ssh
+    display_name: Debian shell
+    host: shell.example.lan
+    port: 22
+    host_key_sha256: SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    platform: debian
+    allow_relaxed_usernames: false
+    mode: password_and_key
+    default_groups: [developers]

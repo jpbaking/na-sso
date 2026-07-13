@@ -3,6 +3,7 @@ import respx
 from httpx import Response
 
 from oneauth.connectors.base import Connector, SyncResult
+from oneauth.models import ManagedUser
 
 
 class FakeConnector(Connector):
@@ -28,10 +29,54 @@ class FakeConnector(Connector):
 
 
 def _user(username="jdoe", status="active"):
-    from oneauth.models import ManagedUser
-
     return ManagedUser(username=username, display_name="J", email="j@x", status=status)
 
+
+def test_yaml_registry_preserves_order_repeated_types_and_capabilities(tmp_path, monkeypatch):
+    path = tmp_path / "targets.yaml"
+    path.write_text("""
+targets:
+  - {id: cloud_a, type: nextcloud, display_name: Cloud A, base_url: https://a,
+     admin_user: admin, admin_password: secret}
+  - {id: cloud_b, type: nextcloud, display_name: Cloud B, base_url: https://b,
+     admin_user: admin, admin_password: other}
+  - {id: shell_disabled, type: ssh, display_name: Shell, enabled: false, host: shell,
+     management_user: mgr, management_private_key: key,
+     host_key_sha256: "SHA256:AAAAAAAAAAAAAAAAAAAA", platform: debian}
+""")
+    monkeypatch.setenv("ONEAUTH_CONFIG_FILE", str(path))
+    monkeypatch.setenv("ONEAUTH_DATABASE_PATH", str(tmp_path / "registry.db"))
+    from oneauth.config import get_settings
+    import oneauth.db as database
+    get_settings.cache_clear()
+    database._engine = database._session_factory = None
+    database.init_db()
+    from oneauth.connectors import get_connectors
+    assert get_connectors() == []
+    database._engine = database._session_factory = None
+    get_settings.cache_clear()
+
+
+def test_cross_target_identity_validation_is_preflight():
+    from oneauth.config import NexusTarget
+    from oneauth.connectors import validate_for_targets
+    from oneauth.connectors.nexus import NexusConnector
+    connector = NexusConnector(NexusTarget(id="nexus_a", type="nexus", display_name="Nexus",
+        base_url="https://nexus", admin_user="admin", admin_password="secret"))
+    user = ManagedUser(username="jdoe", display_name="", email="")
+    result = validate_for_targets(user, [connector])
+    assert not result.ok and "requires email" in result.detail
+
+
+def test_ssh_rejects_unrepresentable_and_nonportable_names_without_connecting():
+    from oneauth.config import SshTarget
+    from oneauth.connectors.ssh import SSHConnector
+    target = SshTarget(id="shell", type="ssh", display_name="Shell", host="shell",
+        management_user="mgr", management_private_key="key",
+        host_key_sha256="SHA256:AAAAAAAAAAAAAAAAAAAA", platform="ubuntu")
+    connector = SSHConnector(target)
+    assert not connector.validate_identity(ManagedUser(username="bad/name")).ok
+    assert not connector.validate_identity(ManagedUser(username="name with space")).ok
 
 async def test_fake_connector_interface(client):
     fake = FakeConnector()
@@ -68,6 +113,20 @@ async def test_opnsense_create_user(opnsense):
 
     body = json.loads(add.calls[0].request.content)
     assert body["user"]["name"] == "jdoe" and body["user"]["password"] == "pw-123"
+
+
+@respx.mock
+async def test_opnsense_applies_default_groups():
+    from oneauth.config import OpnsenseTarget
+    from oneauth.connectors.opnsense import OPNsenseConnector
+    connector = OPNsenseConnector(OpnsenseTarget(id="fw", type="opnsense", display_name="FW",
+        base_url="https://groups.test", api_key="key", api_secret="secret",
+        default_groups=["vpn-users", "auditors"]))
+    respx.post("https://groups.test/api/auth/user/search").mock(return_value=Response(200, json={"rows": []}))
+    add = respx.post("https://groups.test/api/auth/user/add").mock(return_value=Response(200, json={"result": "saved"}))
+    assert (await connector.ensure_user(_user(), "pw")).ok
+    import json
+    assert json.loads(add.calls[0].request.content)["user"]["group_memberships"] == "vpn-users,auditors"
 
 
 @respx.mock
@@ -253,6 +312,23 @@ async def test_nextcloud_create_user(nextcloud):
     assert result.ok and create.called and enable.called
     assert b"userid=jdoe" in create.calls[0].request.content
     assert b"password=pw-123" in create.calls[0].request.content
+
+
+@respx.mock
+async def test_nextcloud_applies_default_groups():
+    from oneauth.config import NextcloudTarget
+    from oneauth.connectors.nextcloud import NextcloudConnector
+    connector = NextcloudConnector(NextcloudTarget(id="cloud", type="nextcloud", display_name="Cloud",
+        base_url="https://groups.test", admin_user="admin", admin_password="secret",
+        default_groups=["employees", "engineering"]))
+    respx.get("https://groups.test/ocs/v1.php/cloud/users/jdoe").mock(return_value=Response(200, json=_ocs(998)))
+    create = respx.post("https://groups.test/ocs/v1.php/cloud/users").mock(return_value=Response(200, json=_ocs()))
+    respx.get("https://groups.test/ocs/v1.php/cloud/users/jdoe/groups").mock(return_value=Response(200, json={"ocs": {"meta": {"statuscode": 100}, "data": {"groups": ["employees"]}}}))
+    add_group = respx.post("https://groups.test/ocs/v1.php/cloud/users/jdoe/groups").mock(return_value=Response(200, json=_ocs()))
+    respx.put("https://groups.test/ocs/v1.php/cloud/users/jdoe/enable").mock(return_value=Response(200, json=_ocs()))
+    assert (await connector.ensure_user(_user(), "pw")).ok
+    assert b"groups%5B%5D=employees" in create.calls[0].request.content
+    assert add_group.call_count == 1 and b"engineering" in add_group.calls[0].request.content
 
 
 @respx.mock

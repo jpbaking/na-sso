@@ -6,15 +6,25 @@ services:
       context: .
     image: oneauth:local
 
+  demo-ssh-builder:
+    profiles: ["build"]
+    build:
+      context: .
+      dockerfile: Dockerfile.demo-ssh
+    image: oneauth-demo-ssh:local
+
   # RUNTIME: consumes the built image.
   oneauth:
     image: oneauth:local
     restart: unless-stopped
     env_file: .config/.env
+    environment:
+      ONEAUTH_CONFIG_FILE: /config/oneauth.yaml
     ports:
       - "8000:8000"
     volumes:
       - oneauth-data:/data
+      - ./oneauth.example.yaml:/config/oneauth.yaml:ro
 
   # DEMO: runs One Auth against protocol-faithful in-memory mock targets.
   mock-targets:
@@ -37,6 +47,43 @@ services:
       timeout: 2s
       retries: 15
 
+  demo-ssh-bootstrap:
+    profiles: ["demo"]
+    image: oneauth-demo-ssh:local
+    command: ["bootstrap"]
+    volumes:
+      - oneauth-demo-ssh:/demo
+
+  demo-ssh-password:
+    profiles: ["demo"]
+    image: oneauth-demo-ssh:local
+    command: ["serve", "password"]
+    depends_on:
+      demo-ssh-bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - oneauth-demo-ssh:/demo:ro
+    healthcheck:
+      test: ["CMD-SHELL", "ssh-keyscan -t ed25519 -T 2 localhost >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  demo-ssh-combined:
+    profiles: ["demo"]
+    image: oneauth-demo-ssh:local
+    command: ["serve", "combined"]
+    depends_on:
+      demo-ssh-bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - oneauth-demo-ssh:/demo:ro
+    healthcheck:
+      test: ["CMD-SHELL", "ssh-keyscan -t ed25519 -T 2 localhost >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
   oneauth-demo:
     profiles: ["demo"]
     image: oneauth:local
@@ -44,30 +91,23 @@ services:
     depends_on:
       mock-targets:
         condition: service_healthy
+      demo-ssh-password:
+        condition: service_healthy
+      demo-ssh-combined:
+        condition: service_healthy
     environment:
       ONEAUTH_SECRET_KEY: demo-only-secret-key
       ONEAUTH_ADMIN_USERNAME: admin
       ONEAUTH_ADMIN_BOOTSTRAP_PASSWORD: demo-password
       ONEAUTH_DATABASE_PATH: /data/oneauth.db
-      ONEAUTH_OPNSENSE_ENABLED: "true"
-      ONEAUTH_OPNSENSE_BASE_URL: http://mock-targets:9000
-      ONEAUTH_OPNSENSE_API_KEY: demo-key
-      ONEAUTH_OPNSENSE_API_SECRET: demo-secret
-      ONEAUTH_OPNSENSE_VERIFY_TLS: "false"
-      ONEAUTH_NEXUS_ENABLED: "true"
-      ONEAUTH_NEXUS_BASE_URL: http://mock-targets:9000
-      ONEAUTH_NEXUS_ADMIN_USER: admin
-      ONEAUTH_NEXUS_ADMIN_PASSWORD: demo-password
-      ONEAUTH_NEXUS_DEFAULT_ROLES: nx-anonymous
-      ONEAUTH_NEXTCLOUD_ENABLED: "true"
-      ONEAUTH_NEXTCLOUD_BASE_URL: http://mock-targets:9000
-      ONEAUTH_NEXTCLOUD_ADMIN_USER: admin
-      ONEAUTH_NEXTCLOUD_ADMIN_PASSWORD: demo-password
+      ONEAUTH_CONFIG_FILE: /demo/oneauth.yaml
     ports:
       - "8000:8000"
     volumes:
       - oneauth-demo-data:/data
+      - oneauth-demo-ssh:/demo:ro
 
 volumes:
   oneauth-data:
   oneauth-demo-data:
+  oneauth-demo-ssh:

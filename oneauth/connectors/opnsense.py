@@ -1,19 +1,28 @@
 import httpx
 
-from oneauth.config import Settings
-from oneauth.connectors.base import Connector, SyncResult
+from oneauth.config import OpnsenseTarget, Settings
+from oneauth.connectors.base import Connector, IdentityCapabilities, SyncResult
 from oneauth.models import ManagedUser
 
 
 class OPNsenseConnector(Connector):
     """OPNsense core auth/user API (api/auth/user/*), key+secret basic auth."""
 
-    name = "opnsense"
+    capabilities = IdentityCapabilities(email=True, display_name=True)
 
-    def __init__(self, settings: Settings):
-        self._base = settings.opnsense_base_url.rstrip("/")
-        self._auth = (settings.opnsense_api_key, settings.opnsense_api_secret)
-        self._verify = settings.opnsense_verify_tls
+    def __init__(self, settings: Settings | OpnsenseTarget):
+        if isinstance(settings, OpnsenseTarget):
+            self.target_id, self.target_type, self.display_name = settings.id, settings.type, settings.display_name
+            self._base = settings.base_url.rstrip("/")
+            self._auth = (settings.api_key.get_secret_value(), settings.api_secret.get_secret_value())
+            self._verify = settings.verify_tls
+            self._groups = settings.default_groups
+        else:
+            self.target_id = self.target_type = "opnsense"; self.display_name = "OPNsense"
+            self._base = settings.opnsense_base_url.rstrip("/")
+            self._auth = (settings.opnsense_api_key, settings.opnsense_api_secret)
+            self._verify = settings.opnsense_verify_tls
+            self._groups = []
 
     def _client(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(
@@ -41,6 +50,7 @@ class OPNsenseConnector(Connector):
                         "descr": user.display_name or user.username,
                         "email": user.email,
                         "disabled": "1" if user.status == "disabled" else "0",
+                        "group_memberships": ",".join(self._groups),
                     }
                 }
                 if password is not None:

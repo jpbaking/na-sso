@@ -237,6 +237,7 @@ async def nextcloud_add(
     password: str = Form(...),
     displayName: str = Form(""),
     email: str = Form(""),
+    groups: list[str] = Form(default=[], alias="groups[]"),
 ) -> JSONResponse:
     _require_basic(request, _credentials("NEXTCLOUD", "admin", "demo-password"))
     _maybe_fail("nextcloud")
@@ -248,8 +249,30 @@ async def nextcloud_add(
         "email": email,
         "password": password,
         "enabled": True,
+        "groups": groups,
     }
     return JSONResponse(_ocs())
+
+
+@app.get("/ocs/v1.php/cloud/users/{username}/groups")
+async def nextcloud_groups(username: str, request: Request) -> dict[str, Any]:
+    _require_basic(request, _credentials("NEXTCLOUD", "admin", "demo-password"))
+    _maybe_fail("nextcloud")
+    if username not in state.nextcloud:
+        return _ocs(103, "User does not exist")
+    return _ocs(data={"groups": list(state.nextcloud[username].get("groups", []))})
+
+
+@app.post("/ocs/v1.php/cloud/users/{username}/groups")
+async def nextcloud_add_group(username: str, request: Request, groupid: str = Form(...)) -> dict[str, Any]:
+    _require_basic(request, _credentials("NEXTCLOUD", "admin", "demo-password"))
+    _maybe_fail("nextcloud")
+    if username not in state.nextcloud:
+        return _ocs(103, "User does not exist")
+    groups = state.nextcloud[username].setdefault("groups", [])
+    if groupid not in groups:
+        groups.append(groupid)
+    return _ocs()
 
 
 @app.put("/ocs/v1.php/cloud/users/{username}")

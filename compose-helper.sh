@@ -166,28 +166,29 @@ case "${1:-}" in
         run_dc --profile build build --pull
         ;;
     demo-pull)
-        run_dc --profile demo pull oneauth-demo mock-targets
+        run_dc --profile demo pull oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
         ;;
     demo-start)
         run_dc --profile demo up -d oneauth-demo
         ;;
     demo-restart)
-        run_dc --profile demo stop -t "$DCH_STOP_TIMEOUT" oneauth-demo mock-targets
+        run_dc --profile demo stop -t "$DCH_STOP_TIMEOUT" oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
         run_dc --profile demo up -d oneauth-demo
         ;;
     demo-stop)
-        run_dc --profile demo stop -t "$DCH_STOP_TIMEOUT" oneauth-demo mock-targets
+        run_dc --profile demo stop -t "$DCH_STOP_TIMEOUT" oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
         ;;
     demo-down)
-        run_dc --profile demo rm -f -s -v oneauth-demo mock-targets
+        run_dc --profile demo rm -f -s -v oneauth-demo mock-targets demo-ssh-password demo-ssh-combined demo-ssh-bootstrap
         # Remove only the named demo database volume. A missing volume is fine.
         docker volume rm "${PROJECT_NAME}_oneauth-demo-data" 2>/dev/null || true
+        docker volume rm "${PROJECT_NAME}_oneauth-demo-ssh" 2>/dev/null || true
         ;;
     demo-logs)
-        run_dc --profile demo logs -f --tail="$DCH_LOGS_TAIL" oneauth-demo mock-targets
+        run_dc --profile demo logs -f --tail="$DCH_LOGS_TAIL" oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
         ;;
     demo-ps)
-        run_dc --profile demo ps oneauth-demo mock-targets
+        run_dc --profile demo ps oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
         ;;
     logs)
         run_dc logs -f --tail="$DCH_LOGS_TAIL"

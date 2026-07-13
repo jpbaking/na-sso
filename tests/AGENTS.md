@@ -20,10 +20,12 @@ Owns pytest fixtures and tests only. Production contracts and implementation rem
 
 ## Feature Map
 
-- **Test application fixtures** — Creates isolated clients, database state, and authenticated admin sessions. Start: `conftest.py`.
+- **Configuration and application fixtures** — Validates YAML target/policy parsing and creates isolated clients, database state, and authenticated admin sessions. Start: `test_config.py`. Files: `conftest.py`.
 - **Authentication and user workflows** — Covers login guards, CRUD, duplicate validation, status changes, and plaintext-secret exclusion. Start: `test_users.py`.
-- **Connector behavior** — Covers interface conformance, target API request/response shapes, probes, and status-page integration. Start: `test_connectors.py`.
-- **Synchronization and lifecycle behavior** — Covers full and partial success, automatic/manual retry, disable, soft deletion, restore, purge, authenticated SSE snapshots, dashboard state, and audit events. Start: `test_sync.py`. Files: `test_users.py`, `test_migrations.py`.
+- **Account security** — Covers password policy/generation, role-restricted login, `SUPERADMIN` root immutability/N/A target presentation, and private-key-to-public-key enrollment boundaries. Start: `test_security.py`.
+- **Connector behavior** — Covers interface conformance, target API request/response shapes, configured default memberships, probes, and status-page integration. Start: `test_connectors.py`.
+- **Encrypted target onboarding** — Covers credential encryption/redaction, SSH admin password/private-key modes, combined save/probe gating, configuration status, and route authorization. Start: `test_target_credentials.py`.
+- **Synchronization and lifecycle behavior** — Covers stable-ID migration, retired ambiguity, assignment/deferred states, full and partial success, retry, disable, deletion, restore, expiry, SSE, dashboards, and audit events. Start: `test_sync.py`. Files: `test_users.py`, `test_migrations.py`.
 - **Mock target and demo integration** — Covers target API contracts, real-HTTP connector lifecycles, failure/retry UX, and the all-target application workflow. Start: `test_mock_targets.py`.
 
 ## Child DOX Index

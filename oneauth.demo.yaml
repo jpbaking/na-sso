@@ -1,0 +1,15 @@
+version: 1
+password_policy:
+  min_length: 14
+  history_size: 3
+  expires_after_days: 90
+ssh_key_policy:
+  allowed_algorithms: [ed25519, rsa]
+  rsa_min_bits: 3072
+  browser_generation: true
+  allow_server_fallback: true
+targets:
+  - {id: firewall_a, type: opnsense, display_name: Firewall A, base_url: http://mock-targets:9000, verify_tls: false}
+  - {id: firewall_b, type: opnsense, display_name: Firewall B, base_url: http://mock-targets:9000, verify_tls: false}
+  - {id: nexus_demo, type: nexus, display_name: Nexus Repository, base_url: http://mock-targets:9000, default_roles: [nx-anonymous], verify_tls: false}
+  - {id: cloud_demo, type: nextcloud, display_name: Nextcloud, base_url: http://mock-targets:9000, verify_tls: false, default_groups: [employees]}
