@@ -51,13 +51,20 @@ edit, change the password of, disable, retry, and delete users through the
 normal UI; One Auth uses its production connector implementations for every
 operation.
 
+Open `http://localhost:9000` to control mock availability. OPNsense, Nexus,
+and Nextcloud each have one independent success/failure switch; the selected
+mode applies consistently to every API request for that whole target. This
+makes failed states and automatic recovery deterministic. The control page is
+bound to host loopback only, and health checks remain successful regardless of
+target switches.
+
 The demo is isolated from the normal runtime:
 
 - `oneauth-demo` has explicit demo-only settings and a separate
   `oneauth-demo-data` volume. It never reads target credentials from
   `.config/.env`.
-- `mock-targets` is reachable only inside the Compose network. Its reset and
-  failure-injection controls are intentionally not published to the host.
+- Connector-facing mock APIs remain inside the Compose network. The browser
+  controls are published only on host loopback port 9000.
 - Mock target users live in memory and reset whenever `mock-targets` is
   restarted. The One Auth demo database persists, so delete evaluated users
   in the UI before restarting the mocks when you want both sides to remain in

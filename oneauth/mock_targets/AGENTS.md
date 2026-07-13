@@ -13,8 +13,9 @@ Owns the optional mock-target FastAPI service and its in-memory target state. Pr
 - Implement only the target API shapes exercised by the production connectors; this is not a general emulator for any target product.
 - Keep OPNsense, Nexus, and Nextcloud state isolated and in memory. Restarting the service intentionally resets remote demo state.
 - Default credentials are public demo values and must never be presented as production-safe secrets.
-- The Compose demo must not publish mock API or control endpoints to the host.
+- The Compose demo publishes the mock service only on host loopback port 9000 for its control page; never bind it to a non-loopback host interface.
 - `/__mock__/reset` and one-shot `/__mock__/fail/{target}` controls are deterministic test/demo aids for the private Compose network and loopback tests.
+- Each target has one in-memory availability switch that consistently succeeds or fails every connector-facing request for that target.
 - Protocol changes must remain aligned with `../connectors/` and receive direct API plus real-HTTP connector coverage.
 
 ## Verification
@@ -25,7 +26,7 @@ Owns the optional mock-target FastAPI service and its in-memory target state. Pr
 ## Feature Map
 
 - **Stateful target API emulation** — Implements the connector-facing OPNsense Auth User, Nexus Security User, and Nextcloud OCS Provisioning routes. Start: `app.py`.
-- **Demo controls and readiness** — Provides health, deterministic reset, and one-shot target failure behavior for repeatable workflows. Start: `app.py`.
+- **Demo controls and readiness** — Provides a browser page with independent whole-target availability switches plus deterministic health/reset and one-shot failures. Start: `app.py`.
 
 ## Child DOX Index
 

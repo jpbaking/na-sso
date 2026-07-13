@@ -7,7 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, Form, HTTPException, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 
 @dataclass
@@ -16,12 +16,16 @@ class MockState:
     nexus: dict[str, dict[str, Any]] = field(default_factory=dict)
     nextcloud: dict[str, dict[str, Any]] = field(default_factory=dict)
     fail_next: set[str] = field(default_factory=set)
+    available: dict[str, bool] = field(
+        default_factory=lambda: {"opnsense": True, "nexus": True, "nextcloud": True}
+    )
 
     def reset(self) -> None:
         self.opnsense.clear()
         self.nexus.clear()
         self.nextcloud.clear()
         self.fail_next.clear()
+        self.available = {"opnsense": True, "nexus": True, "nextcloud": True}
 
 
 state = MockState()
@@ -48,6 +52,8 @@ def _maybe_fail(target: str) -> None:
     if target in state.fail_next:
         state.fail_next.remove(target)
         raise HTTPException(status_code=503, detail=f"injected {target} failure")
+    if not state.available[target]:
+        raise HTTPException(status_code=503, detail=f"{target} is toggled unavailable")
 
 
 def _ocs(code: int = 100, message: str = "OK", data: Any = None) -> dict[str, Any]:
@@ -62,6 +68,32 @@ def _ocs(code: int = 100, message: str = "OK", data: Any = None) -> dict[str, An
 @app.get("/healthz")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/", response_class=HTMLResponse)
+async def control_page() -> str:
+    cards = "".join(
+        f"""<article><h2>{target.title()}</h2>
+        <p class=\"{'up' if available else 'down'}\">{'Reply success' if available else 'Reply failure'}</p>
+        <form method=\"post\" action=\"/__mock__/availability/{target}\">
+        <input type=\"hidden\" name=\"available\" value=\"{'false' if available else 'true'}\">
+        <button type=\"submit\">Switch to {'failure' if available else 'success'}</button></form></article>"""
+        for target, available in state.available.items()
+    )
+    return f"""<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">
+    <title>One Auth mock controls</title><style>
+    body{{font:16px system-ui;background:#101828;color:#f8fafc;margin:0;padding:3rem}}main{{max-width:900px;margin:auto}}
+    section{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}}article{{background:#1d2939;padding:1.5rem;border-radius:12px}}
+    .up{{color:#6ce9a6}}.down{{color:#f97066}}button{{padding:.7rem 1rem;border:0;border-radius:8px;cursor:pointer}}</style></head>
+    <body><main><h1>Mock target controls</h1><p>Each switch applies to every API request for that target.</p><section>{cards}</section></main></body></html>"""
+
+
+@app.post("/__mock__/availability/{target}")
+async def set_availability(target: str, available: bool = Form(...)) -> RedirectResponse:
+    if target not in state.available:
+        raise HTTPException(status_code=404, detail="unknown target")
+    state.available[target] = available
+    return RedirectResponse("/", status_code=303)
 
 
 @app.post("/__mock__/reset")

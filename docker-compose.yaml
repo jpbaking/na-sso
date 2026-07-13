@@ -23,6 +23,8 @@ services:
     restart: unless-stopped
     command:
       ["uvicorn", "oneauth.mock_targets.app:app", "--host", "0.0.0.0", "--port", "9000"]
+    ports:
+      - "127.0.0.1:9000:9000"
     healthcheck:
       test:
         [

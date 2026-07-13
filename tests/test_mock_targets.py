@@ -169,6 +169,28 @@ def test_mock_health_reset_auth_and_failure_injection():
     ).status_code == 200
 
 
+def test_target_wide_availability_controls():
+    client = _client()
+    page = client.get("/")
+    assert page.status_code == 200 and "Mock target controls" in page.text
+    assert client.post(
+        "/api/auth/user/search", auth=("demo-key", "demo-secret"), json={}
+    ).status_code == 200
+    response = client.post(
+        "/__mock__/availability/opnsense",
+        data={"available": "false"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert client.post(
+        "/api/auth/user/search", auth=("demo-key", "demo-secret"), json={}
+    ).status_code == 503
+    assert client.get(
+        "/service/rest/v1/security/users", auth=("admin", "demo-password")
+    ).status_code == 200
+    assert client.get("/healthz").status_code == 200
+
+
 @pytest.mark.parametrize(
     "connector_type",
     [OPNsenseConnector, NexusConnector, NextcloudConnector],
