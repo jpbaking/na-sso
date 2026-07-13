@@ -10,13 +10,12 @@ Owns everything under `design/`. Token values and asset linework define the visu
 - `styles.css` (tokens) and `components.css` (classes) are the two public stylesheet entry points, linked in that order. Consumers never link individual token files.
 - Import order in `styles.css` is load-order-sensitive: `colors.css` → `typography.css` → `spacing.css` → `charts.css`. Do not reorder.
 - All tokens are `:root`-scoped custom properties. No component-scoped token overrides in this folder.
-- `components.css` sections are numbered (§1–§24) and listed in its header CONTENTS block; the README §5 catalog and CHEATSHEET.md map to those numbers — keep all three in sync.
+- `components.css` sections are numbered (§1–§24) and listed in its header CONTENTS block; keep that index synchronized with section changes.
 - `components.js` and `charts.js` are plain classic scripts (no modules, no build step, no dependencies). `components.js` auto-initialises from `data-*` attributes; `charts.js` exposes `window.lwCharts`.
 - `--chart-1..5` in `tokens/charts.css` is a validated palette (CVD separation, ≥3:1 contrast on white) — never eyeball-edit; re-validate any change (see the file's header comment).
 - Asset URLs inside `components.css` are relative (`assets/…`) so they resolve wherever `design/` is mounted.
 - The logo mark structure must be preserved across all variants: rounded blue tile (`#12279E`), white linework, single amber dot (`#D9821F`).
-- `assets/favicons/` is the generated default favicon set for the kit's own mark; regenerate with `../scripts/make-favicons.sh` after changing the mark.
-- Never add a token without adding a corresponding row/entry to README §8.
+- `assets/favicons/` is the generated default favicon set for the kit's own mark; replace it from the upstream design kit after changing the mark.
 
 ## Feature Map
 - **Style entry point** — Loads Google Fonts and imports the four token files in order. Start: `styles.css`. Files: `tokens/colors.css`, `tokens/typography.css`, `tokens/spacing.css`, `tokens/charts.css`.
