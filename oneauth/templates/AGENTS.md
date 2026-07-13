@@ -14,6 +14,7 @@ Owns page structure and presentation. Route behavior and template context are ow
 - Follow the lazyway.io design rules from the root contract: documented classes first, no gradients, and exactly one amber accent per page.
 - Keep navigation consistent across authenticated pages: Users, Targets, Audit, and Sign out.
 - Render operator-visible connector errors safely; never render credentials or decrypted pending secrets.
+- Pending and retrying target cells subscribe to authenticated `/events/sync` updates through the shared application shell; construct event-derived content with DOM text APIs.
 
 ## Verification
 
@@ -22,7 +23,7 @@ Owns page structure and presentation. Route behavior and template context are ow
 
 ## Feature Map
 
-- **Application shell** — Shared metadata, navigation, static design links, content slot, and footer. Start: `base.html`.
+- **Application shell and live sync** — Shared metadata, navigation, static design links, content slot, footer, and SSE-driven target-cell updates. Start: `base.html`.
 - **Admin login** — Renders credential input and authentication errors. Start: `login.html`. Files: `base.html`.
 - **User lifecycle management** — Lists target and retry states and provides create/edit/password/status/soft-delete/restore/purge/manual-retry controls. Start: `users.html`. Files: `user_form.html`, `base.html`.
 - **Target dashboard** — Shows connector reachability and the user sync matrix. Start: `status.html`. Files: `base.html`.

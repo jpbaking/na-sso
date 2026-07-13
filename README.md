@@ -12,6 +12,7 @@ target's user-management API and records the result independently.
 - Generates passwords or accepts operator-supplied passwords.
 - Propagates user changes to every enabled target and automatically retries failures.
 - Shows per-user, per-target pending, successful, and failed states.
+- Streams pending and retrying state changes into the Users and Targets tables without a page refresh.
 - Persists capped exponential-backoff schedules across application restarts and also supports immediate manual retry.
 - Soft-deletes users locally after remote deletion, with restore and explicit purge controls.
 - Records admin actions and connector results in an audit log.

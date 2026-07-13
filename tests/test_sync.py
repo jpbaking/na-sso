@@ -164,6 +164,19 @@ def test_status_dashboard_reflects_sync_state(admin_client):
     assert response.status_code == 200
     assert "syncme" in response.text
     assert "failed" in response.text and "offline" in response.text
+    assert 'data-sync-cell' in response.text
+
+
+def test_sync_sse_requires_auth_and_returns_snapshot(client):
+    assert client.get("/events/sync?once=true").status_code == 401
+    user_id = _stored_user()
+    assert client.post("/login", data={"username": "admin", "password": "admin-pass"}, follow_redirects=False).status_code == 303
+    response = client.get("/events/sync?once=true")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: sync" in response.text
+    assert f'\"id\":{user_id}' in response.text
+    assert '\"states\"' in response.text
 
 
 def test_audit_page_lists_admin_and_sync_events(admin_client, monkeypatch):

@@ -49,7 +49,7 @@
           <td><a href="/users/{{ u.id }}">{{ u.username }}</a>{% if u.desired_action == "delete" %} (deletion{% if u.deleted_at %} complete{% else %} pending{% endif %}){% endif %}</td>
           {% for target in ["opnsense", "nexus", "nextcloud"] %}
           {% set state = states.get(target) %}
-          <td>
+          <td data-sync-cell data-user-id="{{ u.id }}" data-target="{{ target }}">
             {% if state and state.state == "ok" %}<span class="badge badge-shipped">ok</span>
             {% elif state and state.state == "failed" %}<span class="badge badge-danger" title="{{ state.detail }}">failed</span>
             {% else %}<span class="badge badge-planned">pending</span>{% endif %}

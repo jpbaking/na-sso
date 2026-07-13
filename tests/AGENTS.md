@@ -23,7 +23,7 @@ Owns pytest fixtures and tests only. Production contracts and implementation rem
 - **Test application fixtures** — Creates isolated clients, database state, and authenticated admin sessions. Start: `conftest.py`.
 - **Authentication and user workflows** — Covers login guards, CRUD, duplicate validation, status changes, and plaintext-secret exclusion. Start: `test_users.py`.
 - **Connector behavior** — Covers interface conformance, target API request/response shapes, probes, and status-page integration. Start: `test_connectors.py`.
-- **Synchronization and lifecycle behavior** — Covers full and partial success, automatic/manual retry, disable, soft deletion, restore, purge, dashboard state, and audit events. Start: `test_sync.py`. Files: `test_users.py`, `test_migrations.py`.
+- **Synchronization and lifecycle behavior** — Covers full and partial success, automatic/manual retry, disable, soft deletion, restore, purge, authenticated SSE snapshots, dashboard state, and audit events. Start: `test_sync.py`. Files: `test_users.py`, `test_migrations.py`.
 - **Mock target and demo integration** — Covers target API contracts, real-HTTP connector lifecycles, failure/retry UX, and the all-target application workflow. Start: `test_mock_targets.py`.
 
 ## Child DOX Index

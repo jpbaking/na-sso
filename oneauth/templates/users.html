@@ -37,7 +37,7 @@
           </td>
           {% for t in ["opnsense", "nexus", "nextcloud"] %}
           {% set s = states.get(t) %}
-          <td>
+          <td data-sync-cell data-user-id="{{ u.id }}" data-target="{{ t }}">
             {% if s and s.state == "ok" %}<span class="badge badge-shipped">ok</span>
             {% elif s and s.state == "failed" %}
             <span class="badge badge-danger" title="{{ s.detail }}">failed</span>
