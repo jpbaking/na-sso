@@ -52,6 +52,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.site-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.site-page > main { flex: 1; }
+
 img, svg { vertical-align: middle; }
 
 /* The hidden attribute always wins, even over display:flex/grid classes. */
@@ -618,6 +626,36 @@ button.tag.active { background: var(--brand-blue); border-color: var(--brand-blu
   text-align: right;
   word-break: break-all;
 }
+
+/* Expandable key/status rows with a right-aligned disclosure chevron. */
+.disclosure-row { border-bottom: var(--border-hair) solid var(--line); }
+.disclosure-row:nth-child(even) { background: var(--surface); }
+
+.disclosure-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3);
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure-summary::-webkit-details-marker { display: none; }
+
+.disclosure-summary .data-key {
+  font-size: var(--ui-body);
+}
+
+.disclosure-summary::after {
+  content: "▸";
+  color: var(--muted);
+  font-size: var(--ui-body);
+}
+
+.disclosure-row[open] > .disclosure-summary::after { content: "▾"; }
+.disclosure-body { padding: 0 var(--space-3) var(--space-4); }
+.disclosure-body > .btn { display: flex; margin-left: auto; }
 
 /* --------------------------------------------------------------------------
    13. Forms

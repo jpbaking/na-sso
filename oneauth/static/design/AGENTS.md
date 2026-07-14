@@ -19,7 +19,7 @@ Owns everything under `design/`. Token values and asset linework define the visu
 
 ## Feature Map
 - **Style entry point** — Loads Google Fonts and imports the four token files in order. Start: `styles.css`. Files: `tokens/colors.css`, `tokens/typography.css`, `tokens/spacing.css`, `tokens/charts.css`.
-- **Component classes** — Every documented UI class (§1 base … §24 spinner), including the single-function app shell (§23, the url-shortener pattern). Start: `components.css`. Files: (none beyond the file).
+- **Component classes** — Every documented UI class (§1 base … §24 spinner), including viewport-filling page shells, zebra-striped disclosure lists, and the single-function app shell (§23, the url-shortener pattern). Start: `components.css`. Files: (none beyond the file).
 - **JS behaviors** — Modal (`data-modal-open/close` on `<dialog class="modal">`), tabs (`[data-tabs]`), date picker (`[data-datepicker]` → `YYYY-MM-DD`), time picker (`[data-timepicker]` → `HH:MM`). Start: `components.js`. Files: (none beyond the file).
 - **Charts** — Dependency-free SVG bar/line/donut/sparkline with legends, hover tooltips, and sr-only data tables; colors from `--chart-*` tokens. Start: `charts.js`. Files: `tokens/charts.css`.
 - **Color tokens** — Brand, neutrals, on-blue, focus, status dots, success/danger pairs. Start: `tokens/colors.css`.

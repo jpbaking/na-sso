@@ -313,7 +313,10 @@ def test_application_demo_workflow_with_failure_and_retry(
             assert user.pending_secret is not None
             assert {item.target: item.state for item in user.sync_states}["nexus"] == "failed"
         status_page = client.get("/status")
-        assert "demo_user" in status_page.text and "failed" in status_page.text
+        users_page = client.get("/users")
+        assert "demo_user" not in status_page.text
+        assert "User sync matrix" not in status_page.text
+        assert "demo_user" in users_page.text and "failed" in users_page.text
 
         with db.get_session() as session:
             user = session.get(ManagedUser, user_id)

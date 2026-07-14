@@ -9,6 +9,15 @@ def test_bad_login_rejected(client):
     assert r.status_code == 401
 
 
+def test_shared_page_shell_pins_footer_to_viewport(client, admin_client):
+    login = client.get("/login")
+    users = admin_client.get("/users")
+
+    for response in (login, users):
+        assert '<body class="site-page">' in response.text
+        assert response.text.index("<main>") < response.text.index('<footer class="footer">')
+
+
 def test_user_crud_roundtrip(admin_client):
     c = admin_client
     r = c.post(

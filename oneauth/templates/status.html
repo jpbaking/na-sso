@@ -13,26 +13,26 @@
     <h1 class="section-title">Target status</h1>
   </div>
   {% if probes %}
-  <div class="data-list">
+  <div class="data-list disclosure-list">
     {% for p in probes %}
-    <div class="data-row">
-      <div class="data-key">{{ p.name }}</div>
-      <div class="data-value">
+    <details class="disclosure-row" name="target-credentials">
+      <summary class="disclosure-summary">
+        <span class="data-key">{{ p.name }}</span>
         <span class="badge {{ 'badge-shipped' if p.ok else ('badge-danger' if p.configured else 'badge-planned') }}" title="{{ p.detail }}">{{ p.configuration_status }}</span>
-        <form method="post" action="/targets/{{ p.id }}/credentials" enctype="multipart/form-data" class="stack-1">
-          {% if p.type == 'opnsense' %}
-          <label class="label">API key <input class="input" name="api_key" required autocomplete="off"></label>
-          <label class="label">API secret <input class="input" name="api_secret" type="password" required autocomplete="new-password"></label>
-          {% else %}
-          <label class="label">{{ 'SSH admin' if p.type == 'ssh' else 'Admin user' }} <input class="input" name="admin_user" required autocomplete="off"></label>
-          {% if p.type == 'ssh' %}<label class="label">Authentication <select class="select" name="auth_mode"><option value="password">Password</option><option value="private_key">Private key</option></select></label>{% endif %}
-          <label class="label">Admin password <input class="input" name="password" type="password" autocomplete="new-password"></label>
-          {% if p.type == 'ssh' %}<label class="label">Private key <input class="input" name="private_key" type="file" accept=".pem,.key,text/plain"></label>{% endif %}
-          {% endif %}
-          <button class="btn btn-primary btn-sm" type="submit">SAVE</button>
-        </form>
-      </div>
-    </div>
+      </summary>
+      <form method="post" action="/targets/{{ p.id }}/credentials" enctype="multipart/form-data" class="disclosure-body stack-1">
+        {% if p.type == 'opnsense' %}
+        <label class="label">API key <input class="input" name="api_key" required autocomplete="off"></label>
+        <label class="label">API secret <input class="input" name="api_secret" type="password" required autocomplete="new-password"></label>
+        {% else %}
+        <label class="label">{{ 'SSH admin' if p.type == 'ssh' else 'Admin user' }} <input class="input" name="admin_user" required autocomplete="off"></label>
+        {% if p.type == 'ssh' %}<label class="label">Authentication <select class="select" name="auth_mode"><option value="password">Password</option><option value="private_key">Private key</option></select></label>{% endif %}
+        <label class="label">Admin password <input class="input" name="password" type="password" autocomplete="new-password"></label>
+        {% if p.type == 'ssh' %}<label class="label">Private key <input class="input" name="private_key" type="file" accept=".pem,.key,text/plain"></label>{% endif %}
+        {% endif %}
+        <button class="btn btn-primary btn-sm" type="submit">SAVE</button>
+      </form>
+    </details>
     {% endfor %}
   </div>
   {% else %}
@@ -40,44 +40,6 @@
     <div class="alert-title">No targets enabled</div>
     Add and enable target instances in the YAML configuration.
   </div>
-  {% endif %}
-
-  <div class="section-head">
-    <div class="section-kicker">// Propagation state</div>
-    <h2 class="section-title">User sync matrix</h2>
-  </div>
-  {% if users %}
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr><th>User</th>{% for target in targets %}<th>{{ target.display_name }}</th>{% endfor %}</tr>
-      </thead>
-      <tbody>
-        {% for u in users %}
-        {% set states = {} %}
-        {% for s in u.sync_states %}{% if states.update({s.target: s}) %}{% endif %}{% endfor %}
-        <tr>
-          <td><a href="/users/{{ u.id }}">{{ u.username }}</a>{% if u.desired_action == "delete" %} (deletion{% if u.deleted_at %} complete{% else %} pending{% endif %}){% endif %}</td>
-          {% for target in targets %}
-          {% set state = states.get(target.target_id) %}
-          {% if u.is_root %}<td><span class="muted">N/A</span></td>{% else %}
-          <td data-sync-cell data-user-id="{{ u.id }}" data-target="{{ target.target_id }}">
-            {% if state and state.state == "ok" %}<span class="badge badge-shipped">ok</span>
-            {% elif state and state.state == "failed" %}<span class="badge badge-danger" title="{{ state.detail }}">failed</span>
-            {% elif state and state.state == "awaiting_credentials" %}<span class="badge badge-planned">awaiting credentials</span>
-            {% elif state and (state.state == "unassigned" or not state.assigned) %}<span class="badge badge-planned">unassigned; disabled</span>
-            {% elif state and state.retired %}<span class="badge badge-planned">retired</span>
-            {% else %}<span class="badge badge-planned">not assigned</span>{% endif %}
-          </td>
-          {% endif %}
-          {% endfor %}
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <p class="muted">No managed users yet.</p>
   {% endif %}
 </section>
 {% endblock %}

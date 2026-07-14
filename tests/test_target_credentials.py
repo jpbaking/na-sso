@@ -46,11 +46,17 @@ def test_api_credentials_are_encrypted_and_probe_gated(admin_client, tmp_path, m
     assert "fully configured" in configured_page.text
     assert ">verified<" not in configured_page.text
     assert ">reachable<" not in configured_page.text
+    assert '<details class="disclosure-row" name="target-credentials">' in configured_page.text
+    assert '<summary class="disclosure-summary">' in configured_page.text
+    assert "Change credentials" not in configured_page.text
     respx.post("https://fw.test/api/auth/user/search").mock(return_value=Response(401))
     admin_client.post("/targets/firewall/credentials", data={"api_key": "new-key", "api_secret": "new-secret"})
     assert get_connectors() == []
     page = admin_client.get("/status")
     assert "auth failed" in page.text
+    assert '<details class="disclosure-row" name="target-credentials">' in page.text
+    assert '<details class="disclosure-row" name="target-credentials" open>' not in page.text
+    assert "Configure credentials" not in page.text
     assert "Test probe" not in page.text
     assert ">SAVE<" in page.text
 

@@ -11,10 +11,13 @@ Owns page structure and presentation. Route behavior and template context are ow
 ## Local Contracts
 
 - Every page extends `base.html` and keeps the standard favicon and `/design/styles.css` plus `/design/components.css` links.
+- The shared `site-page` shell fills the viewport and lets `main` grow so the footer stays at the bottom on short screens without overlapping long content.
 - Follow the lazyway.io design rules from the root contract: documented classes first, no gradients, and exactly one amber accent per page.
 - Keep navigation consistent across authenticated pages: Users, Targets, Audit, and Sign out.
 - Render operator-visible connector errors safely; never render credentials or decrypted pending secrets.
-- Target credential forms are write-only: show readiness and safe probe detail, never stored values; SAVE persists and immediately probes the replacement as one operation.
+- Target credential forms are write-only: show readiness and safe probe detail, never stored values; load every form collapsed behind an accessible right-aligned chevron, group disclosures so at most one target is open, use generously spaced zebra-striped rows with right-aligned SAVE actions, and make SAVE persist and immediately probe the replacement as one operation.
+- On the Targets page, render target names at the larger standard body-text size while retaining the normal data-key colour and weight.
+- Keep user synchronization state on the Users management page; the Targets page owns target configuration and health only.
 - Render the protected root as `SUPERADMIN` with `N/A` target cells and no live-sync cell attributes.
 - Pending and retrying target cells subscribe to authenticated `/events/sync` updates through the shared application shell; construct event-derived content with DOM text APIs.
 
@@ -28,8 +31,8 @@ Owns page structure and presentation. Route behavior and template context are ow
 - **Application shell and live sync** — Shared metadata, navigation, static design links, content slot, footer, and SSE-driven target-cell updates. Start: `base.html`.
 - **Admin login** — Renders credential input and authentication errors. Start: `login.html`. Files: `base.html`.
 - **User lifecycle management** — Renders registry-driven assignment matrices, select-all controls, live password compliance/generation, deferred/retired states, and lifecycle/retry actions. Start: `users.html`. Files: `user_form.html`, `base.html`.
-- **Target dashboard** — Shows connector reachability and the user sync matrix. Start: `status.html`. Files: `base.html`.
-- **Target onboarding** — Collects write-only API/admin/SSH management credentials, saves and probes them in one action, and displays one combined configuration/authentication status with safe probe detail as a tooltip. Start: `status.html`.
+- **Target dashboard** — Shows target configuration and connector health without duplicating the Users management matrix. Start: `status.html`. Files: `base.html`.
+- **Target onboarding** — Collects write-only API/admin/SSH management credentials in readiness-aware disclosure forms, saves and probes them in one action, and displays one combined configuration/authentication status with safe probe detail as a tooltip. Start: `status.html`.
 - **Audit history** — Shows administrative and synchronization events. Start: `audit.html`. Files: `base.html`.
 
 ## Child DOX Index

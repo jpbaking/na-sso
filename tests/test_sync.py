@@ -149,7 +149,7 @@ def test_retry_endpoint_runs_only_selected_target(admin_client, monkeypatch):
     assert second.calls == [("ensure", "syncme", "secret-42")]
 
 
-def test_status_dashboard_reflects_sync_state(admin_client):
+def test_target_page_omits_duplicate_user_sync_matrix(admin_client):
     user_id = _stored_user()
     from oneauth.db import get_session
     from oneauth.models import SyncState
@@ -159,12 +159,14 @@ def test_status_dashboard_reflects_sync_state(admin_client):
         db.add(SyncState(user=user, target="nexus", state="failed", detail="offline"))
         db.commit()
 
-    response = admin_client.get("/status")
+    target_page = admin_client.get("/status")
+    users_page = admin_client.get("/users")
 
-    assert response.status_code == 200
-    assert "syncme" in response.text
-    assert "failed" in response.text and "offline" in response.text
-    assert 'data-sync-cell' in response.text
+    assert target_page.status_code == 200
+    assert "User sync matrix" not in target_page.text
+    assert "syncme" not in target_page.text
+    assert '<td data-sync-cell' not in target_page.text
+    assert "syncme" in users_page.text
 
 
 def test_sync_sse_requires_auth_and_returns_snapshot(client):

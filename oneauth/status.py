@@ -1,6 +1,5 @@
 import asyncio
 import json
-from types import SimpleNamespace
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse, StreamingResponse
@@ -112,18 +111,10 @@ async def status_page(request: Request):
                            "configuration_status": _configuration_status(
                                configured=True, verified=result.ok, detail=result.detail
                            )})
-    with get_session() as db:
-        users = db.query(ManagedUser).order_by(ManagedUser.username).all()
-        for user in users:
-            user.sync_states
-        targets = get_connectors()
-        known = {target.target_id for target in targets}
-        for target_id in sorted({state.target for user in users for state in user.sync_states} - known):
-            targets.append(SimpleNamespace(target_id=target_id, display_name=target_id, target_type="retired"))
     return templates.TemplateResponse(
         request,
         "status.html",
-        {"admin": admin, "probes": probes, "users": users, "targets": targets},
+        {"admin": admin, "probes": probes},
     )
 
 
