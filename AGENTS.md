@@ -207,12 +207,13 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ## Feature Map
 
-- **Containerized application and demo** — Builds and runs One Auth with persistent SQLite storage and read-only strict YAML definitions, plus repeated API instances and runtime-keyed isolated OpenSSH password/combined-mode targets with dedicated helper lifecycle commands. Start: `docker-compose.yaml`. Files: `Dockerfile`, `Dockerfile.demo-ssh`, `demo-ssh.sh`, `compose-helper.sh`, `compose-helper.env`, `oneauth.example.yaml`, `oneauth.demo.yaml`, `.config/.env.example`. Detail in `./oneauth/mock_targets`.
+- **Containerized application and isolated demo** — Runs the normal service from `docker-compose.yaml` with `.config/`, and a separate `<project>-demo` stack from `docker-compose-demo.yaml` with public `.config-demo/` settings, browser-uploadable demo management credentials, and runtime-generated SSH/YAML state. Start: `docker-compose.yaml`. Files: `docker-compose-demo.yaml`, `Dockerfile`, `Dockerfile.demo-ssh`, `demo-ssh.sh`, `compose-helper.sh`, `compose-helper.env`, `.config/.env.example`, `.config/oneauth.yaml.example`, `.config-demo/.env`. Detail in `./oneauth/mock_targets`.
 - **Python package and service** — FastAPI application implementing local administration and cross-target credential propagation. Start: `oneauth/main.py`. Files: `oneauth/`. Detail in `./oneauth`.
-- **Operator and developer runbook** — Documents configuration, target prerequisites, operation, and verification. Start: `README.md`. Files: `pyproject.toml`.
+- **Product overview and project guides** — Introduces One Auth and routes evaluators, operators, and developers to detailed guidance. Start: `README.md`. Files: `docs/`, `pyproject.toml`. Detail in `./docs`.
 
 ## Child DOX Index
 
+- `docs/` — demo, developer, and production deployment/operations guides.
 - `oneauth/` — FastAPI application, persistence, UI, connectors, and sync orchestration.
 - `tests/` — pytest fixtures and behavioral coverage for users, connectors, and synchronization.
 
