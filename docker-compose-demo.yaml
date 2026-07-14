@@ -1,0 +1,89 @@
+services:
+  # BUILDERS: produce local images; never run as services.
+  oneauth-builder:
+    profiles: ["build"]
+    build:
+      context: .
+    image: oneauth:local
+
+  demo-ssh-builder:
+    profiles: ["build"]
+    build:
+      context: .
+      dockerfile: Dockerfile.demo-ssh
+    image: oneauth-demo-ssh:local
+
+  # DEMO RUNTIME: protocol-faithful in-memory API targets.
+  mock-targets:
+    image: oneauth:local
+    restart: unless-stopped
+    command:
+      ["uvicorn", "oneauth.mock_targets.app:app", "--host", "0.0.0.0", "--port", "9000"]
+    ports:
+      - "127.0.0.1:9000:9000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:9000/healthz')",
+        ]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  # Generates persistent SSH host keys, fingerprints, and the effective demo YAML.
+  demo-ssh-bootstrap:
+    image: oneauth-demo-ssh:local
+    command: ["bootstrap"]
+    volumes:
+      - ./.config-demo:/demo
+
+  demo-ssh-password:
+    image: oneauth-demo-ssh:local
+    command: ["serve", "password"]
+    depends_on:
+      demo-ssh-bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - ./.config-demo:/demo:ro
+    healthcheck:
+      test: ["CMD-SHELL", "ssh-keyscan -t ed25519 -T 2 localhost >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  demo-ssh-combined:
+    image: oneauth-demo-ssh:local
+    command: ["serve", "combined"]
+    depends_on:
+      demo-ssh-bootstrap:
+        condition: service_completed_successfully
+    volumes:
+      - ./.config-demo:/demo:ro
+    healthcheck:
+      test: ["CMD-SHELL", "ssh-keyscan -t ed25519 -T 2 localhost >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  oneauth-demo:
+    image: oneauth:local
+    restart: unless-stopped
+    env_file: .config-demo/.env
+    depends_on:
+      mock-targets:
+        condition: service_healthy
+      demo-ssh-password:
+        condition: service_healthy
+      demo-ssh-combined:
+        condition: service_healthy
+    ports:
+      - "8001:8000"
+    volumes:
+      - oneauth-demo-data:/data
+      - ./.config-demo:/demo:ro
+
+volumes:
+  oneauth-demo-data:

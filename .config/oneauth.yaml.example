@@ -1,0 +1,85 @@
+# Copy to .config/oneauth.yaml. This strict YAML file owns password/key policy
+# and the ordered target registry. Unknown fields are rejected at startup.
+# Target IDs are durable database keys: use 2-64 lowercase letters, digits,
+# underscores, or hyphens, starting with a letter. Do not rename IDs casually.
+
+# Only schema version 1 is currently supported.
+version: 1
+
+# Managed-account password acceptance, generation, history, and expiry policy.
+password_policy:
+  min_length: 14                 # 8-1024
+  max_length: 128                # 8-4096; must be >= min_length
+  require_lowercase: true
+  require_uppercase: true
+  require_digit: true
+  require_symbol: true
+  max_repeated_characters: 3     # 1-128; use null to disable this check
+  max_numeric_sequence: 3        # 2-32; use null to disable this check
+  min_identity_distance: 4       # 1-128 and <= max_length; null disables
+  reject_identity_terms: true    # Reject username/email/display-name terms
+  history_size: 3                # 0-100 previous hashes; 0 disables history
+  expires_after_days: 90         # 1-3650; use null for no password expiry
+
+# User SSH-key enrollment policy.
+ssh_key_policy:
+  allowed_algorithms: [ed25519, rsa] # Non-empty, unique; ed25519 and/or rsa
+  rsa_min_bits: 3072                  # 2048-16384
+  browser_generation: true            # Prefer private-key generation in browser
+  allow_server_fallback: false        # Explicit compatibility flow; private key returned once
+
+# Target management credentials should normally be saved in the Targets UI.
+# The commented credential fields below show the supported environment-backed
+# alternative. A ${NAME} value must be the entire YAML scalar and NAME must
+# exist in .config/.env. Never place literal production secrets in this file.
+targets:
+  # OPNsense Auth User API target.
+  - id: firewall_primary
+    type: opnsense
+    display_name: Primary firewall
+    enabled: true
+    base_url: https://opnsense.example.lan # Server root; no trailing API path
+    verify_tls: true
+    default_groups: [vpn-users]          # Existing safe group identifiers
+    # api_key: ${OPNSENSE_PRIMARY_API_KEY}
+    # api_secret: ${OPNSENSE_PRIMARY_API_SECRET}
+
+  # Nexus Repository local-user Security API target.
+  - id: nexus_primary
+    type: nexus
+    display_name: Nexus Repository
+    enabled: true
+    base_url: https://nexus.example.lan
+    verify_tls: true
+    default_roles: [nx-anonymous]        # Existing Nexus role IDs
+    # admin_user: ${NEXUS_PRIMARY_ADMIN_USER}
+    # admin_password: ${NEXUS_PRIMARY_ADMIN_PASSWORD}
+
+  # Nextcloud OCS Provisioning API target.
+  - id: cloud_primary
+    type: nextcloud
+    display_name: Nextcloud
+    enabled: true
+    base_url: https://nextcloud.example.lan
+    verify_tls: true
+    default_groups: [employees]          # Existing safe group identifiers
+    # admin_user: ${NEXTCLOUD_PRIMARY_ADMIN_USER}
+    # admin_password: ${NEXTCLOUD_PRIMARY_ADMIN_PASSWORD}
+
+  # SSH-managed Unix target. Duplicate this entry for each host.
+  - id: ssh_debian
+    type: ssh
+    display_name: Debian shell
+    enabled: true
+    host: shell.example.lan
+    port: 22                             # 1-65535
+    host_key_sha256: SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    platform: debian                     # debian, ubuntu, rhel, or rocky
+    allow_relaxed_usernames: false
+    mode: password_and_key               # password, key, or password_and_key
+    default_groups: [developers]         # Existing supplementary groups
+    # management_user: ${SSH_PRIMARY_MANAGEMENT_USER}
+    # Choose exactly one authentication source when configuring via YAML:
+    # management_password: ${SSH_PRIMARY_MANAGEMENT_PASSWORD}
+    # management_private_key: ${SSH_PRIMARY_MANAGEMENT_PRIVATE_KEY}
+    # management_private_key_file: /run/secrets/ssh_management_key

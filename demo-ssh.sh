@@ -22,8 +22,10 @@ targets:
   - {id: nexus_demo, type: nexus, display_name: Nexus Repository, base_url: http://mock-targets:9000, default_roles: [nx-anonymous], verify_tls: false}
   - {id: cloud_demo, type: nextcloud, display_name: Nextcloud, base_url: http://mock-targets:9000, verify_tls: false, default_groups: [employees]}
 EOF
-    chmod 0600 /demo/management_key /demo/*_host_key
-    chmod 0644 /demo/oneauth.yaml /demo/*.pub
+    # The public demo UI uploads management_key from the host. It is a disposable
+    # demo credential, so keep it host-readable; host private keys stay restricted.
+    chmod 0644 /demo/management_key /demo/oneauth.yaml /demo/*.pub
+    chmod 0600 /demo/*_host_key
     ;;
   serve)
     name="${2:?server name required}"

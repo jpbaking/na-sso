@@ -41,6 +41,8 @@ else
     exit 1
 fi
 
+DEMO_COMPOSE_FILE="docker-compose-demo.yaml"
+
 # (script_name).env configures DCH itself (timeouts, tail length, etc.).
 # Sourced early so DCH_PROJECT_NAME can override the directory-derived project name.
 # set -a exports every variable so child processes (docker compose) see them too.
@@ -57,7 +59,9 @@ fi
 # Pinning the project name prevents docker compose from deriving it from the
 # current working directory, which can vary by caller.
 PROJECT_NAME="${DCH_PROJECT_NAME:-$(basename "$SCRIPT_DIR")}"
+DEMO_PROJECT_NAME="${DCH_DEMO_PROJECT_NAME:-${PROJECT_NAME}-demo}"
 DC_OPTS=(-p "$PROJECT_NAME" -f "$COMPOSE_FILE")
+DEMO_DC_OPTS=(-p "$DEMO_PROJECT_NAME" -f "$DEMO_COMPOSE_FILE")
 
 # .env is passed to docker compose for container variable substitution.
 # .config/.env is the fallback for projects that keep config out of the root.
@@ -66,12 +70,23 @@ if [[ -f ".env" ]]; then
 elif [[ -f ".config/.env" ]]; then
     DC_OPTS+=(--env-file ".config/.env")
 fi
+if [[ -f ".config-demo/.env" ]]; then
+    DEMO_DC_OPTS+=(--env-file ".config-demo/.env")
+fi
 
 DCH_STOP_TIMEOUT="${DCH_STOP_TIMEOUT:-30}"
 DCH_LOGS_TAIL="${DCH_LOGS_TAIL:-10}"
 
 run_dc() {
     "${DC[@]}" "${DC_OPTS[@]}" "$@"
+}
+
+run_demo_dc() {
+    if [[ ! -f "$DEMO_COMPOSE_FILE" ]]; then
+        echo "Error: no $DEMO_COMPOSE_FILE found in $SCRIPT_DIR" >&2
+        return 1
+    fi
+    "${DC[@]}" "${DEMO_DC_OPTS[@]}" "$@"
 }
 
 usage() {
@@ -90,13 +105,13 @@ Commands:
   demo-up       Start the demo detached
   demo-rebuild  Rebuild the local image, then start the demo detached
   demo-build    Rebuild the local image only
-  demo-pull     Pull demo service images
   demo-start    Start the demo detached (no pull/build)
   demo-restart  Stop then start the demo detached (no pull/build)
   demo-stop     Stop the demo; preserve demo data
   demo-down     Remove demo containers and the demo database volume
   demo-logs     Follow demo logs from the last ${DCH_LOGS_TAIL} lines
   demo-ps       Show demo container status
+  demo-compose  Pass remaining arguments to the isolated demo Compose project
   logs     Follow logs from last ${DCH_LOGS_TAIL} lines
   <other>  Pass-through to docker compose
 
@@ -105,14 +120,20 @@ directly to docker compose (e.g. 'up --build' skips the 'up' shorthand).
 
 Environment (set in ${SCRIPT_BASE}.env):
   DCH_PROJECT_NAME  Override project name (default: directory name)
+  DCH_DEMO_PROJECT_NAME  Override demo project name (default: <project>-demo)
   DCH_STOP_TIMEOUT  Shutdown timeout in seconds (default: 30)
   DCH_LOGS_TAIL     Log tail line count (default: 10)
 
 Project: $PROJECT_NAME  Compose: $COMPOSE_FILE
+Demo project: $DEMO_PROJECT_NAME  Compose: $DEMO_COMPOSE_FILE
 EOF
 }
 
-if [[ $# -gt 1 ]]; then
+if [[ "${1:-}" == "demo-compose" ]]; then
+    shift
+    run_demo_dc "$@"
+    exit
+elif [[ $# -gt 1 ]]; then
     run_dc "$@"
     exit
 fi
@@ -154,41 +175,37 @@ case "${1:-}" in
         run_dc down -t "$DCH_STOP_TIMEOUT" --remove-orphans -v
         ;;
     demo-up)
-        # Naming the demo runtime avoids also starting unprofiled services.
-        # Compose starts mock-targets automatically through depends_on.
-        run_dc --profile demo up -d oneauth-demo
+        run_demo_dc up -d oneauth-demo
         ;;
     demo-rebuild)
-        run_dc --profile build build --pull
-        run_dc --profile demo up -d --force-recreate oneauth-demo
+        run_demo_dc --profile build build --pull
+        run_demo_dc up -d --force-recreate oneauth-demo
         ;;
     demo-build)
-        run_dc --profile build build --pull
-        ;;
-    demo-pull)
-        run_dc --profile demo pull oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
+        run_demo_dc --profile build build --pull
         ;;
     demo-start)
-        run_dc --profile demo up -d oneauth-demo
+        run_demo_dc up -d oneauth-demo
         ;;
     demo-restart)
-        run_dc --profile demo stop -t "$DCH_STOP_TIMEOUT" oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
-        run_dc --profile demo up -d oneauth-demo
+        run_demo_dc down -t "$DCH_STOP_TIMEOUT" --remove-orphans
+        run_demo_dc up -d oneauth-demo
         ;;
     demo-stop)
-        run_dc --profile demo stop -t "$DCH_STOP_TIMEOUT" oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
+        run_demo_dc down -t "$DCH_STOP_TIMEOUT" --remove-orphans
         ;;
     demo-down)
-        run_dc --profile demo rm -f -s -v oneauth-demo mock-targets demo-ssh-password demo-ssh-combined demo-ssh-bootstrap
-        # Remove only the named demo database volume. A missing volume is fine.
-        docker volume rm "${PROJECT_NAME}_oneauth-demo-data" 2>/dev/null || true
-        docker volume rm "${PROJECT_NAME}_oneauth-demo-ssh" 2>/dev/null || true
+        run_demo_dc down -t "$DCH_STOP_TIMEOUT" --remove-orphans -v
+        rm -f .config-demo/oneauth.yaml \
+              .config-demo/management_key .config-demo/management_key.pub \
+              .config-demo/password_host_key .config-demo/password_host_key.pub \
+              .config-demo/combined_host_key .config-demo/combined_host_key.pub
         ;;
     demo-logs)
-        run_dc --profile demo logs -f --tail="$DCH_LOGS_TAIL" oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
+        run_demo_dc logs -f --tail="$DCH_LOGS_TAIL" oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
         ;;
     demo-ps)
-        run_dc --profile demo ps oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
+        run_demo_dc ps oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
         ;;
     logs)
         run_dc logs -f --tail="$DCH_LOGS_TAIL"

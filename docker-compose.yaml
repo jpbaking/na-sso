@@ -1,19 +1,12 @@
 services:
-  # BUILDER: produces the local image; never runs.
+  # BUILDER: produces the deployable application image; never runs.
   oneauth-builder:
     profiles: ["build"]
     build:
       context: .
     image: oneauth:local
 
-  demo-ssh-builder:
-    profiles: ["build"]
-    build:
-      context: .
-      dockerfile: Dockerfile.demo-ssh
-    image: oneauth-demo-ssh:local
-
-  # RUNTIME: consumes the built image.
+  # PRODUCTION RUNTIME: consumes the built image and only normal configuration.
   oneauth:
     image: oneauth:local
     restart: unless-stopped
@@ -24,90 +17,7 @@ services:
       - "8000:8000"
     volumes:
       - oneauth-data:/data
-      - ./oneauth.example.yaml:/config/oneauth.yaml:ro
-
-  # DEMO: runs One Auth against protocol-faithful in-memory mock targets.
-  mock-targets:
-    profiles: ["demo"]
-    image: oneauth:local
-    restart: unless-stopped
-    command:
-      ["uvicorn", "oneauth.mock_targets.app:app", "--host", "0.0.0.0", "--port", "9000"]
-    ports:
-      - "127.0.0.1:9000:9000"
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:9000/healthz')",
-        ]
-      interval: 2s
-      timeout: 2s
-      retries: 15
-
-  demo-ssh-bootstrap:
-    profiles: ["demo"]
-    image: oneauth-demo-ssh:local
-    command: ["bootstrap"]
-    volumes:
-      - oneauth-demo-ssh:/demo
-
-  demo-ssh-password:
-    profiles: ["demo"]
-    image: oneauth-demo-ssh:local
-    command: ["serve", "password"]
-    depends_on:
-      demo-ssh-bootstrap:
-        condition: service_completed_successfully
-    volumes:
-      - oneauth-demo-ssh:/demo:ro
-    healthcheck:
-      test: ["CMD-SHELL", "ssh-keyscan -t ed25519 -T 2 localhost >/dev/null 2>&1"]
-      interval: 2s
-      timeout: 2s
-      retries: 15
-
-  demo-ssh-combined:
-    profiles: ["demo"]
-    image: oneauth-demo-ssh:local
-    command: ["serve", "combined"]
-    depends_on:
-      demo-ssh-bootstrap:
-        condition: service_completed_successfully
-    volumes:
-      - oneauth-demo-ssh:/demo:ro
-    healthcheck:
-      test: ["CMD-SHELL", "ssh-keyscan -t ed25519 -T 2 localhost >/dev/null 2>&1"]
-      interval: 2s
-      timeout: 2s
-      retries: 15
-
-  oneauth-demo:
-    profiles: ["demo"]
-    image: oneauth:local
-    restart: unless-stopped
-    depends_on:
-      mock-targets:
-        condition: service_healthy
-      demo-ssh-password:
-        condition: service_healthy
-      demo-ssh-combined:
-        condition: service_healthy
-    environment:
-      ONEAUTH_SECRET_KEY: demo-only-secret-key
-      ONEAUTH_ADMIN_USERNAME: admin
-      ONEAUTH_ADMIN_BOOTSTRAP_PASSWORD: demo-password
-      ONEAUTH_DATABASE_PATH: /data/oneauth.db
-      ONEAUTH_CONFIG_FILE: /demo/oneauth.yaml
-    ports:
-      - "8000:8000"
-    volumes:
-      - oneauth-demo-data:/data
-      - oneauth-demo-ssh:/demo:ro
+      - ./.config/oneauth.yaml:/config/oneauth.yaml:ro
 
 volumes:
   oneauth-data:
-  oneauth-demo-data:
-  oneauth-demo-ssh:
