@@ -82,6 +82,11 @@ administration:
 | **Admin password** | Leave empty |
 | **Private key** | Upload `.config-demo/management_key` |
 
+The authentication selector shows only the credentials required by the chosen
+mode. **Password** shows the password field, **Private key** shows the upload,
+and **Password + private key** shows and requires both. The combined option is
+for SSH servers configured to require both factors for the management login.
+
 Upload `management_key` itself—not `management_key.pub`,
 `password_host_key`, or `combined_host_key`. The public half is already
 installed for `provisioner` inside both demo SSH targets. The host-key files

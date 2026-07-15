@@ -19,8 +19,10 @@
     {% if not user %}
     <div class="field">
       <label class="label" for="username">Username</label>
-      <input class="input" id="username" name="username" required>
-      <div class="field-hint">Lowercase letters, digits and underscores. Used on every target.</div>
+      <input class="input" id="username" name="username" required maxlength="64"
+             pattern="[a-z0-9](?:[a-z0-9_.-]*[a-z0-9])?"
+             autocapitalize="none" spellcheck="false">
+      <div class="field-hint">Lowercase letters, digits, underscores, dots and hyphens. Separators cannot be first or last. Used on every target.</div>
     </div>
     {% endif %}
     <div class="field">
@@ -75,6 +77,28 @@
   </div>
   {% endif %}
 </section>
+<dialog id="generated-password-modal" class="modal" aria-labelledby="generated-password-title">
+  <div class="modal-head">
+    <h2 class="modal-title" id="generated-password-title">Generated password</h2>
+    <button class="modal-close" type="button" data-modal-close aria-label="Close">Close</button>
+  </div>
+  <div class="modal-body stack-2">
+    <div class="result-block">
+      <div class="result-row">
+        <code class="result-link" id="generated-password-preview"></code>
+        <button class="copy-btn" id="copy-generated-password" type="button">Copy</button>
+      </div>
+    </div>
+    <div class="alert alert-info">
+      <div class="alert-title">Copy this password now</div>
+      The full password will not be shown again after this window is closed.
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn btn-primary" type="button" data-modal-close>I have copied it</button>
+  </div>
+</dialog>
+<script src="/design/components.js"></script>
 <script>
 const password=document.getElementById('password');
 const boxes=[...document.querySelectorAll('input[name="target_ids"]')];
@@ -83,6 +107,32 @@ document.getElementById('select-none').onclick=()=>boxes.forEach(x=>x.checked=fa
 const policy={{ password_policy.model_dump() | tojson }};
 function randomPassword(){const chars='abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789-_.!@#%+';const length=Math.max(20,policy.min_length);const bytes=crypto.getRandomValues(new Uint8Array(length-4));return [...bytes].map(x=>chars[x%chars.length]).join('')+'aA1!'}
 function checks(){const value=password.value;const rows=[['Minimum length',value.length>=policy.min_length],['Lowercase',!policy.require_lowercase||/[a-z]/.test(value)],['Uppercase',!policy.require_uppercase||/[A-Z]/.test(value)],['Digit',!policy.require_digit||/\d/.test(value)],['Symbol',!policy.require_symbol||/[^A-Za-z0-9]/.test(value)]];document.getElementById('password-checks').innerHTML=rows.map(([label,ok])=>`<div class="data-row"><div class="data-key">${label}</div><div class="data-value">${ok?'passed':'not yet'}</div></div>`).join('')}
-document.getElementById('generate-password').onclick=()=>{password.value=randomPassword();checks()};password.addEventListener('input',checks);checks();
+const generatedPasswordModal=document.getElementById('generated-password-modal');
+const generatedPasswordPreview=document.getElementById('generated-password-preview');
+const copyGeneratedPassword=document.getElementById('copy-generated-password');
+let generatedPassword='';
+document.getElementById('generate-password').onclick=()=>{
+  generatedPassword=randomPassword();
+  password.value=generatedPassword;
+  generatedPasswordPreview.textContent=`${generatedPassword.slice(0,8)}…${generatedPassword.slice(-4)}`;
+  copyGeneratedPassword.textContent='Copy';
+  checks();
+  generatedPasswordModal.showModal();
+};
+copyGeneratedPassword.onclick=async()=>{
+  if(!generatedPassword)return;
+  try{
+    await navigator.clipboard.writeText(generatedPassword);
+    copyGeneratedPassword.textContent='Copied';
+  }catch(error){
+    copyGeneratedPassword.textContent='Copy failed';
+  }
+};
+generatedPasswordModal.addEventListener('close',()=>{
+  generatedPassword='';
+  generatedPasswordPreview.textContent='';
+  copyGeneratedPassword.textContent='Copy';
+});
+password.addEventListener('input',checks);checks();
 </script>
 {% endblock %}

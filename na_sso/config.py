@@ -110,10 +110,11 @@ class SshTarget(TargetBase):
 
     @model_validator(mode="after")
     def validate_management_key(self) -> "SshTarget":
-        sources = sum(bool(item) for item in (self.management_password, self.management_private_key,
-                                              self.management_private_key_file))
-        if sources > 1:
-            raise ValueError("only one SSH management authentication source is allowed")
+        key_sources = sum(bool(item) for item in (
+            self.management_private_key, self.management_private_key_file
+        ))
+        if key_sources > 1:
+            raise ValueError("only one SSH management private-key source is allowed")
         return self
 
 

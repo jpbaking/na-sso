@@ -14,7 +14,7 @@ Owns the connector interface, registry, typed results, and OPNsense, Nexus Repos
 - Every instance exposes stable target ID/type/display name and identity-attribute capabilities; validate all selected targets before remote mutation.
 - `get_connectors()` returns only enabled, currently verified YAML instances in declared propagation order.
 - YAML owns non-secret endpoints and capabilities; encrypted database records supply management credentials only for immediate connector construction. Never log credentials, management keys, or plaintext passwords.
-- SSH pins the configured host fingerprint, authenticates with an encrypted admin password or uploaded private key, uses non-interactive constrained sudo operations, and persists only managed-user public keys.
+- SSH pins the configured host fingerprint, authenticates with an encrypted admin password, uploaded private key, or both when the server requires two factors, uses non-interactive constrained sudo operations, and persists only managed-user public keys.
 - Nexus applies configured default roles; OPNsense, Nextcloud, and SSH apply configured default groups. Memberships must already exist, and SSH appends supplementary groups without removing other memberships.
 - API calls use bounded timeouts. A missing remote account is a successful delete outcome.
 - Endpoint or payload changes require verification against official target documentation or source plus mocked-response tests.
@@ -29,7 +29,7 @@ Owns the connector interface, registry, typed results, and OPNsense, Nexus Repos
 - **OPNsense local users** — Manages Auth User API accounts and configured group memberships with API key/secret authentication. Start: `opnsense.py`.
 - **Nexus Repository local users** — Manages Security API accounts, roles, status, and password changes. Start: `nexus.py`.
 - **Nextcloud local users** — Manages OCS Provisioning API accounts and configured group memberships while interpreting OCS status codes. Start: `nextcloud.py`.
-- **SSH local users** — Safely creates platform-aware Unix users, appends configured supplementary groups, and manages password, authorized-key, lock, and deletion lifecycle through pinned management-key SSH. Start: `ssh.py`.
+- **SSH local users** — Connects through pinned-host SSH with management password, private key, or both, then safely creates platform-aware Unix users, appends configured supplementary groups, and manages password, authorized-key, lock, and deletion lifecycle. Start: `ssh.py`.
 
 ## Child DOX Index
 

@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, BackgroundTasks, Form, Request
 from fastapi.responses import RedirectResponse, Response
 
@@ -11,6 +13,7 @@ from na_sso.sync import sync_user
 from na_sso.connectors import get_connectors, validate_for_targets
 
 router = APIRouter()
+USERNAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_.-]{0,62}[a-z0-9])?$")
 
 
 def _guard(request: Request) -> str | Response:
@@ -108,12 +111,12 @@ async def create_user(
     if isinstance(admin, Response):
         return admin
     username = username.strip().lower()
-    if not username.isidentifier():
+    if not USERNAME_RE.fullmatch(username):
         return _render(
             request,
             "user_form.html",
             {"user": None, "admin": admin, "suggested": password,
-             "error": "Username must be letters, digits and underscores."},
+             "error": "Username must use lowercase letters, digits, underscores, dots or hyphens; separators cannot be first or last."},
             status_code=422,
         )
     with get_session() as db:

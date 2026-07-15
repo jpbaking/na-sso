@@ -96,6 +96,7 @@ async def status_page(request: Request):
     probes = [{"id": target.id, "name": target.display_name, "type": target.type,
                "ok": readiness[target.id].verified, "detail": readiness[target.id].detail,
                "configured": readiness[target.id].configured,
+               "auth_mode": readiness[target.id].auth_mode or "password",
                "configuration_status": _configuration_status(
                    configured=readiness[target.id].configured,
                    verified=readiness[target.id].verified,
@@ -138,8 +139,12 @@ async def configure_target(request: Request, target_id: str,
     else:
         uploaded = (await private_key.read()).decode("utf-8") if private_key and private_key.filename else ""
         payload = {"management_user": admin_user.strip(),
-                   "management_password": password if auth_mode == "password" else "",
-                   "management_private_key": uploaded if auth_mode == "private_key" else ""}
+                   "management_password": password if auth_mode in {
+                       "password", "password_and_private_key"
+                   } else "",
+                   "management_private_key": uploaded if auth_mode in {
+                       "private_key", "password_and_private_key"
+                   } else ""}
     try:
         save_credentials(target_id, auth_mode, payload)
     except (UnicodeDecodeError, ValueError):

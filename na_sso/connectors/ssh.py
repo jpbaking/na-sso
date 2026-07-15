@@ -19,7 +19,7 @@ class _PinnedClient(asyncssh.SSHClient):
 
 
 class SSHConnector(Connector):
-    """Pinned-host SSH account provisioning with management-key authentication."""
+    """Pinned-host SSH provisioning with password, key, or combined authentication."""
 
     capabilities = IdentityCapabilities(display_name=True, password=True, public_key=True)
 
@@ -38,7 +38,7 @@ class SSHConnector(Connector):
         kwargs = {}
         if self._target.management_password:
             kwargs["password"] = self._target.management_password.get_secret_value()
-        else:
+        if self._target.management_private_key or self._target.management_private_key_file:
             material = (self._target.management_private_key.get_secret_value()
                         if self._target.management_private_key
                         else Path(self._target.management_private_key_file).read_text(encoding="utf-8"))

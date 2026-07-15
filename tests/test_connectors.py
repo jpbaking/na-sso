@@ -77,6 +77,37 @@ def test_ssh_rejects_unrepresentable_and_nonportable_names_without_connecting():
     connector = SSHConnector(target)
     assert not connector.validate_identity(ManagedUser(username="bad/name")).ok
     assert not connector.validate_identity(ManagedUser(username="name with space")).ok
+    assert not connector.validate_identity(ManagedUser(username="john.doe")).ok
+    assert connector.validate_identity(ManagedUser(username="john-doe")).ok
+
+    relaxed = target.model_copy(update={"allow_relaxed_usernames": True})
+    assert SSHConnector(relaxed).validate_identity(ManagedUser(username="john.doe")).ok
+
+
+async def test_ssh_combined_management_auth_passes_password_and_key(monkeypatch):
+    from na_sso.config import SshTarget
+    from na_sso.connectors.ssh import SSHConnector
+    import na_sso.connectors.ssh as ssh_module
+
+    captured = {}
+
+    async def connect(*args, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(ssh_module.asyncssh, "import_private_key", lambda material: f"parsed:{material}")
+    monkeypatch.setattr(ssh_module.asyncssh, "connect", connect)
+    connector = SSHConnector(SshTarget(
+        id="shell", type="ssh", display_name="Shell", host="shell",
+        management_user="mgr", management_password="secret",
+        management_private_key="private-material",
+        host_key_sha256="SHA256:AAAAAAAAAAAAAAAAAAAA", platform="ubuntu",
+    ))
+
+    await connector._connect()
+
+    assert captured["password"] == "secret"
+    assert captured["client_keys"] == ["parsed:private-material"]
 
 async def test_fake_connector_interface(client):
     fake = FakeConnector()

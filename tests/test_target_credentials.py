@@ -1,4 +1,5 @@
 from httpx import Response
+import pytest
 import respx
 
 
@@ -61,7 +62,7 @@ def test_api_credentials_are_encrypted_and_probe_gated(admin_client, tmp_path, m
     assert ">SAVE<" in page.text
 
 
-def test_ssh_password_or_uploaded_key_is_encrypted(admin_client, tmp_path, monkeypatch):
+def test_ssh_password_key_or_combined_credentials_are_encrypted(admin_client, tmp_path, monkeypatch):
     _registry(tmp_path, monkeypatch, """targets:
   - {id: shell, type: ssh, display_name: Shell, host: shell.test, host_key_sha256: 'SHA256:AAAAAAAAAAAAAAAAAAAA', platform: debian}
 """)
@@ -72,6 +73,11 @@ def test_ssh_password_or_uploaded_key_is_encrypted(admin_client, tmp_path, monke
         return SyncResult(True, "reachable")
 
     monkeypatch.setattr(SSHConnector, "probe", reachable)
+    from na_sso.target_credentials import save_credentials
+    with pytest.raises(ValueError, match="management credentials"):
+        save_credentials("shell", "password_and_private_key", {
+            "management_user": "incomplete", "management_password": "password-only"
+        })
     assert admin_client.post("/targets/shell/credentials", data={
         "auth_mode": "password", "admin_user": "provisioner", "password": "admin-secret"
     }, follow_redirects=False).status_code == 303
@@ -82,10 +88,25 @@ def test_ssh_password_or_uploaded_key_is_encrypted(admin_client, tmp_path, monke
         "auth_mode": "private_key", "admin_user": "key-admin"
     }, files={"private_key": ("admin.key", private, "text/plain")}, follow_redirects=False).status_code == 303
     assert build_unverified_connector("shell")._target.management_private_key.get_secret_value() == private
+    assert admin_client.post("/targets/shell/credentials", data={
+        "auth_mode": "password_and_private_key", "admin_user": "two-factor-admin",
+        "password": "second-factor"
+    }, files={"private_key": ("admin.key", private, "text/plain")}, follow_redirects=False).status_code == 303
+    combined = build_unverified_connector("shell")._target
+    assert combined.management_password.get_secret_value() == "second-factor"
+    assert combined.management_private_key.get_secret_value() == private
     from na_sso.db import get_session
     from na_sso.models import TargetCredential
     with get_session() as db:
-        assert "redacted-test-material" not in db.query(TargetCredential).filter_by(target_id="shell").one().encrypted_payload
+        row = db.query(TargetCredential).filter_by(target_id="shell").one()
+        assert row.auth_mode == "password_and_private_key"
+        assert "redacted-test-material" not in row.encrypted_payload
+        assert "second-factor" not in row.encrypted_payload
+    page = admin_client.get("/status")
+    assert 'value="password_and_private_key" selected' in page.text
+    assert "data-ssh-credentials" in page.text
+    assert "data-auth-password" in page.text
+    assert "data-auth-private-key" in page.text
 
 
 def test_target_credential_routes_require_auth(client):

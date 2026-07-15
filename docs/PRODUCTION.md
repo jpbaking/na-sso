@@ -145,6 +145,11 @@ The SSH administrator needs the documented user-management commands plus
 access to `getent group` and passwordless sudo for `usermod -aG`. NA-SSO
 appends configured groups without removing unrelated memberships.
 
+Management authentication supports a password, a private key, or both. Select
+**Password + private key** when the SSH server uses an OpenSSH authentication
+chain such as `AuthenticationMethods publickey,password`; NA-SSO supplies both
+credentials during the same connection attempt.
+
 ## Validate, build, and start
 
 Use the helper so the Compose project, file, and env-file behavior remain

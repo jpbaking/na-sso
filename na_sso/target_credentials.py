@@ -35,10 +35,18 @@ def save_credentials(target_id: str, auth_mode: str, payload: dict[str, str]) ->
     if target is None:
         raise ValueError("unknown target ID")
     cleaned = {key: value for key, value in payload.items() if value}
+    ssh_required = {
+        "password": {"management_user", "management_password"},
+        "private_key": {"management_user", "management_private_key"},
+        "password_and_private_key": {
+            "management_user", "management_password", "management_private_key"
+        },
+    }
     required = ({"api_key", "api_secret"} if target.type == "opnsense" else
                 {"admin_user", "admin_password"} if target.type in {"nexus", "nextcloud"} else
-                {"management_user", "management_password" if auth_mode == "password" else "management_private_key"})
-    if auth_mode not in ({"password", "private_key"} if target.type == "ssh" else {"password"}) or not required <= cleaned.keys():
+                ssh_required.get(auth_mode, set()))
+    allowed_modes = set(ssh_required) if target.type == "ssh" else {"password"}
+    if auth_mode not in allowed_modes or not required <= cleaned.keys():
         raise ValueError("management credentials are required")
     encrypted = encrypt_secret(json.dumps(cleaned, separators=(",", ":")))
     with get_session() as db:

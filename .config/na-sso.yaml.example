@@ -79,7 +79,7 @@ targets:
     mode: password_and_key               # password, key, or password_and_key
     default_groups: [developers]         # Existing supplementary groups
     # management_user: ${SSH_PRIMARY_MANAGEMENT_USER}
-    # Choose exactly one authentication source when configuring via YAML:
+    # Use a password, one private-key source, or a password plus one key source:
     # management_password: ${SSH_PRIMARY_MANAGEMENT_PASSWORD}
     # management_private_key: ${SSH_PRIMARY_MANAGEMENT_PRIVATE_KEY}
     # management_private_key_file: /run/secrets/ssh_management_key

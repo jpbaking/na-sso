@@ -56,3 +56,21 @@ def test_defaults_are_safe_and_complete():
     config = FileConfig()
     assert config.password_policy.history_size == 3
     assert config.ssh_key_policy.allowed_algorithms == ["ed25519"]
+
+
+def test_ssh_management_auth_allows_password_plus_one_private_key_source():
+    target = SshTarget(
+        id="shell", type="ssh", display_name="Shell", host="shell",
+        management_user="mgr", management_password="secret",
+        management_private_key="private-material",
+        host_key_sha256="SHA256:AAAAAAAAAAAAAAAAAAAA", platform="debian",
+    )
+    assert target.management_password.get_secret_value() == "secret"
+    assert target.management_private_key.get_secret_value() == "private-material"
+
+    with pytest.raises(ValidationError, match="private-key source"):
+        SshTarget(
+            id="invalid", type="ssh", display_name="Invalid", host="shell",
+            management_private_key="inline", management_private_key_file="/key",
+            host_key_sha256="SHA256:AAAAAAAAAAAAAAAAAAAA", platform="debian",
+        )

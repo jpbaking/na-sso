@@ -20,15 +20,29 @@
         <span class="data-key">{{ p.name }}</span>
         <span class="badge {{ 'badge-shipped' if p.ok else ('badge-danger' if p.configured else 'badge-planned') }}" title="{{ p.detail }}">{{ p.configuration_status }}</span>
       </summary>
-      <form method="post" action="/targets/{{ p.id }}/credentials" enctype="multipart/form-data" class="disclosure-body stack-1">
+      <form method="post" action="/targets/{{ p.id }}/credentials" enctype="multipart/form-data" class="disclosure-body stack-1"{% if p.type == 'ssh' %} data-ssh-credentials{% endif %}>
         {% if p.type == 'opnsense' %}
         <label class="label">API key <input class="input" name="api_key" required autocomplete="off"></label>
         <label class="label">API secret <input class="input" name="api_secret" type="password" required autocomplete="new-password"></label>
         {% else %}
         <label class="label">{{ 'SSH admin' if p.type == 'ssh' else 'Admin user' }} <input class="input" name="admin_user" required autocomplete="off"></label>
-        {% if p.type == 'ssh' %}<label class="label">Authentication <select class="select" name="auth_mode"><option value="password">Password</option><option value="private_key">Private key</option></select></label>{% endif %}
-        <label class="label">Admin password <input class="input" name="password" type="password" autocomplete="new-password"></label>
-        {% if p.type == 'ssh' %}<label class="label">Private key <input class="input" name="private_key" type="file" accept=".pem,.key,text/plain"></label>{% endif %}
+        {% if p.type == 'ssh' %}
+        <label class="label">Authentication
+          <select class="select" name="auth_mode" data-auth-mode>
+            <option value="password"{% if p.auth_mode == 'password' %} selected{% endif %}>Password</option>
+            <option value="private_key"{% if p.auth_mode == 'private_key' %} selected{% endif %}>Private key</option>
+            <option value="password_and_private_key"{% if p.auth_mode == 'password_and_private_key' %} selected{% endif %}>Password + private key</option>
+          </select>
+        </label>
+        <label class="label" data-auth-password{% if p.auth_mode == 'private_key' %} hidden{% endif %}>Admin password
+          <input class="input" name="password" type="password" autocomplete="new-password"{% if p.auth_mode != 'private_key' %} required{% endif %}>
+        </label>
+        <label class="label" data-auth-private-key{% if p.auth_mode == 'password' %} hidden{% endif %}>Private key
+          <input class="input" name="private_key" type="file" accept=".pem,.key,text/plain"{% if p.auth_mode != 'password' %} required{% endif %}>
+        </label>
+        {% else %}
+        <label class="label">Admin password <input class="input" name="password" type="password" required autocomplete="new-password"></label>
+        {% endif %}
         {% endif %}
         <button class="btn btn-primary btn-sm" type="submit">SAVE</button>
       </form>
@@ -42,4 +56,23 @@
   </div>
   {% endif %}
 </section>
+<script>
+document.querySelectorAll('[data-ssh-credentials]').forEach(form => {
+  const mode = form.querySelector('[data-auth-mode]');
+  const passwordField = form.querySelector('[data-auth-password]');
+  const passwordInput = passwordField.querySelector('input');
+  const keyField = form.querySelector('[data-auth-private-key]');
+  const keyInput = keyField.querySelector('input');
+  const syncAuthenticationFields = () => {
+    const needsPassword = mode.value !== 'private_key';
+    const needsPrivateKey = mode.value !== 'password';
+    passwordField.hidden = !needsPassword;
+    passwordInput.required = needsPassword;
+    keyField.hidden = !needsPrivateKey;
+    keyInput.required = needsPrivateKey;
+  };
+  mode.addEventListener('change', syncAuthenticationFields);
+  syncAuthenticationFields();
+});
+</script>
 {% endblock %}
