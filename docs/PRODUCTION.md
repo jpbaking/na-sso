@@ -70,6 +70,11 @@ optional environment-backed credential field. Normally, management credentials
 should instead be entered through **Targets**, where they are encrypted in
 SQLite and never rendered back.
 
+The password policy's `expires_after_days` value controls managed-account
+expiry. Use an integer from 1 through 3650, or `null` to disable expiry. The
+calculated date is shown in the administrator's **Users** table and on the
+user's **Account** page.
+
 The YAML registry is intended to remain non-secret. Environment-backed YAML
 credential fields exist for deployment automation, but UI-managed credentials
 are the preferred path for this Compose deployment.
@@ -176,18 +181,30 @@ Dockerfile or application changes.
 ## Normal operation
 
 1. Check target configuration and probe state under **Targets**.
-2. Create or edit an account under **Users**.
-3. Assign only the required targets and review the per-target matrix.
-4. Inspect failed detail and retry after correcting the target.
-5. Review **Audit** for administrative and connector results.
+2. Create or restore an account under **Users**, retain its temporary password,
+   and assign only the required targets.
+3. Have the user sign in to NA-SSO and replace the temporary password. Until
+   then, assigned targets show **CHPW** and remain uncreated or disabled.
+4. Review the per-target matrix and the password-expiry date.
+5. Inspect failed detail and retry after correcting the target.
+6. Review **Audit** for administrative and connector results.
+
+Initial, administrator-reset, and restore passwords authenticate only to
+NA-SSO. They are never propagated. An administrator reset immediately places
+the account back into **CHPW** and disables existing assigned target accounts;
+the user's replacement password re-enables or creates them. Generated
+passwords are displayed once with a copy action and cannot be recovered after
+the modal closes.
 
 Unassignment disables the remote account rather than deleting it. Reassignment
-re-enables an existing account or waits for a verified password action when new
-credentials are needed.
+either re-enables an existing account or waits in `awaiting credentials` until
+a verified password action supplies a credential. It remains in **CHPW** while
+a temporary-password decision is outstanding.
 
 Deletion is soft locally. NA-SSO deletes assigned remote accounts, retries
 failures, and keeps the completed local record for audit and restoration.
-Restore requires a new password. Permanent removal requires an explicit purge
+Restore requires a new temporary password and completion of **CHPW** before
+target accounts are recreated. Permanent removal requires an explicit purge
 after remote deletion completes.
 
 Stop while preserving the database:
@@ -203,6 +220,8 @@ volume is explicitly intended.
 
 - Plaintext managed-user passwords are never stored. Pending propagation values
   are encrypted and removed after all assigned targets consume them.
+- Initial, administrator-reset, and restore passwords remain local-only;
+  target accounts stay uncreated or disabled until the user replaces them.
 - Target management credentials are encrypted, write-only in the UI, and gated
   by a successful probe.
 - Browser-supported SSH enrollment generates private keys client-side. The
@@ -227,8 +246,8 @@ and secret together.
 ## Pre-production verification
 
 Use a release artifact that has passed the full automated suite described in
-the [developer guide](DEVELOPER.md). Before rollout, verify create, password
-change, disable, retry, delete, and restore against non-production instances
-matching the deployed target versions. Confirm TLS, target permissions,
-memberships, backup restoration, and ingress access policy in the intended
-environment.
+the [developer guide](DEVELOPER.md). Before rollout, verify create and **CHPW**,
+normal password change, expiry handling, administrator reset, disable, retry,
+delete, and restore against non-production instances matching the deployed
+target versions. Confirm TLS, target permissions, memberships, backup
+restoration, and ingress access policy in the intended environment.

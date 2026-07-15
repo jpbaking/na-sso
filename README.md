@@ -27,8 +27,14 @@ tracked independently, so a partial outage stays visible and recoverable.
 - The protected recovery account remains local-only and cannot be assigned to
   external targets.
 - Plaintext managed-user passwords are never persisted.
+- Initial, administrator-reset, and restore passwords are temporary local
+  credentials. Assigned target accounts remain uncreated or disabled in
+  `CHPW` until the user signs in and chooses a replacement password.
 - Short-lived propagation secrets and target management credentials are
   encrypted using `NA_SSO_SECRET_KEY`.
+- Password-expiry dates are visible to administrators and to users on their
+  account page; an expired user may replace the password or explicitly accept
+  the risk of keeping it.
 - Target credentials are write-only in the UI and must pass an immediate probe
   before synchronization is enabled.
 - SSH host keys are pinned, and only managed-user public keys persist.

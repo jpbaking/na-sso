@@ -79,7 +79,7 @@ flowchart TB
     DB -->|"decrypt in memory"| Connector
     Connector -->|"success gates synchronization"| Verified["Verified target"]
 
-    Password["Managed-user password action"] -->|"encrypt temporarily"| Crypto
+    Password["User-chosen replacement or normal password change"] -->|"encrypt temporarily"| Crypto
     Crypto -->|"pending propagation secret"| DB
     DB -->|"decrypt only during sync"| Sync["Synchronization"]
     Sync -->|"clear after all consumers finish"| DB
@@ -88,16 +88,21 @@ flowchart TB
 YAML credentials may reference exact `${ENV_NAME}` values, but the normal UI
 path stores encrypted credential revisions in SQLite. Plaintext managed-user
 passwords exist only for the current request or as encrypted pending secrets
-while assigned targets still need them.
+while assigned targets still need them. Initial, administrator-reset, and
+restore passwords are local-only temporary credentials and never enter this
+propagation flow. Only the replacement selected by the user is staged for
+targets.
 
 ## Synchronization state model
 
 ```mermaid
 stateDiagram-v2
     [*] --> Unassigned: local account created
-    Unassigned --> Pending: target assigned with usable credential
+    Unassigned --> CHPW: target assigned while initial/reset decision is required
+    CHPW --> Pending: user chooses replacement password
+    OK --> CHPW: administrator resets password; remote account is disabled
     Unassigned --> AwaitingCredentials: target assigned without a current password
-    AwaitingCredentials --> Pending: login, password change, or admin reset
+    AwaitingCredentials --> Pending: verified login or user password change
     Pending --> OK: connector succeeds
     Pending --> Failed: connector fails
     Failed --> Pending: manual retry
@@ -110,8 +115,15 @@ stateDiagram-v2
 
 Stable target IDs key sync history. Removed targets and ambiguous legacy
 migrations remain retired for operator visibility rather than being discarded.
-`awaiting_credentials` is intentionally not retried until a verified login or
-password action supplies a new short-lived credential.
+`chpw` means an initial, administrator-reset, or restore password decision is
+outstanding. The temporary password stays local; a new remote account is not
+created, and an existing remote account is disabled. When the user chooses a
+replacement, that credential is staged and synchronization moves to `pending`.
+
+`awaiting_credentials` is distinct: it is intentionally not retried until a
+verified login or a user password action supplies a new short-lived credential.
+An administrator reset moves the account to `chpw`; it does not supply a target
+credential.
 
 ## Synchronization sequence
 
@@ -125,18 +137,25 @@ sequenceDiagram
     participant Worker as Retry worker
 
     Operator->>UI: Save user or password action
-    UI->>DB: Persist desired state and encrypted pending secret
-    UI->>Sync: Schedule synchronization
-    Sync->>DB: Mark target pending
-    Sync->>Target: Apply desired operation
-    alt target succeeds
-        Target-->>Sync: Success
-        Sync->>DB: Mark OK and clear consumed secret when complete
-    else target fails
-        Target-->>Sync: Safe failure detail
-        Sync->>DB: Mark failed, increment attempts, set next retry
-        Worker->>DB: Scan for due retries
-        Worker->>Sync: Replay persisted desired action
+    alt initial, administrator-reset, or restore password
+        UI->>DB: Persist local temporary credential and CHPW decision
+        UI->>Sync: Apply CHPW hold
+        Sync->>Target: Disable existing account if present
+        Sync->>DB: Mark target CHPW
+    else user-chosen replacement or normal password change
+        UI->>DB: Persist desired state and encrypted pending secret
+        UI->>Sync: Schedule synchronization
+        Sync->>DB: Mark target pending
+        Sync->>Target: Apply desired operation
+        alt target succeeds
+            Target-->>Sync: Success
+            Sync->>DB: Mark OK and clear consumed secret when complete
+        else target fails
+            Target-->>Sync: Safe failure detail
+            Sync->>DB: Mark failed, increment attempts, set next retry
+            Worker->>DB: Scan for due retries
+            Worker->>Sync: Replay persisted desired action
+        end
     end
     UI-->>Operator: Stream updated target state over authenticated SSE
 ```
@@ -144,6 +163,12 @@ sequenceDiagram
 Connector methods return `SyncResult` instead of leaking transport exceptions.
 Each attempt persists safe detail, attempt count, and the next retry time before
 the UI receives the updated state.
+
+Password expiry is derived from `password_changed_at` and the configured
+`expires_after_days`. Initial/reset accounts show expiry as **after CHPW**;
+after the user chooses a replacement, the exact date is shown in both the admin
+Users table and the personal account page. Expired users must either change the
+password or explicitly acknowledge the risk of keeping it before continuing.
 
 ## Connector contracts
 

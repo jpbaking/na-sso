@@ -99,6 +99,27 @@ After each save, the target should report **fully configured**. If the generated
 key is not present yet, confirm `demo-rebuild` or `demo-up` completed and that
 `.config-demo/management_key` exists.
 
+## Complete a managed user's first login
+
+Passwords set when an administrator creates, resets, or restores an account are
+temporary local credentials. NA-SSO deliberately does not send them to target
+systems. Assigned targets show **CHPW** and their accounts remain uncreated or
+disabled until the user signs in to NA-SSO and chooses a replacement password.
+
+To complete the transition:
+
+1. Create the user and assign the desired targets. Copy the generated password
+   before closing its one-time modal, or retain the manually entered value.
+2. Sign out as the administrator and sign in as the managed user with that
+   temporary password.
+3. Choose a replacement password on the required password-change page.
+4. Return to the account page. The replacement is propagated to assigned
+   password-capable targets, and the account page shows its expiry date.
+
+The administrator's **Users** table shows the same expiry date. With the demo's
+90-day policy, it is calculated from the user-chosen replacement, not from the
+temporary password.
+
 The SSH target mode and its management authentication are separate concepts:
 the selected **Authentication** field controls how NA-SSO logs in as
 `provisioner`; the target's generated YAML `mode` controls whether managed
@@ -147,11 +168,14 @@ deterministic synchronization failures and automatic recovery testing.
 
 Useful evaluation flows include:
 
-1. Create a local-only user, then assign selected targets.
-2. Change a password and watch pending states update on **Users**.
+1. Create a user, assign selected targets, and observe **CHPW** before first
+   login.
+2. Sign in as that user, replace the temporary password, and watch pending
+   states update on **Users**.
 3. Disable and re-enable an account.
 4. Force one mock target offline, observe retry state, then restore it.
-5. Delete, restore with a new password, and explicitly purge a completed record.
+5. Delete and restore with a temporary password, complete **CHPW** again, and
+   explicitly purge a completed record.
 6. Review administrative and connector events under **Audit**.
 
 Mock API user state is in memory and resets whenever `mock-targets` restarts.
