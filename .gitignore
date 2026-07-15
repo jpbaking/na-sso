@@ -4,8 +4,8 @@ data/
 __pycache__/
 *.egg-info/
 .config/.env
-.config/oneauth.yaml
-.config-demo/oneauth.yaml
+.config/na-sso.yaml
+.config-demo/na-sso.yaml
 .config-demo/management_key*
 .config-demo/password_host_key*
 .config-demo/combined_host_key*

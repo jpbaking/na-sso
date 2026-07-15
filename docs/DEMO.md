@@ -1,6 +1,6 @@
-# One Auth demo
+# NA-SSO demo
 
-The standalone demo runs the real One Auth application and production
+The standalone demo runs the real NA-SSO application and production
 connectors against stateful, protocol-faithful mock OPNsense, Nexus Repository,
 and Nextcloud APIs plus two isolated Debian OpenSSH targets. It does not contact
 or modify real target systems.
@@ -27,7 +27,7 @@ read `.config/` and can run alongside the normal application on port 8000.
 ## Configure the demo targets
 
 Target management credentials are intentionally not preloaded. Enter them on
-**Targets** and select **SAVE**; One Auth encrypts each value and immediately
+**Targets** and select **SAVE**; NA-SSO encrypts each value and immediately
 probes that target revision.
 
 Expand one target row at a time and enter the following values.
@@ -95,13 +95,13 @@ key is not present yet, confirm `demo-rebuild` or `demo-up` completed and that
 `.config-demo/management_key` exists.
 
 The SSH target mode and its management authentication are separate concepts:
-the selected **Authentication** field controls how One Auth logs in as
+the selected **Authentication** field controls how NA-SSO logs in as
 `provisioner`; the target's generated YAML `mode` controls whether managed
 users receive a password, a public key, or both.
 
 ### Exercise managed-user SSH keys
 
-The uploaded `management_key` authenticates One Auth as the target
+The uploaded `management_key` authenticates NA-SSO as the target
 administrator; it is not a managed user's login key. To exercise the combined
 target's managed-user key propagation:
 
@@ -110,7 +110,7 @@ target's managed-user key propagation:
 2. Sign out as the administrator and sign in as that managed user.
 3. Complete the first-login password decision, then open **Account**.
 4. Select **Generate key in this browser** and save the downloaded
-   `oneauth_ed25519` private key. Only its public half is sent to One Auth and
+   `na-sso_ed25519` private key. Only its public half is sent to NA-SSO and
    propagated to the combined SSH target.
 5. Alternatively, use the clearly labelled compatibility fallback; it displays
    a server-generated private key once and does not persist it.
@@ -123,7 +123,7 @@ the enrolled public key. The combined target receives both.
 On first start, `demo-ssh-bootstrap` creates the following ignored files under
 `.config-demo/`:
 
-- `oneauth.yaml` containing the effective six-target registry
+- `na-sso.yaml` containing the effective six-target registry
 - `management_key` and `management_key.pub` for the SSH management login
 - Password-target host key and public key
 - Combined-target host key and public key
@@ -150,7 +150,7 @@ Useful evaluation flows include:
 6. Review administrative and connector events under **Audit**.
 
 Mock API user state is in memory and resets whenever `mock-targets` restarts.
-The One Auth demo database persists independently, so delete evaluated users
+The NA-SSO demo database persists independently, so delete evaluated users
 before restarting mocks when both sides need to stay aligned.
 
 ## Demo lifecycle commands

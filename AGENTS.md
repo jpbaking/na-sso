@@ -207,14 +207,14 @@ When the user requests a durable behavior change, record it here or in the relev
 
 ## Feature Map
 
-- **Containerized application and isolated demo** — Runs the normal service from `docker-compose.yaml` with `.config/`, and a separate `<project>-demo` stack from `docker-compose-demo.yaml` with public `.config-demo/` settings, browser-uploadable demo management credentials, and runtime-generated SSH/YAML state. Start: `docker-compose.yaml`. Files: `docker-compose-demo.yaml`, `Dockerfile`, `Dockerfile.demo-ssh`, `demo-ssh.sh`, `compose-helper.sh`, `compose-helper.env`, `.config/.env.example`, `.config/oneauth.yaml.example`, `.config-demo/.env`. Detail in `./oneauth/mock_targets`.
-- **Python package and service** — FastAPI application implementing local administration and cross-target credential propagation. Start: `oneauth/main.py`. Files: `oneauth/`. Detail in `./oneauth`.
-- **Product overview and project guides** — Introduces One Auth and routes evaluators, operators, and developers to detailed guidance. Start: `README.md`. Files: `docs/`, `pyproject.toml`. Detail in `./docs`.
+- **Containerized application and isolated demo** — Runs the normal service from `docker-compose.yaml` with `.config/`, and a separate `<project>-demo` stack from `docker-compose-demo.yaml` with public `.config-demo/` settings, browser-uploadable demo management credentials, and runtime-generated SSH/YAML state. Start: `docker-compose.yaml`. Files: `docker-compose-demo.yaml`, `Dockerfile`, `Dockerfile.demo-ssh`, `demo-ssh.sh`, `compose-helper.sh`, `compose-helper.env`, `.config/.env.example`, `.config/na-sso.yaml.example`, `.config-demo/.env`. Detail in `./na_sso/mock_targets`.
+- **Python package and service** — FastAPI application implementing local administration and cross-target credential propagation. Start: `na_sso/main.py`. Files: `na_sso/`. Detail in `./na_sso`.
+- **Product overview and project guides** — Introduces NA-SSO (Not Another SSO) and routes evaluators, operators, and developers to detailed guidance. Start: `README.md`. Files: `docs/`, `pyproject.toml`. Detail in `./docs`.
 
 ## Child DOX Index
 
 - `docs/` — demo, developer, and production deployment/operations guides.
-- `oneauth/` — FastAPI application, persistence, UI, connectors, and sync orchestration.
+- `na_sso/` — FastAPI application, persistence, UI, connectors, and sync orchestration.
 - `tests/` — pytest fixtures and behavioral coverage for users, connectors, and synchronization.
 
 ## Project rules (imported)

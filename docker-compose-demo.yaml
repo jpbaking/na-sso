@@ -1,24 +1,24 @@
 services:
   # BUILDERS: produce local images; never run as services.
-  oneauth-builder:
+  na-sso-builder:
     profiles: ["build"]
     build:
       context: .
-    image: oneauth:local
+    image: na-sso:local
 
   demo-ssh-builder:
     profiles: ["build"]
     build:
       context: .
       dockerfile: Dockerfile.demo-ssh
-    image: oneauth-demo-ssh:local
+    image: na-sso-demo-ssh:local
 
   # DEMO RUNTIME: protocol-faithful in-memory API targets.
   mock-targets:
-    image: oneauth:local
+    image: na-sso:local
     restart: unless-stopped
     command:
-      ["uvicorn", "oneauth.mock_targets.app:app", "--host", "0.0.0.0", "--port", "9000"]
+      ["uvicorn", "na_sso.mock_targets.app:app", "--host", "0.0.0.0", "--port", "9000"]
     ports:
       - "127.0.0.1:9000:9000"
     healthcheck:
@@ -35,13 +35,13 @@ services:
 
   # Generates persistent SSH host keys, fingerprints, and the effective demo YAML.
   demo-ssh-bootstrap:
-    image: oneauth-demo-ssh:local
+    image: na-sso-demo-ssh:local
     command: ["bootstrap"]
     volumes:
       - ./.config-demo:/demo
 
   demo-ssh-password:
-    image: oneauth-demo-ssh:local
+    image: na-sso-demo-ssh:local
     command: ["serve", "password"]
     depends_on:
       demo-ssh-bootstrap:
@@ -55,7 +55,7 @@ services:
       retries: 15
 
   demo-ssh-combined:
-    image: oneauth-demo-ssh:local
+    image: na-sso-demo-ssh:local
     command: ["serve", "combined"]
     depends_on:
       demo-ssh-bootstrap:
@@ -68,8 +68,8 @@ services:
       timeout: 2s
       retries: 15
 
-  oneauth-demo:
-    image: oneauth:local
+  na-sso-demo:
+    image: na-sso:local
     restart: unless-stopped
     env_file: .config-demo/.env
     depends_on:
@@ -82,8 +82,8 @@ services:
     ports:
       - "8001:8000"
     volumes:
-      - oneauth-demo-data:/data
+      - na-sso-demo-data:/data
       - ./.config-demo:/demo:ro
 
 volumes:
-  oneauth-demo-data:
+  na-sso-demo-data:

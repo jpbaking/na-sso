@@ -1,7 +1,7 @@
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
-from oneauth.security import generate_password, public_key_from_private, validate_password
+from na_sso.security import generate_password, public_key_from_private, validate_password
 
 
 def test_generated_password_satisfies_central_policy(client):
@@ -40,8 +40,8 @@ def test_local_user_login_is_restricted_until_password_decision(admin_client):
 
 def test_root_cannot_be_mutated_through_user_routes(admin_client):
     admin_client.post("/users/0/delete", follow_redirects=False)
-    from oneauth.db import get_session
-    from oneauth.models import ManagedUser
+    from na_sso.db import get_session
+    from na_sso.models import ManagedUser
     with get_session() as db:
         root = db.get(ManagedUser, 0)
         assert root.role == "root"
@@ -54,7 +54,7 @@ def test_superadmin_target_cells_are_na(admin_client, monkeypatch):
     from types import SimpleNamespace
     target = SimpleNamespace(target_id="verified_target", target_type="ssh",
                              display_name="Verified target")
-    monkeypatch.setattr("oneauth.users.get_connectors", lambda: [target])
+    monkeypatch.setattr("na_sso.users.get_connectors", lambda: [target])
     response = admin_client.get("/users")
     assert response.status_code == 200
     assert "SUPERADMIN" in response.text
@@ -74,8 +74,8 @@ def test_private_key_enrollment_persists_only_public_key(admin_client):
                                 serialization.NoEncryption()).decode()
     response = admin_client.post("/account/ssh-key", data={"private_key": private}, follow_redirects=False)
     assert response.status_code == 303
-    from oneauth.db import get_session
-    from oneauth.models import ManagedUser
+    from na_sso.db import get_session
+    from na_sso.models import ManagedUser
     with get_session() as db:
         user = db.query(ManagedUser).filter_by(username="keyuser").one()
         assert user.ssh_public_key.startswith("ssh-ed25519 ")

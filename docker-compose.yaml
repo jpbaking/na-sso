@@ -1,23 +1,23 @@
 services:
   # BUILDER: produces the deployable application image; never runs.
-  oneauth-builder:
+  na-sso-builder:
     profiles: ["build"]
     build:
       context: .
-    image: oneauth:local
+    image: na-sso:local
 
   # PRODUCTION RUNTIME: consumes the built image and only normal configuration.
-  oneauth:
-    image: oneauth:local
+  na-sso:
+    image: na-sso:local
     restart: unless-stopped
     env_file: .config/.env
     environment:
-      ONEAUTH_CONFIG_FILE: /config/oneauth.yaml
+      NA_SSO_CONFIG_FILE: /config/na-sso.yaml
     ports:
       - "8000:8000"
     volumes:
-      - oneauth-data:/data
-      - ./.config/oneauth.yaml:/config/oneauth.yaml:ro
+      - na-sso-data:/data
+      - ./.config/na-sso.yaml:/config/na-sso.yaml:ro
 
 volumes:
-  oneauth-data:
+  na-sso-data:

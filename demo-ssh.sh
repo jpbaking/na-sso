@@ -10,7 +10,7 @@ case "${1:-}" in
     done
     password_fp="$(ssh-keygen -lf /demo/password_host_key.pub -E sha256 | awk '{print $2}')"
     combined_fp="$(ssh-keygen -lf /demo/combined_host_key.pub -E sha256 | awk '{print $2}')"
-    cat > /demo/oneauth.yaml <<EOF
+    cat > /demo/na-sso.yaml <<EOF
 version: 1
 password_policy: {min_length: 14, history_size: 3, expires_after_days: 90}
 ssh_key_policy: {allowed_algorithms: [ed25519, rsa], rsa_min_bits: 3072, browser_generation: true, allow_server_fallback: true}
@@ -24,7 +24,7 @@ targets:
 EOF
     # The public demo UI uploads management_key from the host. It is a disposable
     # demo credential, so keep it host-readable; host private keys stay restricted.
-    chmod 0644 /demo/management_key /demo/oneauth.yaml /demo/*.pub
+    chmod 0644 /demo/management_key /demo/na-sso.yaml /demo/*.pub
     chmod 0600 /demo/*_host_key
     ;;
   serve)

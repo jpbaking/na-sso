@@ -175,37 +175,37 @@ case "${1:-}" in
         run_dc down -t "$DCH_STOP_TIMEOUT" --remove-orphans -v
         ;;
     demo-up)
-        run_demo_dc up -d oneauth-demo
+        run_demo_dc up -d na-sso-demo
         ;;
     demo-rebuild)
         run_demo_dc --profile build build --pull
-        run_demo_dc up -d --force-recreate oneauth-demo
+        run_demo_dc up -d --force-recreate na-sso-demo
         ;;
     demo-build)
         run_demo_dc --profile build build --pull
         ;;
     demo-start)
-        run_demo_dc up -d oneauth-demo
+        run_demo_dc up -d na-sso-demo
         ;;
     demo-restart)
         run_demo_dc down -t "$DCH_STOP_TIMEOUT" --remove-orphans
-        run_demo_dc up -d oneauth-demo
+        run_demo_dc up -d na-sso-demo
         ;;
     demo-stop)
         run_demo_dc down -t "$DCH_STOP_TIMEOUT" --remove-orphans
         ;;
     demo-down)
         run_demo_dc down -t "$DCH_STOP_TIMEOUT" --remove-orphans -v
-        rm -f .config-demo/oneauth.yaml \
+        rm -f .config-demo/na-sso.yaml \
               .config-demo/management_key .config-demo/management_key.pub \
               .config-demo/password_host_key .config-demo/password_host_key.pub \
               .config-demo/combined_host_key .config-demo/combined_host_key.pub
         ;;
     demo-logs)
-        run_demo_dc logs -f --tail="$DCH_LOGS_TAIL" oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
+        run_demo_dc logs -f --tail="$DCH_LOGS_TAIL" na-sso-demo mock-targets demo-ssh-password demo-ssh-combined
         ;;
     demo-ps)
-        run_demo_dc ps oneauth-demo mock-targets demo-ssh-password demo-ssh-combined
+        run_demo_dc ps na-sso-demo mock-targets demo-ssh-password demo-ssh-combined
         ;;
     logs)
         run_dc logs -f --tail="$DCH_LOGS_TAIL"

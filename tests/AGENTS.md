@@ -6,7 +6,7 @@ Behavioral test suite for authentication, managed users, connectors, synchroniza
 
 ## Ownership
 
-Owns pytest fixtures and tests only. Production contracts and implementation remain under `../oneauth/`.
+Owns pytest fixtures and tests only. Production contracts and implementation remain under `../na_sso/`.
 
 ## Local Contracts
 

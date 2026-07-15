@@ -1,6 +1,6 @@
-from oneauth.connectors.base import Connector, SyncResult
-from oneauth.models import ManagedUser
-from oneauth.security import encrypt_secret
+from na_sso.connectors.base import Connector, SyncResult
+from na_sso.models import ManagedUser
+from na_sso.security import encrypt_secret
 
 
 class StubConnector(Connector):
@@ -26,7 +26,7 @@ class StubConnector(Connector):
 
 
 def _stored_user():
-    from oneauth.db import get_session
+    from na_sso.db import get_session
 
     with get_session() as db:
         user = ManagedUser(
@@ -43,14 +43,14 @@ def _stored_user():
 async def test_sync_success_clears_pending_secret(client, monkeypatch):
     first = StubConnector("opnsense")
     second = StubConnector("nexus")
-    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [first, second])
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [first, second])
     user_id = _stored_user()
 
-    from oneauth.sync import sync_user
+    from na_sso.sync import sync_user
 
     await sync_user(user_id)
 
-    from oneauth.db import get_session
+    from na_sso.db import get_session
 
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
@@ -65,13 +65,13 @@ async def test_sync_success_clears_pending_secret(client, monkeypatch):
 async def test_sync_partial_failure_keeps_secret_and_retry_succeeds(client, monkeypatch):
     good = StubConnector("opnsense")
     flaky = StubConnector("nexus", ok=False)
-    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [good, flaky])
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [good, flaky])
     user_id = _stored_user()
 
-    from oneauth.sync import sync_user
+    from na_sso.sync import sync_user
 
     await sync_user(user_id)
-    from oneauth.db import get_session
+    from na_sso.db import get_session
 
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
@@ -91,16 +91,16 @@ async def test_sync_partial_failure_keeps_secret_and_retry_succeeds(client, monk
 
 async def test_sync_disable_and_delete(client, monkeypatch):
     connector = StubConnector("nextcloud")
-    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [connector])
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [connector])
     user_id = _stored_user()
-    from oneauth.db import get_session
+    from na_sso.db import get_session
 
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
         user.status = "disabled"
         db.commit()
 
-    from oneauth.sync import sync_user
+    from na_sso.sync import sync_user
 
     await sync_user(user_id)
     assert connector.calls[-1] == ("disable", "syncme")
@@ -113,10 +113,10 @@ async def test_sync_disable_and_delete(client, monkeypatch):
 
 async def test_failed_delete_schedules_and_retries_delete(client, monkeypatch):
     connector = StubConnector("nextcloud", ok=False)
-    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [connector])
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [connector])
     user_id = _stored_user()
-    from oneauth.db import get_session
-    from oneauth.sync import retry_due, sync_user
+    from na_sso.db import get_session
+    from na_sso.sync import retry_due, sync_user
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
         user.desired_action = "delete"
@@ -137,7 +137,7 @@ async def test_failed_delete_schedules_and_retries_delete(client, monkeypatch):
 def test_retry_endpoint_runs_only_selected_target(admin_client, monkeypatch):
     first = StubConnector("opnsense")
     second = StubConnector("nexus")
-    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [first, second])
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [first, second])
     user_id = _stored_user()
 
     response = admin_client.post(
@@ -151,8 +151,8 @@ def test_retry_endpoint_runs_only_selected_target(admin_client, monkeypatch):
 
 def test_target_page_omits_duplicate_user_sync_matrix(admin_client):
     user_id = _stored_user()
-    from oneauth.db import get_session
-    from oneauth.models import SyncState
+    from na_sso.db import get_session
+    from na_sso.models import SyncState
 
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
@@ -183,7 +183,7 @@ def test_sync_sse_requires_auth_and_returns_snapshot(client):
 
 def test_audit_page_lists_admin_and_sync_events(admin_client, monkeypatch):
     connector = StubConnector("opnsense")
-    monkeypatch.setattr("oneauth.sync.get_connectors", lambda: [connector])
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [connector])
 
     response = admin_client.post(
         "/users/new",

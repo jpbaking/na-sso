@@ -1,6 +1,6 @@
 # Developer guide
 
-This guide covers One Auth internals, local engineering setup, synchronization
+This guide covers NA-SSO internals, local engineering setup, synchronization
 behavior, and verification. Deployment and operator procedures belong in the
 [production guide](PRODUCTION.md); evaluation workflows belong in the
 [demo guide](DEMO.md).
@@ -16,22 +16,22 @@ python -m venv .venv
 ```
 
 The application can run directly with a valid local `.config/.env` and
-`.config/oneauth.yaml`, but Compose should be used for container lifecycle and
+`.config/na-sso.yaml`, but Compose should be used for container lifecycle and
 for the complete demo. Follow the nearest `AGENTS.md` before editing any path.
 
 ## Code map
 
 | Area | Start here | Responsibility |
 | --- | --- | --- |
-| Application startup | `oneauth/main.py` | Lifespan, database initialization, retry worker, routes, and static mounts. |
-| Configuration | `oneauth/config.py` | Strict YAML models, environment references, policies, and target registry. |
-| Persistence | `oneauth/models.py` | Managed users, sync state, encrypted target credentials, and audit events. |
-| Authentication | `oneauth/auth.py` | Sessions, login, password actions, and SSH enrollment. |
-| User lifecycle | `oneauth/users.py` | Create, edit, assign, disable, delete, restore, purge, and manual retry. |
-| Synchronization | `oneauth/sync.py` | Fan-out, encrypted pending secrets, retry scheduling, and recovery worker. |
-| Target onboarding | `oneauth/target_credentials.py` | Encrypted credential revisions, readiness, and probe gating. |
-| Connectors | `oneauth/connectors/` | Target-specific API and pinned-host SSH adapters. |
-| Templates | `oneauth/templates/` | Administrative UI and authenticated live state updates. |
+| Application startup | `na_sso/main.py` | Lifespan, database initialization, retry worker, routes, and static mounts. |
+| Configuration | `na_sso/config.py` | Strict YAML models, environment references, policies, and target registry. |
+| Persistence | `na_sso/models.py` | Managed users, sync state, encrypted target credentials, and audit events. |
+| Authentication | `na_sso/auth.py` | Sessions, login, password actions, and SSH enrollment. |
+| User lifecycle | `na_sso/users.py` | Create, edit, assign, disable, delete, restore, purge, and manual retry. |
+| Synchronization | `na_sso/sync.py` | Fan-out, encrypted pending secrets, retry scheduling, and recovery worker. |
+| Target onboarding | `na_sso/target_credentials.py` | Encrypted credential revisions, readiness, and probe gating. |
+| Connectors | `na_sso/connectors/` | Target-specific API and pinned-host SSH adapters. |
+| Templates | `na_sso/templates/` | Administrative UI and authenticated live state updates. |
 | Behavioral tests | `tests/` | Configuration, security, connector, lifecycle, and demo coverage. |
 
 ## Application architecture
@@ -68,8 +68,8 @@ external queue; duplicating the current process would duplicate recovery work.
 ```mermaid
 flowchart TB
     Env[".config/.env"] -->|"bootstrap admin, retry timing"| Settings["Runtime settings"]
-    Env -->|"ONEAUTH_SECRET_KEY"| Crypto["Fernet key derivation"]
-    YAML["Read-only oneauth.yaml"] -->|"policy, endpoints, capabilities"| Registry["Target registry"]
+    Env -->|"NA_SSO_SECRET_KEY"| Crypto["Fernet key derivation"]
+    YAML["Read-only na-sso.yaml"] -->|"policy, endpoints, capabilities"| Registry["Target registry"]
 
     Operator["Operator on Targets page"] -->|"write-only management credential"| Save["Save and probe"]
     Save --> Crypto
@@ -118,7 +118,7 @@ password action supplies a new short-lived credential.
 ```mermaid
 sequenceDiagram
     actor Operator
-    participant UI as One Auth UI
+    participant UI as NA-SSO UI
     participant DB as SQLite
     participant Sync as Sync orchestrator
     participant Target as Assigned target

@@ -1,7 +1,7 @@
 [project]
-name = "one-auth-non-sso"
+name = "na-sso"
 version = "0.1.0"
-description = "Admin-managed users propagated to OPNsense, Nexus Repository, and Nextcloud (non-SSO)"
+description = "Not Another SSO: admin-managed users propagated to local accounts on external targets"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -30,10 +30,10 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["oneauth*"]
+include = ["na_sso*"]
 
 [tool.setuptools.package-data]
-oneauth = ["templates/*", "static/*", "static/design/**/*"]
+na_sso = ["templates/*", "static/*", "static/design/**/*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}NA-SSO{% endblock %} — Not Another SSO</title>
+  <meta name="description" content="Centralised local accounts, propagated to OPNsense, Nexus and Nextcloud.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="stylesheet" href="/design/styles.css">
+  <link rel="stylesheet" href="/design/components.css">
+</head>
+<body class="site-page">
+
+<header class="nav-wrap">
+  <nav class="nav container" aria-label="Main navigation">
+    <a href="/users" class="brand" aria-label="NA-SSO — home">
+      <img src="/design/assets/logo-mark.svg" alt="">
+      <span class="brand-name">NA-SSO</span>
+    </a>
+    <ul class="nav-links" role="list">
+      {% block nav %}{% endblock %}
+      {% if admin %}
+      <li>
+        <form method="post" action="/logout">
+          <button type="submit" class="btn btn-quiet btn-sm">Sign out</button>
+        </form>
+      </li>
+      {% endif %}
+    </ul>
+  </nav>
+</header>
+
+<main>
+{% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+  <div class="footer-inner container">
+    <div class="foot-brand">NA-SSO · Not Another SSO</div>
+    <div class="foot-copy">Accounts are provisioned to each target over its API.</div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const cells = document.querySelectorAll('[data-sync-cell]');
+  if (!cells.length || !window.EventSource) return;
+  const badge = (label, className, title = '') => {
+    const node = document.createElement('span');
+    node.className = `badge ${className}`;
+    node.textContent = label;
+    if (title) node.title = title;
+    return node;
+  };
+  const render = (cell, user, target) => {
+    const state = user.states[target] || {state: 'pending'};
+    cell.replaceChildren();
+    if (state.state === 'ok') {
+      cell.append(badge(user.desired_action === 'delete' ? 'deleted' : 'ok', 'badge-shipped'));
+    } else if (state.state === 'failed') {
+      cell.append(badge(state.next_retry_at ? 'retrying' : 'failed', 'badge-danger', state.detail));
+      if (state.next_retry_at) {
+        const detail = document.createElement('small');
+        detail.textContent = ` attempt ${state.attempt_count}; retry scheduled`;
+        cell.append(detail);
+      }
+      if (window.location.pathname === '/users') {
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = `/users/${user.id}/retry/${target}`;
+        const button = document.createElement('button');
+        button.type = 'submit';
+        button.className = 'btn btn-quiet btn-sm';
+        button.textContent = 'Retry';
+        form.append(button);
+        cell.append(form);
+      }
+    } else {
+      cell.append(badge('pending', 'badge-planned'));
+    }
+  };
+  const stream = new EventSource('/events/sync');
+  stream.addEventListener('sync', event => {
+    const users = new Map(JSON.parse(event.data).users.map(user => [String(user.id), user]));
+    cells.forEach(cell => {
+      const user = users.get(cell.dataset.userId);
+      if (user) render(cell, user, cell.dataset.target);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

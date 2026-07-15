@@ -7,12 +7,12 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 
-from oneauth.config import Settings
-from oneauth.connectors.nextcloud import NextcloudConnector
-from oneauth.connectors.nexus import NexusConnector
-from oneauth.connectors.opnsense import OPNsenseConnector
-from oneauth.mock_targets.app import app
-from oneauth.models import ManagedUser
+from na_sso.config import Settings
+from na_sso.connectors.nextcloud import NextcloudConnector
+from na_sso.connectors.nexus import NexusConnector
+from na_sso.connectors.opnsense import OPNsenseConnector
+from na_sso.mock_targets.app import app
+from na_sso.models import ManagedUser
 
 
 @pytest.fixture(scope="module")
@@ -235,29 +235,29 @@ def test_application_demo_workflow_with_failure_and_retry(
     live_mock_url, tmp_path, monkeypatch
 ):
     target_settings = {
-        "ONEAUTH_DATABASE_PATH": str(tmp_path / "demo-test.db"),
-        "ONEAUTH_SECRET_KEY": "demo-test-secret",
-        "ONEAUTH_ADMIN_USERNAME": "admin",
-        "ONEAUTH_ADMIN_BOOTSTRAP_PASSWORD": "demo-password",
-        "ONEAUTH_OPNSENSE_ENABLED": "true",
-        "ONEAUTH_OPNSENSE_BASE_URL": live_mock_url,
-        "ONEAUTH_OPNSENSE_API_KEY": "demo-key",
-        "ONEAUTH_OPNSENSE_API_SECRET": "demo-secret",
-        "ONEAUTH_OPNSENSE_VERIFY_TLS": "false",
-        "ONEAUTH_NEXUS_ENABLED": "true",
-        "ONEAUTH_NEXUS_BASE_URL": live_mock_url,
-        "ONEAUTH_NEXUS_ADMIN_USER": "admin",
-        "ONEAUTH_NEXUS_ADMIN_PASSWORD": "demo-password",
-        "ONEAUTH_NEXTCLOUD_ENABLED": "true",
-        "ONEAUTH_NEXTCLOUD_BASE_URL": live_mock_url,
-        "ONEAUTH_NEXTCLOUD_ADMIN_USER": "admin",
-        "ONEAUTH_NEXTCLOUD_ADMIN_PASSWORD": "demo-password",
+        "NA_SSO_DATABASE_PATH": str(tmp_path / "demo-test.db"),
+        "NA_SSO_SECRET_KEY": "demo-test-secret",
+        "NA_SSO_ADMIN_USERNAME": "admin",
+        "NA_SSO_ADMIN_BOOTSTRAP_PASSWORD": "demo-password",
+        "NA_SSO_OPNSENSE_ENABLED": "true",
+        "NA_SSO_OPNSENSE_BASE_URL": live_mock_url,
+        "NA_SSO_OPNSENSE_API_KEY": "demo-key",
+        "NA_SSO_OPNSENSE_API_SECRET": "demo-secret",
+        "NA_SSO_OPNSENSE_VERIFY_TLS": "false",
+        "NA_SSO_NEXUS_ENABLED": "true",
+        "NA_SSO_NEXUS_BASE_URL": live_mock_url,
+        "NA_SSO_NEXUS_ADMIN_USER": "admin",
+        "NA_SSO_NEXUS_ADMIN_PASSWORD": "demo-password",
+        "NA_SSO_NEXTCLOUD_ENABLED": "true",
+        "NA_SSO_NEXTCLOUD_BASE_URL": live_mock_url,
+        "NA_SSO_NEXTCLOUD_ADMIN_USER": "admin",
+        "NA_SSO_NEXTCLOUD_ADMIN_PASSWORD": "demo-password",
     }
     for key, value in target_settings.items():
         monkeypatch.setenv(key, value)
 
-    import oneauth.config as config
-    import oneauth.db as db
+    import na_sso.config as config
+    import na_sso.db as db
 
     config.get_settings.cache_clear()
     db._engine = None
@@ -266,9 +266,9 @@ def test_application_demo_workflow_with_failure_and_retry(
 
     from fastapi.testclient import TestClient
 
-    from oneauth.main import app as oneauth_app
+    from na_sso.main import app as na_sso_app
 
-    with TestClient(oneauth_app) as client:
+    with TestClient(na_sso_app) as client:
         assert client.post(
             "/login",
             data={"username": "admin", "password": "demo-password"},
@@ -285,7 +285,7 @@ def test_application_demo_workflow_with_failure_and_retry(
             follow_redirects=False,
         ).status_code == 303
 
-        from oneauth.models import ManagedUser
+        from na_sso.models import ManagedUser
 
         with db.get_session() as session:
             user = session.query(ManagedUser).filter_by(username="demo_user").one()
@@ -324,7 +324,7 @@ def test_application_demo_workflow_with_failure_and_retry(
             nexus_state.next_retry_at = nexus_state.next_retry_at.replace(year=2000)
             session.commit()
         import asyncio
-        from oneauth.sync import retry_due
+        from na_sso.sync import retry_due
         assert asyncio.run(retry_due()) == 1
         with db.get_session() as session:
             user = session.get(ManagedUser, user_id)

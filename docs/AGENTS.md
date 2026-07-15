@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Documentation for evaluating, developing, deploying, securing, and maintaining One Auth.
+Documentation for evaluating, developing, deploying, securing, and maintaining NA-SSO.
 
 ## Ownership
 
-Owns detailed operator guidance under `docs/`. Product positioning remains in the root `README.md`; executable configuration and behavior remain owned by the root Compose files and `oneauth/` source.
+Owns detailed operator guidance under `docs/`. Product positioning remains in the root `README.md`; executable configuration and behavior remain owned by the root Compose files and `na_sso/` source.
 
 ## Local Contracts
 

@@ -2,8 +2,8 @@ import pytest
 import respx
 from httpx import Response
 
-from oneauth.connectors.base import Connector, SyncResult
-from oneauth.models import ManagedUser
+from na_sso.connectors.base import Connector, SyncResult
+from na_sso.models import ManagedUser
 
 
 class FakeConnector(Connector):
@@ -44,23 +44,23 @@ targets:
      management_user: mgr, management_private_key: key,
      host_key_sha256: "SHA256:AAAAAAAAAAAAAAAAAAAA", platform: debian}
 """)
-    monkeypatch.setenv("ONEAUTH_CONFIG_FILE", str(path))
-    monkeypatch.setenv("ONEAUTH_DATABASE_PATH", str(tmp_path / "registry.db"))
-    from oneauth.config import get_settings
-    import oneauth.db as database
+    monkeypatch.setenv("NA_SSO_CONFIG_FILE", str(path))
+    monkeypatch.setenv("NA_SSO_DATABASE_PATH", str(tmp_path / "registry.db"))
+    from na_sso.config import get_settings
+    import na_sso.db as database
     get_settings.cache_clear()
     database._engine = database._session_factory = None
     database.init_db()
-    from oneauth.connectors import get_connectors
+    from na_sso.connectors import get_connectors
     assert get_connectors() == []
     database._engine = database._session_factory = None
     get_settings.cache_clear()
 
 
 def test_cross_target_identity_validation_is_preflight():
-    from oneauth.config import NexusTarget
-    from oneauth.connectors import validate_for_targets
-    from oneauth.connectors.nexus import NexusConnector
+    from na_sso.config import NexusTarget
+    from na_sso.connectors import validate_for_targets
+    from na_sso.connectors.nexus import NexusConnector
     connector = NexusConnector(NexusTarget(id="nexus_a", type="nexus", display_name="Nexus",
         base_url="https://nexus", admin_user="admin", admin_password="secret"))
     user = ManagedUser(username="jdoe", display_name="", email="")
@@ -69,8 +69,8 @@ def test_cross_target_identity_validation_is_preflight():
 
 
 def test_ssh_rejects_unrepresentable_and_nonportable_names_without_connecting():
-    from oneauth.config import SshTarget
-    from oneauth.connectors.ssh import SSHConnector
+    from na_sso.config import SshTarget
+    from na_sso.connectors.ssh import SSHConnector
     target = SshTarget(id="shell", type="ssh", display_name="Shell", host="shell",
         management_user="mgr", management_private_key="key",
         host_key_sha256="SHA256:AAAAAAAAAAAAAAAAAAAA", platform="ubuntu")
@@ -86,14 +86,14 @@ async def test_fake_connector_interface(client):
 
 @pytest.fixture()
 def opnsense(client, monkeypatch):
-    import oneauth.config as config
+    import na_sso.config as config
 
-    monkeypatch.setenv("ONEAUTH_OPNSENSE_ENABLED", "true")
-    monkeypatch.setenv("ONEAUTH_OPNSENSE_BASE_URL", "https://fw.test")
-    monkeypatch.setenv("ONEAUTH_OPNSENSE_API_KEY", "k")
-    monkeypatch.setenv("ONEAUTH_OPNSENSE_API_SECRET", "s")
+    monkeypatch.setenv("NA_SSO_OPNSENSE_ENABLED", "true")
+    monkeypatch.setenv("NA_SSO_OPNSENSE_BASE_URL", "https://fw.test")
+    monkeypatch.setenv("NA_SSO_OPNSENSE_API_KEY", "k")
+    monkeypatch.setenv("NA_SSO_OPNSENSE_API_SECRET", "s")
     config.get_settings.cache_clear()
-    from oneauth.connectors.opnsense import OPNsenseConnector
+    from na_sso.connectors.opnsense import OPNsenseConnector
 
     yield OPNsenseConnector(config.get_settings())
     config.get_settings.cache_clear()
@@ -117,8 +117,8 @@ async def test_opnsense_create_user(opnsense):
 
 @respx.mock
 async def test_opnsense_applies_default_groups():
-    from oneauth.config import OpnsenseTarget
-    from oneauth.connectors.opnsense import OPNsenseConnector
+    from na_sso.config import OpnsenseTarget
+    from na_sso.connectors.opnsense import OPNsenseConnector
     connector = OPNsenseConnector(OpnsenseTarget(id="fw", type="opnsense", display_name="FW",
         base_url="https://groups.test", api_key="key", api_secret="secret",
         default_groups=["vpn-users", "auditors"]))
@@ -163,10 +163,10 @@ async def test_opnsense_probe_failure(opnsense):
 
 
 def test_status_page_lists_targets(admin_client, monkeypatch):
-    import oneauth.config as config
+    import na_sso.config as config
 
-    monkeypatch.setenv("ONEAUTH_OPNSENSE_ENABLED", "true")
-    monkeypatch.setenv("ONEAUTH_OPNSENSE_BASE_URL", "https://fw.invalid")
+    monkeypatch.setenv("NA_SSO_OPNSENSE_ENABLED", "true")
+    monkeypatch.setenv("NA_SSO_OPNSENSE_BASE_URL", "https://fw.invalid")
     config.get_settings.cache_clear()
     try:
         r = admin_client.get("/status")
@@ -178,15 +178,15 @@ def test_status_page_lists_targets(admin_client, monkeypatch):
 
 @pytest.fixture()
 def nexus(client, monkeypatch):
-    import oneauth.config as config
+    import na_sso.config as config
 
-    monkeypatch.setenv("ONEAUTH_NEXUS_ENABLED", "true")
-    monkeypatch.setenv("ONEAUTH_NEXUS_BASE_URL", "https://nexus.test")
-    monkeypatch.setenv("ONEAUTH_NEXUS_ADMIN_USER", "admin")
-    monkeypatch.setenv("ONEAUTH_NEXUS_ADMIN_PASSWORD", "secret")
-    monkeypatch.setenv("ONEAUTH_NEXUS_DEFAULT_ROLES", "nx-reader,nx-anonymous")
+    monkeypatch.setenv("NA_SSO_NEXUS_ENABLED", "true")
+    monkeypatch.setenv("NA_SSO_NEXUS_BASE_URL", "https://nexus.test")
+    monkeypatch.setenv("NA_SSO_NEXUS_ADMIN_USER", "admin")
+    monkeypatch.setenv("NA_SSO_NEXUS_ADMIN_PASSWORD", "secret")
+    monkeypatch.setenv("NA_SSO_NEXUS_DEFAULT_ROLES", "nx-reader,nx-anonymous")
     config.get_settings.cache_clear()
-    from oneauth.connectors.nexus import NexusConnector
+    from na_sso.connectors.nexus import NexusConnector
 
     yield NexusConnector(config.get_settings())
     config.get_settings.cache_clear()
@@ -260,12 +260,12 @@ async def test_nexus_probe_failure(nexus):
 
 @respx.mock
 def test_status_page_lists_nexus(admin_client, monkeypatch):
-    import oneauth.config as config
+    import na_sso.config as config
 
-    monkeypatch.setenv("ONEAUTH_NEXUS_ENABLED", "true")
-    monkeypatch.setenv("ONEAUTH_NEXUS_BASE_URL", "https://nexus.test")
-    monkeypatch.setenv("ONEAUTH_NEXUS_ADMIN_USER", "admin")
-    monkeypatch.setenv("ONEAUTH_NEXUS_ADMIN_PASSWORD", "secret")
+    monkeypatch.setenv("NA_SSO_NEXUS_ENABLED", "true")
+    monkeypatch.setenv("NA_SSO_NEXUS_BASE_URL", "https://nexus.test")
+    monkeypatch.setenv("NA_SSO_NEXUS_ADMIN_USER", "admin")
+    monkeypatch.setenv("NA_SSO_NEXUS_ADMIN_PASSWORD", "secret")
     config.get_settings.cache_clear()
     respx.get("https://nexus.test/service/rest/v1/security/users").mock(
         return_value=Response(200, json=[])
@@ -284,14 +284,14 @@ def _ocs(code=100, message="OK"):
 
 @pytest.fixture()
 def nextcloud(client, monkeypatch):
-    import oneauth.config as config
+    import na_sso.config as config
 
-    monkeypatch.setenv("ONEAUTH_NEXTCLOUD_ENABLED", "true")
-    monkeypatch.setenv("ONEAUTH_NEXTCLOUD_BASE_URL", "https://cloud.test")
-    monkeypatch.setenv("ONEAUTH_NEXTCLOUD_ADMIN_USER", "admin")
-    monkeypatch.setenv("ONEAUTH_NEXTCLOUD_ADMIN_PASSWORD", "app-password")
+    monkeypatch.setenv("NA_SSO_NEXTCLOUD_ENABLED", "true")
+    monkeypatch.setenv("NA_SSO_NEXTCLOUD_BASE_URL", "https://cloud.test")
+    monkeypatch.setenv("NA_SSO_NEXTCLOUD_ADMIN_USER", "admin")
+    monkeypatch.setenv("NA_SSO_NEXTCLOUD_ADMIN_PASSWORD", "app-password")
     config.get_settings.cache_clear()
-    from oneauth.connectors.nextcloud import NextcloudConnector
+    from na_sso.connectors.nextcloud import NextcloudConnector
 
     yield NextcloudConnector(config.get_settings())
     config.get_settings.cache_clear()
@@ -316,8 +316,8 @@ async def test_nextcloud_create_user(nextcloud):
 
 @respx.mock
 async def test_nextcloud_applies_default_groups():
-    from oneauth.config import NextcloudTarget
-    from oneauth.connectors.nextcloud import NextcloudConnector
+    from na_sso.config import NextcloudTarget
+    from na_sso.connectors.nextcloud import NextcloudConnector
     connector = NextcloudConnector(NextcloudTarget(id="cloud", type="nextcloud", display_name="Cloud",
         base_url="https://groups.test", admin_user="admin", admin_password="secret",
         default_groups=["employees", "engineering"]))
@@ -367,12 +367,12 @@ async def test_nextcloud_probe_failure(nextcloud):
 
 @respx.mock
 def test_status_page_lists_nextcloud(admin_client, monkeypatch):
-    import oneauth.config as config
+    import na_sso.config as config
 
-    monkeypatch.setenv("ONEAUTH_NEXTCLOUD_ENABLED", "true")
-    monkeypatch.setenv("ONEAUTH_NEXTCLOUD_BASE_URL", "https://cloud.test")
-    monkeypatch.setenv("ONEAUTH_NEXTCLOUD_ADMIN_USER", "admin")
-    monkeypatch.setenv("ONEAUTH_NEXTCLOUD_ADMIN_PASSWORD", "app-password")
+    monkeypatch.setenv("NA_SSO_NEXTCLOUD_ENABLED", "true")
+    monkeypatch.setenv("NA_SSO_NEXTCLOUD_BASE_URL", "https://cloud.test")
+    monkeypatch.setenv("NA_SSO_NEXTCLOUD_ADMIN_USER", "admin")
+    monkeypatch.setenv("NA_SSO_NEXTCLOUD_ADMIN_PASSWORD", "app-password")
     config.get_settings.cache_clear()
     respx.get("https://cloud.test/ocs/v1.php/cloud/users").mock(
         return_value=Response(200, json=_ocs())

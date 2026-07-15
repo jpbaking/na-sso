@@ -3,11 +3,11 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from oneauth.config import FileConfig, SshTarget, load_file_config
+from na_sso.config import FileConfig, SshTarget, load_file_config
 
 
 def write(tmp_path: Path, text: str) -> Path:
-    path = tmp_path / "oneauth.yaml"
+    path = tmp_path / "na-sso.yaml"
     path.write_text(text)
     return path
 

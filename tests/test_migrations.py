@@ -20,9 +20,9 @@ def test_legacy_database_gets_retry_and_soft_delete_columns(tmp_path, monkeypatc
         CREATE TABLE sync_states (id INTEGER PRIMARY KEY, user_id INTEGER, target VARCHAR(32), state VARCHAR(16), detail TEXT, updated_at DATETIME);
         INSERT INTO managed_users VALUES (1, 'legacy', '', '', 'active', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
         """)
-    monkeypatch.setenv("ONEAUTH_DATABASE_PATH", str(path))
-    import oneauth.config as config
-    import oneauth.db as db
+    monkeypatch.setenv("NA_SSO_DATABASE_PATH", str(path))
+    import na_sso.config as config
+    import na_sso.db as db
     config.get_settings.cache_clear()
     db._engine = db._session_factory = None
     db.init_db()
@@ -39,15 +39,15 @@ def test_legacy_database_gets_retry_and_soft_delete_columns(tmp_path, monkeypatc
 
 def test_legacy_target_maps_only_to_one_matching_instance(tmp_path, monkeypatch):
     path = tmp_path / "legacy-target.db"
-    config_path = tmp_path / "oneauth.yaml"
+    config_path = tmp_path / "na-sso.yaml"
     _legacy_db(path)
     config_path.write_text("""targets:
   - {id: firewall, type: opnsense, display_name: Firewall, base_url: https://fw, api_key: key, api_secret: secret}
 """)
-    monkeypatch.setenv("ONEAUTH_DATABASE_PATH", str(path))
-    monkeypatch.setenv("ONEAUTH_CONFIG_FILE", str(config_path))
-    import oneauth.config as config
-    import oneauth.db as db
+    monkeypatch.setenv("NA_SSO_DATABASE_PATH", str(path))
+    monkeypatch.setenv("NA_SSO_CONFIG_FILE", str(config_path))
+    import na_sso.config as config
+    import na_sso.db as db
     config.get_settings.cache_clear(); db._engine = db._session_factory = None
     db.init_db()
     with sqlite3.connect(path) as connection:
@@ -57,16 +57,16 @@ def test_legacy_target_maps_only_to_one_matching_instance(tmp_path, monkeypatch)
 
 def test_legacy_target_with_multiple_matches_is_retired(tmp_path, monkeypatch):
     path = tmp_path / "ambiguous-target.db"
-    config_path = tmp_path / "oneauth.yaml"
+    config_path = tmp_path / "na-sso.yaml"
     _legacy_db(path)
     config_path.write_text("""targets:
   - {id: fw_a, type: opnsense, display_name: A, base_url: https://a, api_key: key, api_secret: secret}
   - {id: fw_b, type: opnsense, display_name: B, base_url: https://b, api_key: key, api_secret: secret}
 """)
-    monkeypatch.setenv("ONEAUTH_DATABASE_PATH", str(path))
-    monkeypatch.setenv("ONEAUTH_CONFIG_FILE", str(config_path))
-    import oneauth.config as config
-    import oneauth.db as db
+    monkeypatch.setenv("NA_SSO_DATABASE_PATH", str(path))
+    monkeypatch.setenv("NA_SSO_CONFIG_FILE", str(config_path))
+    import na_sso.config as config
+    import na_sso.db as db
     config.get_settings.cache_clear(); db._engine = db._session_factory = None
     db.init_db()
     with sqlite3.connect(path) as connection:

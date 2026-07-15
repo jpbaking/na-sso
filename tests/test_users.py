@@ -55,9 +55,9 @@ def test_soft_deleted_user_can_restore_with_new_password(admin_client):
     admin_client.post("/users/1/delete")
     response = admin_client.post("/users/1/restore", data={"password": "V4lid!New-Secret-2026"}, follow_redirects=False)
     assert response.status_code == 303
-    from oneauth.db import get_session
-    from oneauth.models import ManagedUser
-    from oneauth.security import decrypt_secret
+    from na_sso.db import get_session
+    from na_sso.models import ManagedUser
+    from na_sso.security import decrypt_secret
     with get_session() as db:
         user = db.get(ManagedUser, 1)
         assert user.desired_action == "ensure" and user.deleted_at is None
@@ -80,9 +80,9 @@ def test_password_never_plaintext_in_db(admin_client, tmp_path):
     blob = (tmp_path / "test.db").read_bytes()
     assert b"V4lid!Orbit-Cloud" not in blob
 
-    from oneauth.db import get_session
-    from oneauth.models import ManagedUser
-    from oneauth.security import decrypt_secret
+    from na_sso.db import get_session
+    from na_sso.models import ManagedUser
+    from na_sso.security import decrypt_secret
 
     with get_session() as db:
         u = db.query(ManagedUser).filter(ManagedUser.username == "sec").one()

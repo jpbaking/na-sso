@@ -22,12 +22,12 @@ automation sit outside the repository-provided stack.
 flowchart LR
     Operator["Authorized operator"] -->|"HTTPS"| Proxy["Reverse proxy<br/>TLS and access policy"]
 
-    subgraph Host["One Auth Docker host"]
+    subgraph Host["NA-SSO Docker host"]
         subgraph Network["Compose network"]
-            App["oneauth container"]
+            App["na-sso container"]
         end
         Config[".config<br/>env and read-only YAML"] -.-> App
-        App <--> Data[("oneauth-data<br/>SQLite volume")]
+        App <--> Data[("na-sso-data<br/>SQLite volume")]
     end
 
     Proxy -->|"HTTP to published port 8000"| App
@@ -41,10 +41,10 @@ flowchart LR
 ```
 
 The reverse proxy is deliberately outside the supplied Compose stack. Only the
-One Auth container runs on its Compose network; SQLite is a mounted volume, not
+The NA-SSO container runs on its Compose network; SQLite is a mounted volume, not
 a separate database container. Each target remains an independent outbound
-destination. Managed users continue signing in directly to those targets—One
-Auth is not in their authentication path.
+destination. Managed users continue signing in directly to those targets—NA-SSO
+is not in their authentication path.
 
 ## Configuration ownership
 
@@ -52,18 +52,18 @@ The normal runtime uses exactly two ignored local files:
 
 | Host file | Container use | Contents |
 | --- | --- | --- |
-| `.config/.env` | Loaded into `oneauth` | Bootstrap admin, encryption key, database path, and retry timing. |
-| `.config/oneauth.yaml` | Mounted read-only at `/config/oneauth.yaml` | Password/SSH policy and non-secret target definitions. |
+| `.config/.env` | Loaded into `na-sso` | Bootstrap admin, encryption key, database path, and retry timing. |
+| `.config/na-sso.yaml` | Mounted read-only at `/config/na-sso.yaml` | Password/SSH policy and non-secret target definitions. |
 
 Create them from the fully annotated templates:
 
 ```sh
 cp .config/.env.example .config/.env
-cp .config/oneauth.yaml.example .config/oneauth.yaml
+cp .config/na-sso.yaml.example .config/na-sso.yaml
 ```
 
 Replace every placeholder before starting. Compose sets
-`ONEAUTH_CONFIG_FILE=/config/oneauth.yaml`; do not override it in `.config/.env`.
+`NA_SSO_CONFIG_FILE=/config/na-sso.yaml`; do not override it in `.config/.env`.
 
 The templates show every supported setting, constraint, target type, and
 optional environment-backed credential field. Normally, management credentials
@@ -78,20 +78,20 @@ are the preferred path for this Compose deployment.
 
 | Variable | Purpose |
 | --- | --- |
-| `ONEAUTH_SECRET_KEY` | Signs sessions and encrypts pending secrets and target credentials. Generate a long random value, keep it stable, and back it up. |
-| `ONEAUTH_ADMIN_USERNAME` | Username created when the database has no administrator. |
-| `ONEAUTH_ADMIN_BOOTSTRAP_PASSWORD` | Initial password used only for bootstrap; changing it does not rotate an existing account. |
-| `ONEAUTH_DATABASE_PATH` | SQLite location; `/data/oneauth.db` uses the persistent Compose volume. |
-| `ONEAUTH_RETRY_SCAN_SECONDS` | Recovery-worker scan frequency; default `5`. |
-| `ONEAUTH_RETRY_BASE_SECONDS` | First automatic retry delay; default `5`. |
-| `ONEAUTH_RETRY_MAX_SECONDS` | Exponential-backoff ceiling; default `300`. |
+| `NA_SSO_SECRET_KEY` | Signs sessions and encrypts pending secrets and target credentials. Generate a long random value, keep it stable, and back it up. |
+| `NA_SSO_ADMIN_USERNAME` | Username created when the database has no administrator. |
+| `NA_SSO_ADMIN_BOOTSTRAP_PASSWORD` | Initial password used only for bootstrap; changing it does not rotate an existing account. |
+| `NA_SSO_DATABASE_PATH` | SQLite location; `/data/na-sso.db` uses the persistent Compose volume. |
+| `NA_SSO_RETRY_SCAN_SECONDS` | Recovery-worker scan frequency; default `5`. |
+| `NA_SSO_RETRY_BASE_SECONDS` | First automatic retry delay; default `5`. |
+| `NA_SSO_RETRY_MAX_SECONDS` | Exponential-backoff ceiling; default `300`. |
 
 The protected root recovery account is local-only. It cannot be assigned,
 disabled, deleted, demoted, or expired into remote operations.
 
 ## Target registry
 
-Every target in `.config/oneauth.yaml` needs a stable unique `id`. IDs are
+Every target in `.config/na-sso.yaml` needs a stable unique `id`. IDs are
 database identities, not display labels: renaming one retires the old target
 history rather than transparently moving it. Repeated target types are allowed.
 
@@ -142,7 +142,7 @@ SHA-256 host fingerprint and create every configured supplementary group before
 probing the target.
 
 The SSH administrator needs the documented user-management commands plus
-access to `getent group` and passwordless sudo for `usermod -aG`. One Auth
+access to `getent group` and passwordless sudo for `usermod -aG`. NA-SSO
 appends configured groups without removing unrelated memberships.
 
 ## Validate, build, and start
@@ -159,7 +159,7 @@ consistent:
 
 # Inspect state and bounded logs.
 ./compose-helper.sh ps
-./compose-helper.sh logs --tail=100 oneauth
+./compose-helper.sh logs --tail=100 na-sso
 ```
 
 Open <http://localhost:8000>, sign in with the bootstrap administrator, and
@@ -180,7 +180,7 @@ Unassignment disables the remote account rather than deleting it. Reassignment
 re-enables an existing account or waits for a verified password action when new
 credentials are needed.
 
-Deletion is soft locally. One Auth deletes assigned remote accounts, retries
+Deletion is soft locally. NA-SSO deletes assigned remote accounts, retries
 failures, and keeps the completed local record for audit and restoration.
 Restore requires a new password. Permanent removal requires an explicit purge
 after remote deletion completes.
@@ -212,8 +212,8 @@ volume is explicitly intended.
 
 Back up both:
 
-- The `oneauth-data` volume containing SQLite
-- The exact `ONEAUTH_SECRET_KEY`
+- The `na-sso-data` volume containing SQLite
+- The exact `NA_SSO_SECRET_KEY`
 
 Losing or changing the secret key makes encrypted target credentials and any
 still-pending propagation secrets unreadable. Test restoration of the volume
