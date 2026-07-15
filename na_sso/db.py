@@ -33,6 +33,7 @@ def init_db() -> None:
     upgrades = {
         "managed_users": {
             "desired_action": "VARCHAR(16) NOT NULL DEFAULT 'ensure'",
+            "active_operation_id": "VARCHAR(36)",
             "deletion_requested_at": "DATETIME",
             "deleted_at": "DATETIME",
             "password_hash": "VARCHAR(128)",
@@ -40,6 +41,9 @@ def init_db() -> None:
             "password_decision_required": "BOOLEAN NOT NULL DEFAULT 0",
             "password_decision_kind": "VARCHAR(16) NOT NULL DEFAULT ''",
             "password_changed_at": "DATETIME",
+            "last_authenticated_at": "DATETIME",
+            "password_keep_until": "DATETIME",
+            "password_keep_count": "INTEGER NOT NULL DEFAULT 0",
             "session_version": "INTEGER NOT NULL DEFAULT 1",
             "ssh_public_key": "TEXT",
         },
@@ -49,6 +53,24 @@ def init_db() -> None:
             "target_type": "VARCHAR(32)",
             "assigned": "BOOLEAN NOT NULL DEFAULT 1",
             "retired": "BOOLEAN NOT NULL DEFAULT 0",
+            "operation_id": "VARCHAR(36)",
+        },
+        "audit_events": {
+            "operation_id": "VARCHAR(36)",
+        },
+        "target_credentials": {
+            "last_checked_at": "DATETIME",
+            "last_success_at": "DATETIME",
+            "last_probe_ok": "BOOLEAN",
+            "probe_failure_kind": "VARCHAR(32) NOT NULL DEFAULT ''",
+            "probe_attempt_count": "INTEGER NOT NULL DEFAULT 0",
+            "next_probe_at": "DATETIME",
+        },
+        "admin_mfa": {
+            "totp_last_counter": "INTEGER NOT NULL DEFAULT -1",
+        },
+        "lifecycle_operations": {
+            "parent_id": "VARCHAR(36)",
         },
     }
     with get_engine().begin() as connection:
@@ -59,8 +81,33 @@ def init_db() -> None:
                     connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
         _migrate_legacy_targets(connection)
         connection.execute(text(
+            "INSERT INTO user_ssh_keys "
+            "(id, user_id, name, public_key, fingerprint, algorithm, enrolled_at, last_used_source) "
+            "SELECT lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || "
+            "substr(lower(hex(randomblob(2))),2) || '-a' || substr(lower(hex(randomblob(2))),2) || '-' || "
+            "lower(hex(randomblob(6))), id, 'Migrated key', ssh_public_key, "
+            "'legacy:' || id, CASE WHEN ssh_public_key LIKE 'ssh-rsa %' THEN 'rsa' ELSE 'ed25519' END, "
+            "COALESCE(updated_at, created_at), 'not_reported' FROM managed_users u "
+            "WHERE ssh_public_key IS NOT NULL AND ssh_public_key != '' AND NOT EXISTS "
+            "(SELECT 1 FROM user_ssh_keys k WHERE k.user_id=u.id)"
+        ))
+        from na_sso.security import ssh_public_key_fingerprint
+        legacy_keys = connection.execute(text(
+            "SELECT id, public_key FROM user_ssh_keys WHERE fingerprint LIKE 'legacy:%'"
+        )).mappings()
+        for key in legacy_keys:
+            fingerprint = ssh_public_key_fingerprint(key["public_key"])
+            if fingerprint:
+                connection.execute(
+                    text("UPDATE user_ssh_keys SET fingerprint=:fingerprint WHERE id=:id"),
+                    {"fingerprint": fingerprint, "id": key["id"]},
+                )
+        connection.execute(text(
             "UPDATE managed_users SET password_decision_kind='initial' "
             "WHERE password_decision_required=1 AND password_decision_kind=''"
+        ))
+        connection.execute(text(
+            "UPDATE managed_users SET role='user_operator' WHERE role='admin'"
         ))
         connection.execute(text(
             "UPDATE managed_users SET pending_secret=NULL "

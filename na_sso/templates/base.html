@@ -10,8 +10,21 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="stylesheet" href="/design/styles.css">
   <link rel="stylesheet" href="/design/components.css">
+  <link rel="stylesheet" href="/app.css">
 </head>
 <body class="site-page">
+
+{% set page_navigation %}{% block nav %}{% endblock %}{% endset %}
+{% set account_navigation %}
+  {% if admin_area %}
+  <li><a href="/account" class="nav-link">My account</a></li>
+  <li><a href="/account/password" class="nav-link">Change password</a></li>
+  <li><a href="/account/mfa" class="nav-link">MFA</a></li>
+  {% endif %}
+  {% if admin %}
+  <li><form method="post" action="/logout"><button type="submit" class="btn btn-quiet btn-sm">Sign out</button></form></li>
+  {% endif %}
+{% endset %}
 
 <header class="nav-wrap">
   <nav class="nav container" aria-label="Main navigation">
@@ -19,20 +32,22 @@
       <img src="/design/assets/logo-mark.svg" alt="">
       <span class="brand-name">NA-SSO</span>
     </a>
-    <ul class="nav-links" role="list">
-      {% block nav %}{% endblock %}
-      {% if admin %}
-      <li>
-        <form method="post" action="/logout">
-          <button type="submit" class="btn btn-quiet btn-sm">Sign out</button>
-        </form>
-      </li>
-      {% endif %}
+    <ul class="nav-links desktop-nav" role="list">
+      {{ page_navigation | safe }}{{ account_navigation | safe }}
     </ul>
+    {% if page_navigation | trim or admin %}
+    <details class="mobile-nav">
+      <summary class="btn btn-secondary btn-sm">Menu</summary>
+      <ul class="nav-links mobile-nav-links" role="list" aria-label="Mobile navigation">
+        {{ page_navigation | safe }}{{ account_navigation | safe }}
+      </ul>
+    </details>
+    {% endif %}
   </nav>
 </header>
 
 <main>
+{% include "_feedback.html" %}
 {% block content %}{% endblock %}
 </main>
 
@@ -45,43 +60,56 @@
 
 <script>
 (() => {
+  const errorSummary = document.querySelector('[data-error-summary]');
+  if (errorSummary) errorSummary.focus();
   const cells = document.querySelectorAll('[data-sync-cell]');
-  if (!cells.length || !window.EventSource) return;
-  const badge = (label, className, title = '') => {
+  const operationCells = document.querySelectorAll('[data-operation-cell]');
+  if ((!cells.length && !operationCells.length) || !window.EventSource) return;
+  const badge = (label, className, description = '') => {
     const node = document.createElement('span');
     node.className = `badge ${className}`;
     node.textContent = label;
-    if (title) node.title = title;
+    if (description) {
+      node.title = description;
+      node.setAttribute('aria-label', `${label}. ${description}`);
+    }
     return node;
   };
   const render = (cell, user, target) => {
-    const state = user.states[target] || {state: 'pending'};
+    const state = user.states[target];
+    if (!state || !state.presentation) return;
+    const view = state.presentation;
     cell.replaceChildren();
-    if (state.state === 'ok') {
-      cell.append(badge(user.desired_action === 'delete' ? 'deleted' : 'ok', 'badge-shipped'));
-    } else if (state.state === 'failed') {
-      cell.append(badge(state.next_retry_at ? 'retrying' : 'failed', 'badge-danger', state.detail));
-      if (state.next_retry_at) {
-        const detail = document.createElement('small');
-        detail.textContent = ` attempt ${state.attempt_count}; retry scheduled`;
-        cell.append(detail);
-      }
-      if (window.location.pathname === '/users') {
-        const form = document.createElement('form');
-        form.method = 'post';
-        form.action = `/users/${user.id}/retry/${target}`;
-        const button = document.createElement('button');
-        button.type = 'submit';
-        button.className = 'btn btn-quiet btn-sm';
-        button.textContent = 'Retry';
-        form.append(button);
-        cell.append(form);
-      }
-    } else if (state.state === 'chpw') {
-      cell.append(badge('CHPW', 'badge-planned'));
-    } else {
-      cell.append(badge('pending', 'badge-planned'));
+    cell.append(badge(view.label, view.badge_class, state.detail || view.description));
+    if (state.next_retry_at) {
+      const detail = document.createElement('small');
+      detail.textContent = ` attempt ${state.attempt_count}; retry scheduled`;
+      cell.append(detail);
     }
+    if (view.retryable && window.location.pathname === '/users') {
+      const form = document.createElement('form');
+      form.method = 'post';
+      form.action = `/users/${user.id}/retry/${target}`;
+      const button = document.createElement('button');
+      button.type = 'submit';
+      button.className = 'btn btn-quiet btn-sm';
+      button.textContent = 'Retry';
+      form.append(button);
+      cell.append(form);
+    }
+  };
+  const renderOperation = (cell, user) => {
+    const operation = user.operation;
+    if (!operation || operation.command !== 'delete') return;
+    const summary = document.createElement('small');
+    summary.textContent = `${operation.completed_targets} of ${operation.total_targets} targets complete · operation ${operation.id.slice(0, 8)}`;
+    const content = [summary];
+    if (operation.blocking_targets.length) {
+      const blockers = document.createElement('small');
+      blockers.textContent = `Waiting for ${operation.blocking_targets.join(', ')}`;
+      content.push(blockers);
+    }
+    cell.replaceChildren(...content);
   };
   const stream = new EventSource('/events/sync');
   stream.addEventListener('sync', event => {
@@ -89,6 +117,10 @@
     cells.forEach(cell => {
       const user = users.get(cell.dataset.userId);
       if (user) render(cell, user, cell.dataset.target);
+    });
+    operationCells.forEach(cell => {
+      const user = users.get(cell.dataset.userId);
+      if (user) renderOperation(cell, user);
     });
   });
 })();

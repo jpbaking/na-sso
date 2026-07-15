@@ -1,36 +1,30 @@
 {% extends "base.html" %}
 {% block title %}Audit{% endblock %}
-{% block nav %}
-<li><a href="/users" class="nav-link">Users</a></li>
-<li><a href="/status" class="nav-link">Targets</a></li>
-<!-- the page's ONE amber element -->
-<li><a href="/audit" class="nav-link active">Audit</a></li>
-{% endblock %}
+{% block nav %}{% with active_nav='audit' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
 {% block content %}
 <section class="section container">
-  <div class="section-head">
-    <div class="section-kicker">// Operator record</div>
-    <h1 class="section-title">Audit log</h1>
-  </div>
-  {% if events %}
-  <div class="table-wrap">
-    <table class="table">
-      <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Subject</th><th>Detail</th></tr></thead>
-      <tbody>
-        {% for event in events %}
-        <tr>
-          <td>{{ event.at }}</td>
-          <td>{{ event.actor }}</td>
-          <td>{{ event.action }}</td>
-          <td>{{ event.subject or "—" }}</td>
-          <td>{{ event.detail or "—" }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <p class="muted">No audit events yet.</p>
-  {% endif %}
+  <div class="section-head"><div class="section-kicker">// Operator record</div><h1 class="section-title">Audit log</h1></div>
+  <form method="get" action="/audit" class="card stack-2" aria-label="Filter audit events">
+    <div class="grid-3">
+      <div class="field"><label class="label" for="audit-from">From date (UTC)</label><input class="input" id="audit-from" name="date_from" type="date" value="{{ audit.params.date_from }}"></div>
+      <div class="field"><label class="label" for="audit-to">To date (UTC)</label><input class="input" id="audit-to" name="date_to" type="date" value="{{ audit.params.date_to }}"></div>
+      <div class="field"><label class="label" for="audit-actor">Actor</label><input class="input" id="audit-actor" name="actor" value="{{ audit.params.actor }}"></div>
+      <div class="field"><label class="label" for="audit-subject">Subject</label><input class="input" id="audit-subject" name="subject" value="{{ audit.params.subject }}"></div>
+      <div class="field"><label class="label" for="audit-target">Target ID</label><input class="input" id="audit-target" name="target" value="{{ audit.params.target }}"></div>
+      <div class="field"><label class="label" for="audit-action">Action</label><input class="input" id="audit-action" name="action" value="{{ audit.params.action }}"></div>
+      <div class="field"><label class="label" for="audit-operation">Operation ID or prefix</label><input class="input" id="audit-operation" name="operation" value="{{ audit.params.operation }}"></div>
+      <div class="field"><label class="label" for="audit-outcome">Outcome</label><select class="select" id="audit-outcome" name="outcome">{% for value,label in [('all','Any'),('succeeded','Succeeded'),('failed','Failed or partial'),('in_progress','In progress'),('uncorrelated','No operation')] %}<option value="{{ value }}"{% if audit.params.outcome == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    </div>
+    <input type="hidden" name="page" value="1"><input type="hidden" name="per_page" value="{{ audit.params.per_page }}">
+    <div class="hero-actions"><button class="btn btn-primary btn-sm" type="submit">Apply filters</button><a class="btn btn-secondary btn-sm" href="/audit">Clear</a><a class="btn btn-secondary btn-sm" href="{{ audit.params.export_url('csv') }}">Export CSV page</a><a class="btn btn-secondary btn-sm" href="{{ audit.params.export_url('json') }}">Export JSON page</a></div>
+  </form>
+  <div class="data-list"><div class="data-row"><div class="data-key">Results</div><div class="data-value">{{ audit.total }} events · page {{ audit.params.page }} of {{ audit.pages }} · all times UTC</div></div></div>
+  {% if audit.items %}
+  <div class="table-wrap inventory-desktop"><table class="table"><thead><tr><th>Time (UTC)</th><th>Actor</th><th>Event</th><th>Subject</th><th>Outcome</th><th>Operation</th><th>Technical detail</th></tr></thead><tbody>
+  {% for item in audit.items %}<tr><td>{{ item.event.at.strftime('%Y-%m-%d %H:%M:%S') }} UTC</td><td>{{ item.event.actor }}</td><td>{{ item.summary }}<small>{{ item.event.action }}</small></td><td>{{ item.event.subject or '—' }}</td><td><span class="badge {{ 'badge-shipped' if item.outcome == 'succeeded' else ('badge-danger' if item.outcome == 'failed' else 'badge-planned') }}">{{ item.outcome | replace('_',' ') }}</span></td><td>{% if item.operation %}<a href="/audit/operations/{{ item.operation.id }}">{{ item.operation.id[:8] }}</a>{% else %}<span class="muted">—</span>{% endif %}</td><td>{% if item.event.detail %}<details><summary>Show detail</summary><div class="prose">{{ item.event.detail }}</div></details>{% else %}<span class="muted">—</span>{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>
+  <div class="inventory-cards stack-2" role="list">{% for item in audit.items %}<article class="card" role="listitem"><div class="card-meta">{{ item.event.at.strftime('%Y-%m-%d %H:%M:%S') }} UTC · {{ item.outcome | replace('_',' ') }}</div><h2 class="card-title">{{ item.summary }}</h2><p class="card-desc">{{ item.event.action }} · {{ item.event.actor }} · {{ item.event.subject or 'No subject' }}</p>{% if item.operation %}<a class="btn btn-secondary btn-sm" href="/audit/operations/{{ item.operation.id }}">Operation {{ item.operation.id[:8] }}</a>{% endif %}{% if item.event.detail %}<details><summary>Technical detail</summary><div class="prose">{{ item.event.detail }}</div></details>{% endif %}</article>{% endfor %}</div>
+  <nav class="hero-actions" aria-label="Audit result pages">{% if audit.has_previous %}<a class="btn btn-secondary btn-sm" rel="prev" href="{{ audit.params.url(page=audit.params.page - 1) }}">Previous</a>{% endif %}<span class="muted">Page {{ audit.params.page }} of {{ audit.pages }}</span>{% if audit.has_next %}<a class="btn btn-secondary btn-sm" rel="next" href="{{ audit.params.url(page=audit.params.page + 1) }}">Next</a>{% endif %}</nav>
+  {% else %}<div class="alert alert-info"><div class="alert-title">No matching events</div>Clear or change the investigation filters.</div>{% endif %}
 </section>
 {% endblock %}

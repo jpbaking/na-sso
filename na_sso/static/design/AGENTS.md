@@ -11,7 +11,7 @@ Owns everything under `design/`. Token values and asset linework define the visu
 - Import order in `styles.css` is load-order-sensitive: `colors.css` → `typography.css` → `spacing.css` → `charts.css`. Do not reorder.
 - All tokens are `:root`-scoped custom properties. No component-scoped token overrides in this folder.
 - `components.css` sections are numbered (§1–§24) and listed in its header CONTENTS block; keep that index synchronized with section changes.
-- `components.js` and `charts.js` are plain classic scripts (no modules, no build step, no dependencies). `components.js` auto-initialises from `data-*` attributes; `charts.js` exposes `window.lwCharts`.
+- `components.js` and `charts.js` are plain classic scripts (no modules, no build step, no dependencies). `components.js` auto-initialises from `data-*` attributes and keeps keyboard focus inside open modal dialogs; `charts.js` exposes `window.lwCharts`.
 - `--chart-1..5` in `tokens/charts.css` is a validated palette (CVD separation, ≥3:1 contrast on white) — never eyeball-edit; re-validate any change (see the file's header comment).
 - Asset URLs inside `components.css` are relative (`assets/…`) so they resolve wherever `design/` is mounted.
 - The logo mark structure must be preserved across all variants: rounded blue tile (`#12279E`), white linework, single amber dot (`#D9821F`).
@@ -20,7 +20,7 @@ Owns everything under `design/`. Token values and asset linework define the visu
 ## Feature Map
 - **Style entry point** — Loads Google Fonts and imports the four token files in order. Start: `styles.css`. Files: `tokens/colors.css`, `tokens/typography.css`, `tokens/spacing.css`, `tokens/charts.css`.
 - **Component classes** — Every documented UI class (§1 base … §24 spinner), including fluid standard containers, viewport-filling page shells, zebra-striped disclosure lists, and the single-function app shell (§23, the url-shortener pattern). Start: `components.css`. Files: (none beyond the file).
-- **JS behaviors** — Modal (`data-modal-open/close` on `<dialog class="modal">`), tabs (`[data-tabs]`), date picker (`[data-datepicker]` → `YYYY-MM-DD`), time picker (`[data-timepicker]` → `HH:MM`). Start: `components.js`. Files: (none beyond the file).
+- **JS behaviors** — Focus-trapped modal (`data-modal-open/close` on `<dialog class="modal">`), tabs (`[data-tabs]`), date picker (`[data-datepicker]` → `YYYY-MM-DD`), time picker (`[data-timepicker]` → `HH:MM`). Start: `components.js`. Files: (none beyond the file).
 - **Charts** — Dependency-free SVG bar/line/donut/sparkline with legends, hover tooltips, and sr-only data tables; colors from `--chart-*` tokens. Start: `charts.js`. Files: `tokens/charts.css`.
 - **Color tokens** — Brand, neutrals, on-blue, focus, status dots, success/danger pairs. Start: `tokens/colors.css`.
 - **Typography tokens** — Font stacks, size/weight scales, letter-spacing tracks. Start: `tokens/typography.css`.

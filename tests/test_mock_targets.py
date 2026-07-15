@@ -13,6 +13,7 @@ from na_sso.connectors.nexus import NexusConnector
 from na_sso.connectors.opnsense import OPNsenseConnector
 from na_sso.mock_targets.app import app
 from na_sso.models import ManagedUser
+from na_sso.reconciliation import ReconciliationStatus
 
 
 @pytest.fixture(scope="module")
@@ -223,11 +224,15 @@ async def test_connector_lifecycle_over_real_http(live_mock_url, connector_type)
 
     assert (await connector.probe()).ok
     assert (await connector.ensure_user(user, "first-secret")).ok
+    assert (await connector.inspect_user(user)).status == ReconciliationStatus.IN_SYNC
     user.display_name = "Updated User"
     assert (await connector.ensure_user(user, "second-secret")).ok
     user.status = "disabled"
     assert (await connector.disable_user(user)).ok
+    assert (await connector.inspect_user(user)).status == ReconciliationStatus.IN_SYNC
     assert (await connector.delete_user(user)).ok
+    user.desired_action = "delete"
+    assert (await connector.inspect_user(user)).status == ReconciliationStatus.IN_SYNC
     assert (await connector.delete_user(user)).ok
 
 
@@ -343,9 +348,11 @@ def test_application_demo_workflow_with_failure_and_retry(
         client.post("/login", data={"username": "admin", "password": "demo-password"})
         status_page = client.get("/status")
         users_page = client.get("/users")
+        user_detail = client.get(f"/users/{user_id}")
         assert "demo_user" not in status_page.text
         assert "User sync matrix" not in status_page.text
-        assert "demo_user" in users_page.text and "failed" in users_page.text
+        assert "demo_user" in users_page.text and "needs attention" in users_page.text
+        assert "Retrying" in user_detail.text
 
         with db.get_session() as session:
             user = session.get(ManagedUser, user_id)

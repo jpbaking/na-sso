@@ -20,6 +20,9 @@ password_policy:
   reject_identity_terms: true    # Reject username/email/display-name terms
   history_size: 3                # 0-100 previous hashes; 0 disables history
   expires_after_days: 90         # 1-3650; use null for no password expiry
+  expiry_acknowledgement_mode: grace # disabled, renewal, or grace
+  expiry_acknowledgement_grace_days: 14 # 1-3650; used only by grace mode
+  expiry_acknowledgement_limit: 1 # 1-100 per password; null allows unlimited
 
 # User SSH-key enrollment policy.
 ssh_key_policy:
@@ -27,6 +30,86 @@ ssh_key_policy:
   rsa_min_bits: 3072                  # 2048-16384
   browser_generation: true            # Prefer private-key generation in browser
   allow_server_fallback: false        # Explicit compatibility flow; private key returned once
+  default_expiry_days: 365            # 1-3650, or null for no default expiry
+  max_expiry_days: 730                # 1-3650, or null for no maximum
+
+# Read-only target-local account discovery. Remote deletion is separately
+# Root-approved and disabled until deployment recovery policy is ready.
+unmanaged_account_policy:
+  enabled: true
+  max_accounts_per_target: 1000       # 1-10000; discovery result bound
+  ssh_min_uid: 1000                   # Lower Unix UIDs are treated as system accounts
+  excluded_usernames: [root, nobody, sync, shutdown, halt]
+  excluded_prefixes: ["_", "systemd-", "svc-"]
+  allow_removal: false                # Requires Root two-step approval when true
+
+# Managed-user support path shown only when assigned access needs operator help.
+support_policy:
+  label: Contact identity operations
+  url: null                           # https://, http://, or mailto:; null shows label only
+  guidance: Share your username and target name; never send passwords or private keys.
+
+# Audit exports are page-bounded; retention removes events but never correlated
+# lifecycle operation or target-attempt records. Use null to retain events forever.
+audit_policy:
+  retention_days: 365              # 1-36500, or null
+  export_page_size: 500            # 25-5000 rows per downloaded page
+
+# Scheduled reconciliation performs read-only discovery only. It never repairs
+# or deletes without an operator opening a saved preview and approving it.
+reconciliation_policy:
+  enabled: false
+  interval_seconds: 3600           # 60-2592000
+  scan_seconds: 60                 # 5-3600
+  retry_base_seconds: 60           # 5-86400
+  retry_max_seconds: 3600          # 5-604800; >= retry_base_seconds
+  max_attempts: 5                  # 1-20 failed read attempts
+  max_users_per_run: 100           # 1-1000
+
+# Lifecycle scheduling and access-review defaults. Per-account owner, reason,
+# timing, inactivity window, and end action are managed in the Users UI.
+lifecycle_automation_policy:
+  scan_seconds: 60                 # 5-3600
+  default_review_interval_days: 90 # 1-3650 after a retain decision
+  reminder_days_before_due: 7      # 0-365
+  max_review_accounts: 1000        # 1-5000 per campaign preview
+
+# The versioned automation API uses the same capability checks, correlated
+# operations, audit records, previews, and approvals as the browser UI.
+automation_api_policy:
+  enabled: true
+  requests_per_minute: 120         # 10-10000 per authenticated principal/IP
+  max_page_size: 100               # 25-500 records
+  idempotency_retention_hours: 24  # 1-720
+  default_token_days: 90           # 1-3650
+  max_token_days: 365              # 1-3650; >= default_token_days
+
+# Administrative MFA affects NA-SSO operator login only; target logins and
+# managed-user target credentials are unchanged. Set explicit WebAuthn values
+# behind a reverse proxy. With required=true, operators must enrol before use.
+admin_mfa_policy:
+  required: true
+  allowed_methods: [webauthn, totp]
+  issuer: NA-SSO
+  rp_id: sso.example.lan
+  expected_origin: https://sso.example.lan
+  reauthentication_minutes: 10
+
+# Signed outbound notifications use a durable retry queue and contain only a
+# small allowlisted payload. Endpoint secrets may be exact ${ENV_NAME} values.
+notification_policy:
+  enabled: false
+  persistent_failure_attempts: 3
+  max_attempts: 5
+  retry_base_seconds: 30
+  retry_max_seconds: 3600
+  delivery_scan_seconds: 10
+  endpoints: []
+  # - id: identity_alerts
+  #   url: https://automation.example.lan/hooks/na-sso
+  #   secret: ${IDENTITY_ALERTS_WEBHOOK_SECRET}
+  #   enabled: true
+  #   events: [sync.persistent_failure, password.expired, lifecycle.completed, approval.completed, access_review.reminder]
 
 # Target management credentials should normally be saved in the Targets UI.
 # The commented credential fields below show the supported environment-backed

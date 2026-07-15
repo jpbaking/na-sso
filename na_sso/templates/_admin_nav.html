@@ -1,0 +1,9 @@
+{% if permissions.users %}<li><a href="/users" class="nav-link{% if active_nav == 'users' %} active{% endif %}">Users</a></li>{% endif %}
+{% if permissions.users %}<li><a href="/unmanaged-accounts" class="nav-link{% if active_nav == 'unmanaged' %} active{% endif %}">Unmanaged accounts</a></li>{% endif %}
+{% if permissions.users %}<li><a href="/reconciliation" class="nav-link{% if active_nav == 'reconciliation' %} active{% endif %}">Reconciliation</a></li>{% endif %}
+{% if permissions.users %}<li><a href="/assignment-profiles" class="nav-link{% if active_nav == 'profiles' %} active{% endif %}">Assignment profiles</a></li>{% endif %}
+{% if permissions.users %}<li><a href="/access-reviews" class="nav-link{% if active_nav == 'reviews' %} active{% endif %}">Access reviews</a></li>{% endif %}
+{% if permissions.targets %}<li><a href="/status" class="nav-link{% if active_nav == 'targets' %} active{% endif %}">Targets</a></li>{% endif %}
+{% if permissions.audit %}<li><a href="/audit" class="nav-link{% if active_nav == 'audit' %} active{% endif %}">Audit</a></li>{% endif %}
+{% if permissions.roles %}<li><a href="/notifications" class="nav-link{% if active_nav == 'notifications' %} active{% endif %}">Notifications</a></li>{% endif %}
+{% if permissions.roles %}<li><a href="/service-accounts" class="nav-link{% if active_nav == 'service_accounts' %} active{% endif %}">Service accounts</a></li>{% endif %}

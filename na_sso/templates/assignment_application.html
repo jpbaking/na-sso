@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Assignment preview{% endblock %}
+{% block nav %}{% with active_nav='profiles' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
+{% block content %}<section class="section container-narrow">
+  {% include "_feedback.html" %}
+  <div class="section-head"><div class="section-kicker">// Saved preview</div><h1 class="section-title">Apply {{ profile.name }} v{{ profile.version }}</h1></div><p class="section-desc">Account {{ user.username }}. No assignments changed during this preview.</p>
+  <div class="data-list"><div class="data-row"><div class="data-key">Added by profile</div><div class="data-value">{{ changes.added | join(', ') or 'None' }}</div></div><div class="data-row"><div class="data-key">Preserved as explicit include exceptions</div><div class="data-value">{{ changes.preserved_as_exceptions | join(', ') or 'None' }}</div></div></div>
+  {% if application.status == 'previewed' %}<form method="post" action="/assignment-profiles/applications/{{ application.id }}/confirm" class="stack-2"><input type="hidden" name="approval_token" value="{{ application.approval_token }}"><button class="btn btn-primary" type="submit">Confirm profile assignment</button><a class="btn btn-secondary" href="/assignment-profiles/{{ profile.id }}">Cancel</a></form>{% else %}<div class="alert alert-info"><div class="alert-title">{{ application.status | replace('_',' ') }}</div>This saved application cannot be repeated.</div>{% endif %}
+</section>{% endblock %}

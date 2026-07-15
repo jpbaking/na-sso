@@ -1,11 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Targets{% endblock %}
-{% block nav %}
-<li><a href="/users" class="nav-link">Users</a></li>
-<!-- the page's ONE amber element -->
-<li><a href="/status" class="nav-link active">Targets</a></li>
-<li><a href="/audit" class="nav-link">Audit</a></li>
-{% endblock %}
+{% block nav %}{% with active_nav='targets' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
 {% block content %}
 <section class="section container">
   <div class="section-head">
@@ -15,11 +10,55 @@
   {% if probes %}
   <div class="disclosure-list">
     {% for p in probes %}
-    <details class="disclosure-row" name="target-credentials">
+    <details class="disclosure-row" name="target-credentials"{% if expanded_target == p.id %} open{% endif %}>
       <summary class="disclosure-summary">
         <span class="data-key">{{ p.name }}</span>
         <span class="badge {{ 'badge-shipped' if p.ok else ('badge-danger' if p.configured else 'badge-planned') }}" title="{{ p.detail }}">{{ p.configuration_status }}</span>
       </summary>
+      <div class="disclosure-body stack-2">
+        <div class="data-list">
+          <div class="data-row">
+            <div class="data-key">Credentials</div>
+            <div class="data-value">{{ 'Verified' if p.verified else ('Saved; not verified' if p.configured else 'Not configured') }}</div>
+          </div>
+          <div class="data-row">
+            <div class="data-key">Current reachability</div>
+            <div class="data-value">{{ 'Reachable' if p.reachable else (p.failure_kind | replace('_', ' ') if p.reachable is sameas false else 'Not checked') }}</div>
+          </div>
+          <div class="data-row">
+            <div class="data-key">Credential revision</div>
+            <div class="data-value">{{ p.revision if p.revision is not none else 'Environment configuration' }}</div>
+          </div>
+          <div class="data-row">
+            <div class="data-key">Credentials updated</div>
+            <div class="data-value">{{ p.updated_at.strftime('%Y-%m-%d %H:%M:%S') ~ ' UTC' if p.updated_at else 'Not recorded' }}</div>
+          </div>
+          <div class="data-row">
+            <div class="data-key">Last checked</div>
+            <div class="data-value">{{ p.last_checked_at.strftime('%Y-%m-%d %H:%M:%S') ~ ' UTC' if p.last_checked_at else 'Not checked' }}</div>
+          </div>
+          <div class="data-row">
+            <div class="data-key">Last successful check</div>
+            <div class="data-value">{{ p.last_success_at.strftime('%Y-%m-%d %H:%M:%S') ~ ' UTC' if p.last_success_at else 'No successful check for this revision' }}</div>
+          </div>
+          <div class="data-row">
+            <div class="data-key">Connection retry</div>
+            <div class="data-value">{% if p.next_probe_at %}Attempt {{ p.probe_attempt_count }}; retry after {{ p.next_probe_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC{% else %}No retry scheduled{% endif %}</div>
+          </div>
+        </div>
+        {% if p.configured and not p.ok %}
+        <div class="alert alert-danger" role="alert">
+          <div class="alert-title">Connection needs attention</div>
+          <div>{{ p.detail }}</div>
+          <div class="field-hint">{% if p.failure_kind == 'authentication' %}Check the management username, secret, and required permissions.{% elif p.failure_kind == 'unreachable' %}Check the target address, TLS or SSH trust, firewall path, and service availability.{% else %}Review the target response and connector requirements, then test again.{% endif %}</div>
+        </div>
+        {% endif %}
+        {% if p.configured %}
+        <form method="post" action="/targets/{{ p.id }}/probe">
+          <button class="btn btn-secondary btn-sm" type="submit">Test connection</button>
+        </form>
+        {% endif %}
+      </div>
       <form method="post" action="/targets/{{ p.id }}/credentials" enctype="multipart/form-data" class="disclosure-body stack-1"{% if p.type == 'ssh' %} data-ssh-credentials{% endif %}>
         {% if p.type == 'opnsense' %}
         <label class="label">API key <input class="input" name="api_key" required autocomplete="off"></label>
@@ -44,7 +83,7 @@
         <label class="label">Admin password <input class="input" name="password" type="password" required autocomplete="new-password"></label>
         {% endif %}
         {% endif %}
-        <button class="btn btn-primary btn-sm" type="submit">SAVE</button>
+        <button class="btn btn-primary btn-sm" type="submit">{{ 'Replace credentials' if p.configured else 'Save credentials' }}</button>
       </form>
     </details>
     {% endfor %}

@@ -1,5 +1,10 @@
 # NA-SSO next phase
 
+> **Delivery status (2026-07-16): implemented; release verification passed.**
+> The original audit and recommendations remain below as the decision record.
+> The traceability matrix near the end of this document records the delivered
+> outcome for every confirmed issue and prioritised expansion.
+
 ## Recommendation
 
 Make the next phase **operator confidence and lifecycle correctness**, then add
@@ -388,3 +393,48 @@ Add Playwright coverage for these end-to-end contracts:
 Keep connector unit tests, but add model-based state-transition tests. The
 browser audit found defects that isolated happy-path connector tests could not
 detect.
+
+## Delivery traceability
+
+All confirmed P0–P2 findings have shipped. The implementation preserves the
+product boundary stated in this document: NA-SSO remains an operator-controlled
+local-account control plane and does not proxy login, issue application tokens,
+federate identities, or broker target sessions.
+
+### Confirmed issues
+
+| Finding | Delivered outcome | Primary evidence |
+| --- | --- | --- |
+| P0.1 Delete stuck during CHPW | Typed lifecycle transitions make delete override every prior state and finish only from explicit per-target terminal results. | `na_sso/lifecycle.py`, `na_sso/operations.py`, `tests/test_lifecycle.py`, `tests/test_sync.py` |
+| P0.2 Live state misrepresentation | Static HTML and SSE consume the same canonical presentation payload, including unassigned, credential-waiting, expiry, deletion, retry, timestamps, and accessible descriptions. | `na_sso/lifecycle.py`, `na_sso/status.py`, `na_sso/templates/base.html`, `tests/test_sync.py` |
+| P0.3 Restore races deletion | Durable operation IDs serialize mutations; restore is unavailable until delete is terminal, while progress and blocking targets remain visible. | `na_sso/operations.py`, `na_sso/users.py`, `na_sso/templates/users.html`, `tests/test_lifecycle.py`, `tests/test_users.py` |
+| P1.4 False root controls | Root renders as protected `SUPERADMIN` without target/edit/delete controls and has My account, password, MFA, and current-password reauthentication paths. | `na_sso/templates/users.html`, `na_sso/templates/base.html`, `tests/test_security.py` |
+| P1.5 Lost or silent form outcomes | Safe fields/selections survive validation; focused summaries, inline errors, dedicated action pages, and signed one-time success/failure notices explain every mutation. | `na_sso/feedback.py`, `na_sso/templates/user_form.html`, `na_sso/templates/user_action.html`, `tests/test_users.py` |
+| P1.6 Unsafe generated-secret handoff | Complete selectable/revealable secrets require explicit saved confirmation; browser SSH enrollment is Generate → inspect/save/confirm → Enrol and rotation is add-before-revoke. | `na_sso/templates/users.html`, `na_sso/templates/account.html`, `na_sso/ssh_keys.py`, `tests/test_security.py`, `tests/test_ssh_keys.py` |
+| P1.7 Opaque target failures | Target rows retain inline sanitized recovery detail and separately expose credential proof, reachability, revision/check history, retry state, and manual Test connection. | `na_sso/target_credentials.py`, `na_sso/templates/status.html`, `tests/test_target_credentials.py` |
+| P1.8 Ambiguous expiry acknowledgement | Bounded policy supports disabled, full-renewal, or shorter one-time grace modes; UI previews the resulting date and audit retains the decision without rewriting password-age evidence. | `na_sso/config.py`, `na_sso/auth.py`, `tests/test_security.py`, `.config/na-sso.yaml.example` |
+| P2.9 Users matrix scale | People-first server-paginated inventory adds stable search/filter/sort, summaries, mobile cards, detail pages, selection, and previewed bulk assignment/disable/retry. | `na_sso/inventory.py`, `na_sso/templates/users.html`, `tests/test_inventory.py` |
+| P2.10 Missing My access | Managed users see assigned targets, plain propagation/retry/mode guidance, configurable support, and complete named SSH-key lifecycle metadata/actions. | `na_sso/auth.py`, `na_sso/templates/account.html`, `tests/test_security.py`, `tests/test_ssh_keys.py` |
+| P2.11 Raw audit dump | Bounded investigation adds actor/subject/target/action/outcome/time/operation filters, friendly summaries, technical detail, correlation drill-down, retention, and CSV/JSON export with explicit timezone. | `na_sso/audit_query.py`, `na_sso/templates/audit.html`, `tests/test_audit.py` |
+| P2.12 Hidden broad roles | Central capabilities expose User operator, Target operator, Auditor, and protected Root roles with root-only assignment, descriptions, audit, and last-recovery-path protection. Target ownership is enforced at the target-operator capability boundary; record-level target grants are intentionally not invented for the current single-control-plane model. | `na_sso/permissions.py`, `na_sso/users.py`, `tests/test_permissions.py` |
+| P2.13 Responsive/accessibility gaps | Compact mobile navigation, cards, bounded table scrolling, persistent labels, text-equivalent states, focused errors, responsive layouts, and expanded password-change wording are covered at 390/768/1440 px. | `na_sso/static/app.css`, `na_sso/templates/`, browser journey gates, `tests/test_users.py`, `tests/test_security.py` |
+
+### Prioritised expansion
+
+| Capability | Delivered outcome | Primary evidence |
+| --- | --- | --- |
+| Reconciliation and drift detection | Scheduled and manual bounded read-only desired/actual comparison, saved dry-run, per-field evidence, explicit one-use approval, separate destructive confirmation, and correlated repair. | `na_sso/reconciliation.py`, `na_sso/reconcile.py`, `tests/test_reconciliation.py` |
+| Bulk onboarding and offboarding | Bounded CSV/JSON import plus UI/API selection workflows provide no-change validation, idempotent execution, partial outcomes, assignment mapping, and one-time temporary-credential download. | `na_sso/bulk.py`, `tests/test_bulk_import.py`, `tests/test_inventory.py` |
+| Lifecycle policy | Owner, reason, start/end, temporary access, inactivity timing, scheduled transitions, and review triggers reuse normal correlated lifecycle operations. | `na_sso/governance.py`, `tests/test_governance.py` |
+| Assignment profiles | Immutable published target/group/role bundles, previewed application, and visible per-user assignment/membership exceptions feed synchronization and reconciliation. | `na_sso/assignments.py`, `tests/test_assignments.py` |
+| Access reviews | Saved campaign preview/opening, reminders, owner/reason snapshots, idempotent attestations, and correlated retain/disable/delete decisions. | `na_sso/governance.py`, `tests/test_governance.py` |
+| Delegated administration | Server-enforced separation among user, target, audit, and root-security duties; configurable mandatory administrator WebAuthn/TOTP with one-use recovery; previews/approvals protect broad and destructive workflows. | `na_sso/permissions.py`, `na_sso/mfa.py`, `tests/test_permissions.py`, `tests/test_mfa.py` |
+| SSH key lifecycle | Multiple named keys expose fingerprint, algorithm, enrollment, expiry, history, truthful last-use support, zero-downtime replacement, individual/emergency/expiry revocation, and exact target key sets. | `na_sso/ssh_keys.py`, `tests/test_ssh_keys.py` |
+| Automation surface | Versioned redacted API, thin CLI, least-privilege service accounts, expiring/rotatable one-time Bearer credentials, request IDs, rate limits, idempotency, operation status, target health, audit export, and signed webhooks. | `na_sso/api.py`, `na_sso/cli.py`, `na_sso/service_accounts.py`, `tests/test_api.py`, `tests/test_cli.py` |
+| Unmanaged-account discovery | Built-in connectors enumerate safely without mutation; exclusions, persistent ignore, no-mutation adoption, and disabled-by-default two-step Root removal are explicit. | `na_sso/unmanaged.py`, `tests/test_unmanaged.py` |
+| Connector contract | Contract 1.0 publishes machine-readable capabilities, typed retry-aware errors, bounded timeouts, inspection-only dry-run, discovery, conformance tests, and third-party extension guidance. | `na_sso/connectors/base.py`, `docs/CONNECTORS.md`, `tests/test_connector_contract.py` |
+
+Self-service access requests remain outside this delivered phase. This follows
+the original sequencing recommendation rather than deferring a committed item:
+operators retain final provisioning authority, and no end-user request workflow
+was included in the prioritised capability list.

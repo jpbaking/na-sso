@@ -111,6 +111,18 @@ def public_key_from_private(private_key_pem: str) -> str:
     ).decode()
 
 
+def ssh_public_key_fingerprint(public_key: str | None) -> str | None:
+    """Return the OpenSSH SHA256 fingerprint without exposing key material."""
+    if not public_key:
+        return None
+    try:
+        _algorithm, encoded, *_comment = public_key.split()
+        digest = hashlib.sha256(base64.b64decode(encoded, validate=True)).digest()
+    except (ValueError, TypeError):
+        return None
+    return "SHA256:" + base64.b64encode(digest).decode().rstrip("=")
+
+
 def generate_ssh_keypair() -> tuple[str, str]:
     """Return a one-time private key and its persistable public counterpart."""
     from cryptography.hazmat.primitives import serialization

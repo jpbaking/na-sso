@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block nav %}{% with active_nav='users' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
+{% block content %}
+<section class="section container-narrow">
+  <div class="section-head">
+    <div class="section-kicker">// Lifecycle confirmation</div>
+    <h1 class="section-title">{{ title }}</h1>
+  </div>
+
+  <div class="data-list">
+    <div class="data-row">
+      <div class="data-key">User</div>
+      <div class="data-value">{{ user.username }}</div>
+    </div>
+    <div class="data-row">
+      <div class="data-key">Assigned targets</div>
+      <div class="data-value">{{ assigned_targets | length }}</div>
+    </div>
+    {% if operation %}
+    <div class="data-row">
+      <div class="data-key">Operation</div>
+      <div class="data-value">{{ operation.id[:8] }} · {{ operation.status }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if action_kind == 'delete' %}
+  <div class="alert alert-danger">
+    <div class="alert-title">Delete from every assigned target</div>
+    <div>NA-SSO will remove the remote accounts first and retain the local record for recovery. Restore and purge remain unavailable until every target reaches a terminal result.</div>
+  </div>
+  <form method="post" class="stack-3">
+    <div class="hero-actions">
+      <button class="btn btn-danger" type="submit">Delete user everywhere</button>
+      <a class="btn btn-secondary" href="/users">Cancel</a>
+    </div>
+  </form>
+  {% elif action_kind == 'restore' %}
+  <div class="alert alert-info">
+    <div class="alert-title">Temporary local credential</div>
+    <div>The restored user must sign in and replace this password before assigned remote accounts are provisioned again.</div>
+  </div>
+  <form method="post" class="stack-3">
+    <div class="field">
+      <label class="label" for="restore-password">New temporary password</label>
+      <input class="input" id="restore-password" name="password" type="password" required autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label class="label" for="restore-password-confirm">Confirm temporary password</label>
+      <input class="input" id="restore-password-confirm" name="confirm_password" type="password" required autocomplete="new-password">
+    </div>
+    <div class="data-list" id="password-checks" aria-live="polite"></div>
+    <div class="hero-actions">
+      <button class="btn btn-primary" type="submit">Restore user</button>
+      <a class="btn btn-secondary" href="/users">Cancel</a>
+    </div>
+  </form>
+  <script>
+  const restorePassword=document.getElementById('restore-password');
+  const restorePolicy={{ password_policy.model_dump() | tojson }};
+  const restoreChecks=document.getElementById('password-checks');
+  const showRestoreChecks=()=>{
+    const value=restorePassword.value;
+    const checks=[
+      ['Minimum length',value.length>=restorePolicy.min_length],
+      ['Lowercase',!restorePolicy.require_lowercase||/[a-z]/.test(value)],
+      ['Uppercase',!restorePolicy.require_uppercase||/[A-Z]/.test(value)],
+      ['Digit',!restorePolicy.require_digit||/\d/.test(value)],
+      ['Symbol',!restorePolicy.require_symbol||/[^A-Za-z0-9]/.test(value)]
+    ];
+    restoreChecks.replaceChildren(...checks.map(([label,passed])=>{
+      const row=document.createElement('div');row.className='data-row';
+      const key=document.createElement('div');key.className='data-key';key.textContent=label;
+      const result=document.createElement('div');result.className='data-value';result.textContent=passed?'passed':'not yet';
+      row.append(key,result);return row;
+    }));
+  };
+  restorePassword.addEventListener('input',showRestoreChecks);
+  showRestoreChecks();
+  </script>
+  {% else %}
+  <div class="alert alert-danger">
+    <div class="alert-title">Permanent local removal</div>
+    <div>This removes the local account record after remote deletion. Operation and audit history remain available for investigation.</div>
+  </div>
+  <form method="post" class="stack-3">
+    <div class="field">
+      <label class="label" for="confirm-username">Type {{ user.username }} to confirm</label>
+      <input class="input" id="confirm-username" name="confirm_username" required autocomplete="off">
+    </div>
+    <div class="hero-actions">
+      <button class="btn btn-danger" type="submit">Permanently purge local record</button>
+      <a class="btn btn-secondary" href="/users">Cancel</a>
+    </div>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

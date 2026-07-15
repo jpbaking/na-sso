@@ -14,15 +14,25 @@ def client(tmp_path, monkeypatch):
     import na_sso.db as db
 
     config.get_settings.cache_clear()
+    from na_sso.api_contract import reset_api_rate_limits
+    reset_api_rate_limits()
     db._engine = None
     db._session_factory = None
 
     from fastapi.testclient import TestClient
 
-    from na_sso.main import app
+    from na_sso.main import app, bootstrap_admin
 
-    with TestClient(app) as c:
+    # Unit/route tests initialise persistence explicitly and exercise workers
+    # through their dedicated functions. Avoid long-lived background tasks in
+    # the in-process client; Compose integration covers the application lifespan.
+    db.init_db()
+    bootstrap_admin()
+    c = TestClient(app)
+    try:
         yield c
+    finally:
+        c.close()
 
 
 @pytest.fixture()

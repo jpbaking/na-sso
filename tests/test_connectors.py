@@ -4,6 +4,7 @@ from httpx import Response
 
 from na_sso.connectors.base import Connector, SyncResult
 from na_sso.models import ManagedUser
+from na_sso.reconciliation import DriftState, ReconciliationField, ReconciliationStatus
 
 
 class FakeConnector(Connector):
@@ -109,14 +110,44 @@ async def test_ssh_combined_management_auth_passes_password_and_key(monkeypatch)
     assert captured["password"] == "secret"
     assert captured["client_keys"] == ["parsed:private-material"]
 
-async def test_fake_connector_interface(client):
+async def test_fake_connector_interface():
     fake = FakeConnector()
     res = await fake.ensure_user(_user(), "pw")
     assert res.ok and fake.calls == [("ensure", "jdoe", "pw")]
 
 
+@respx.mock
+async def test_opnsense_inspection_reports_drift_using_search_only(opnsense):
+    search = respx.post("https://fw.test/api/auth/user/search").mock(
+        return_value=Response(200, json={"rows": [{
+            "name": "jdoe", "uuid": "u-1", "descr": "J", "email": "j@x",
+            "disabled": "0", "group_memberships": "vpn-users",
+        }]})
+    )
+
+    report = await opnsense.inspect_user(_user(status="disabled"))
+
+    assert report.status == ReconciliationStatus.DRIFTED
+    assert report.field(ReconciliationField.STATUS).state == DriftState.DRIFT
+    assert report.field(ReconciliationField.PUBLIC_KEY).state == DriftState.UNSUPPORTED
+    assert search.call_count == 1
+    assert [call.request.url.path for call in respx.calls] == ["/api/auth/user/search"]
+
+
+@respx.mock
+async def test_opnsense_inspection_failure_is_unknown_and_sanitised(opnsense):
+    respx.post("https://fw.test/api/auth/user/search").mock(return_value=Response(503))
+
+    report = await opnsense.inspect_user(_user())
+
+    assert report.status == ReconciliationStatus.UNKNOWN
+    assert report.field("identity").state == DriftState.UNKNOWN
+    assert report.detail == "OPNsense identity read failed."
+    assert "secret" not in report.detail.lower()
+
+
 @pytest.fixture()
-def opnsense(client, monkeypatch):
+def opnsense(monkeypatch):
     import na_sso.config as config
 
     monkeypatch.setenv("NA_SSO_OPNSENSE_ENABLED", "true")
@@ -157,7 +188,7 @@ async def test_opnsense_applies_default_groups():
     add = respx.post("https://groups.test/api/auth/user/add").mock(return_value=Response(200, json={"result": "saved"}))
     assert (await connector.ensure_user(_user(), "pw")).ok
     import json
-    assert json.loads(add.calls[0].request.content)["user"]["group_memberships"] == "vpn-users,auditors"
+    assert set(json.loads(add.calls[0].request.content)["user"]["group_memberships"].split(",")) == {"vpn-users", "auditors"}
 
 
 @respx.mock
@@ -208,7 +239,7 @@ def test_status_page_lists_targets(admin_client, monkeypatch):
 
 
 @pytest.fixture()
-def nexus(client, monkeypatch):
+def nexus(monkeypatch):
     import na_sso.config as config
 
     monkeypatch.setenv("NA_SSO_NEXUS_ENABLED", "true")
@@ -237,7 +268,25 @@ async def test_nexus_create_user(nexus):
 
     body = json.loads(create.calls[0].request.content)
     assert body["userId"] == "jdoe" and body["password"] == "pw-123"
-    assert body["roles"] == ["nx-reader", "nx-anonymous"]
+    assert set(body["roles"]) == {"nx-reader", "nx-anonymous"}
+
+
+@respx.mock
+async def test_nexus_inspection_is_in_sync_and_get_only(nexus):
+    lookup = respx.get("https://nexus.test/service/rest/v1/security/users").mock(
+        return_value=Response(200, json=[{
+            "userId": "jdoe", "firstName": "J", "lastName": "",
+            "emailAddress": "j@x", "status": "active",
+            "roles": ["nx-reader", "nx-anonymous"],
+        }])
+    )
+
+    report = await nexus.inspect_user(_user())
+
+    assert report.status == ReconciliationStatus.IN_SYNC
+    assert report.field("memberships").state == DriftState.MATCH
+    assert lookup.call_count == 1
+    assert all(call.request.method == "GET" for call in respx.calls)
 
 
 @respx.mock
@@ -314,7 +363,7 @@ def _ocs(code=100, message="OK"):
 
 
 @pytest.fixture()
-def nextcloud(client, monkeypatch):
+def nextcloud(monkeypatch):
     import na_sso.config as config
 
     monkeypatch.setenv("NA_SSO_NEXTCLOUD_ENABLED", "true")
@@ -343,6 +392,95 @@ async def test_nextcloud_create_user(nextcloud):
     assert result.ok and create.called and enable.called
     assert b"userid=jdoe" in create.calls[0].request.content
     assert b"password=pw-123" in create.calls[0].request.content
+
+
+@respx.mock
+async def test_nextcloud_inspection_reads_profile_and_groups_without_mutation():
+    from na_sso.config import NextcloudTarget
+    from na_sso.connectors.nextcloud import NextcloudConnector
+
+    connector = NextcloudConnector(NextcloudTarget(
+        id="cloud", type="nextcloud", display_name="Cloud",
+        base_url="https://inspect.test", admin_user="admin", admin_password="secret",
+        default_groups=["employees", "engineering"],
+    ))
+    respx.get("https://inspect.test/ocs/v1.php/cloud/users/jdoe").mock(
+        return_value=Response(200, json={"ocs": {
+            "meta": {"statuscode": 100, "message": "OK"},
+            "data": {"id": "jdoe", "displayname": "J", "email": "j@x", "enabled": True},
+        }})
+    )
+    respx.get("https://inspect.test/ocs/v1.php/cloud/users/jdoe/groups").mock(
+        return_value=Response(200, json={"ocs": {
+            "meta": {"statuscode": 100, "message": "OK"},
+            "data": {"groups": ["employees", "optional"]},
+        }})
+    )
+
+    report = await connector.inspect_user(_user())
+
+    assert report.status == ReconciliationStatus.DRIFTED
+    assert report.field("memberships").state == DriftState.DRIFT
+    assert all(call.request.method == "GET" for call in respx.calls)
+
+
+async def test_ssh_inspection_uses_read_only_commands_and_fingerprints_key(monkeypatch):
+    from na_sso.config import SshTarget
+    from na_sso.connectors.ssh import SSHConnector
+
+    public_key = "ssh-ed25519 YWJj managed@example.test"
+
+    class Result:
+        def __init__(self, status=0, stdout="", stderr=""):
+            self.exit_status, self.stdout, self.stderr = status, stdout, stderr
+
+    class Connection:
+        def __init__(self):
+            self.commands = []
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def run(self, command, **kwargs):
+            self.commands.append(command)
+            if command.startswith("getent passwd"):
+                return Result(stdout="jdoe:x:1000:1000:J:/home/jdoe:/bin/bash\n")
+            if command.startswith("id -nG"):
+                return Result(stdout="jdoe operators extra\n")
+            if command.startswith("sudo -n passwd -S"):
+                return Result(stdout="jdoe P 2026-07-15 0 99999 7 -1\n")
+            if command.startswith("sudo -n test -f"):
+                return Result()
+            if command.startswith("sudo -n cat"):
+                return Result(stdout=public_key + "\n")
+            raise AssertionError(f"unexpected command: {command}")
+
+    connection = Connection()
+    connector = SSHConnector(SshTarget(
+        id="shell", type="ssh", display_name="Shell", host="shell",
+        management_user="mgr", management_private_key="key",
+        host_key_sha256="SHA256:AAAAAAAAAAAAAAAAAAAA", platform="ubuntu",
+        mode="key", default_groups=["operators"],
+    ))
+
+    async def connect():
+        return connection
+
+    monkeypatch.setattr(connector, "_connect", connect)
+    user = _user()
+    user.ssh_public_key = public_key
+
+    report = await connector.inspect_user(user)
+
+    assert report.status == ReconciliationStatus.IN_SYNC
+    assert report.field("public_key").state == DriftState.MATCH
+    assert report.field("email").state == DriftState.UNSUPPORTED
+    assert report.field("memberships").state == DriftState.MATCH
+    mutation_words = {"adduser", "useradd", "usermod", "userdel", "chpasswd", "tee", "install"}
+    assert not mutation_words.intersection(" ".join(connection.commands).split())
 
 
 @respx.mock

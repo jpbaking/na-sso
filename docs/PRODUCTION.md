@@ -12,6 +12,20 @@ automated or privileged environment.
 For internal architecture, synchronization state, and local engineering setup,
 see the [developer guide](DEVELOPER.md).
 
+Configure `ssh_key_policy.default_expiry_days` and `max_expiry_days` to match
+device-credential policy. Users may keep separate named keys per device.
+Rotation propagates the new key before revoking the selected old key;
+individual, emergency, and automatic expiry removal use the normal audited
+target synchronization path. Current SSH targets do not report per-key last
+use, and the account page labels that limitation explicitly.
+
+`unmanaged_account_policy` bounds read-only enumeration and excludes protected
+names, prefixes, and low Unix UIDs. Keep `allow_removal: false` until ownership,
+backup, and recovery procedures are tested. When enabled, only Root can approve
+removal, and execution still requires a second confirmation plus a one-use
+token. Adoption links the remote account without mutation and keeps target
+synchronization gated on verified credential handoff.
+
 ## Reference architecture
 
 The supplied normal Compose model runs one application process with persistent
@@ -40,8 +54,8 @@ flowchart LR
     Monitor["Logs and monitoring"] -.-> App
 ```
 
-The reverse proxy is deliberately outside the supplied Compose stack. Only the
-The NA-SSO container runs on its Compose network; SQLite is a mounted volume, not
+The reverse proxy is deliberately outside the supplied Compose stack. The
+NA-SSO container runs on its Compose network; SQLite is a mounted volume, not
 a separate database container. Each target remains an independent outbound
 destination. Managed users continue signing in directly to those targets—NA-SSO
 is not in their authentication path.
@@ -75,9 +89,30 @@ expiry. Use an integer from 1 through 3650, or `null` to disable expiry. The
 calculated date is shown in the administrator's **Users** table and on the
 user's **Account** page.
 
+Expired-password acknowledgement is a separate, explicit policy:
+
+- `expiry_acknowledgement_mode: disabled` requires a password change.
+- `renewal` keeps the unchanged password for another full
+  `expires_after_days` cycle.
+- `grace` keeps it only for `expiry_acknowledgement_grace_days`.
+- `expiry_acknowledgement_limit` limits acknowledgements for the same password;
+  `null` allows repeated acknowledgements. A real password change resets the
+  count.
+
+The decision page states the mode, acknowledgement number, and resulting UTC
+date before confirmation. Acknowledgement does not rewrite the original
+password-change timestamp, and its mode and resulting date are recorded in the
+audit trail.
+
 The YAML registry is intended to remain non-secret. Environment-backed YAML
 credential fields exist for deployment automation, but UI-managed credentials
 are the preferred path for this Compose deployment.
+
+`support_policy` controls the managed-user help path shown when an assigned
+target needs operator intervention. Set a short label, safe guidance, and an
+optional `https://`, `http://`, or `mailto:` URL. Keep the guidance free of
+management endpoints and instruct users never to send passwords or private
+keys.
 
 ## Bootstrap and recovery settings
 
@@ -86,13 +121,183 @@ are the preferred path for this Compose deployment.
 | `NA_SSO_SECRET_KEY` | Signs sessions and encrypts pending secrets and target credentials. Generate a long random value, keep it stable, and back it up. |
 | `NA_SSO_ADMIN_USERNAME` | Username created when the database has no administrator. |
 | `NA_SSO_ADMIN_BOOTSTRAP_PASSWORD` | Initial password used only for bootstrap; changing it does not rotate an existing account. |
+| `NA_SSO_ROOT_RECOVERY_CODE` | Optional long, random emergency second factor accepted only for root and only once per distinct configured value. Remove or rotate it after restoring normal recovery. |
 | `NA_SSO_DATABASE_PATH` | SQLite location; `/data/na-sso.db` uses the persistent Compose volume. |
+| `NA_SSO_SESSION_COOKIE_SECURE` | Set `true` when browser traffic is exclusively HTTPS so session, feedback, and MFA cookies receive the Secure attribute. Direct local HTTP checks must leave it `false`. |
 | `NA_SSO_RETRY_SCAN_SECONDS` | Recovery-worker scan frequency; default `5`. |
 | `NA_SSO_RETRY_BASE_SECONDS` | First automatic retry delay; default `5`. |
 | `NA_SSO_RETRY_MAX_SECONDS` | Exponential-backoff ceiling; default `300`. |
 
 The protected root recovery account is local-only. It cannot be assigned,
 disabled, deleted, demoted, or expired into remote operations.
+
+Use the protected root account to assign one scoped role per delegated account:
+
+| Role | Server-enforced capability |
+| --- | --- |
+| User operator | Create and manage ordinary users, assignments, and lifecycle actions; cannot change operator accounts or roles. |
+| Target operator | Configure write-only target credentials, test connections, and inspect target health. |
+| Auditor | Filter, inspect, and export audit events without user or target mutations. |
+| Root security administrator | All capabilities, role assignment, and protected local recovery. |
+
+The interface shows only authorised sections, but server-side checks protect
+every page, event stream, export, and mutation independently. Role assignments
+are audited and invalidate the changed account's existing sessions. Existing
+pre-upgrade `admin` accounts migrate to User operator; review and deliberately
+reassign any additional capabilities after upgrade. Keep at least one tested
+root recovery credential because the root identity cannot be delegated or
+removed.
+
+### Administrator MFA
+
+Production examples set `admin_mfa_policy.required: true`. Allowed methods are
+`webauthn` and `totp`; restricting the list prevents new enrolment but does not
+silently discard an existing factor. WebAuthn requires user verification. Set
+`rp_id` to the public hostname and `expected_origin` to its exact HTTPS origin,
+including a non-default port. These values must match the browser-visible URL,
+especially behind a reverse proxy. TOTP uses standard six-digit, 30-second
+codes and rejects replay of an already accepted counter.
+
+The first password-authenticated operator session is confined to MFA setup when
+MFA is required and no method exists. Later sign-ins require an enrolled
+passkey, TOTP, or a one-use recovery code. Enrolment, revocation, and recovery
+replacement require the current password again after
+`reauthentication_minutes`. Recovery codes are displayed once, stored only as
+keyed hashes, and consumed once. TOTP secrets are encrypted with
+`NA_SSO_SECRET_KEY`; WebAuthn stores public credential material and sign counts.
+The final factor cannot be revoked while policy requires MFA.
+
+For root only, `NA_SSO_ROOT_RECOVERY_CODE` provides a separately stored
+emergency second factor after the correct root password. Each configured value
+works once and creates explicit audit evidence. Rotate or remove it immediately,
+then enrol a normal factor and replace recovery codes. Losing
+`NA_SSO_SECRET_KEY` also invalidates stored TOTP secrets and recovery hashes, so
+back it up with the database as already required.
+
+### Signed webhook notifications
+
+Set `notification_policy.enabled: true` and define one or more endpoints to
+deliver subscribed `sync.persistent_failure`, `password.expired`,
+`lifecycle.completed`, `approval.completed`, and `access_review.reminder`
+events. Production destination URLs must use HTTPS; plain HTTP is accepted only
+for localhost development.
+Use an exact `${ENV_NAME}` reference for each endpoint `secret`. Runtime root
+controls can disable a destination immediately without changing or revealing
+that secret, and re-enabling returns disabled queued records to the durable
+queue.
+
+Every compact JSON body contains only schema/event/delivery IDs, UTC occurrence
+time, event type, actor, subject, operation ID, target ID, and outcome. It never
+contains passwords, keys, connector detail, email, target credentials, or HTTP
+response bodies. Validate these request headers before processing:
+
+- `X-NA-SSO-Event` and `X-NA-SSO-Delivery` identify the message.
+- `X-NA-SSO-Timestamp` is the signing timestamp; reject stale values according
+  to the receiving system's replay window.
+- `X-NA-SSO-Signature` is `v1=` plus the lowercase HMAC-SHA256 hex digest of
+  `<timestamp>.<exact raw body>` using the endpoint secret. Compare in constant
+  time and deduplicate on delivery ID.
+
+Non-2xx responses and transport errors retry with capped exponential backoff.
+Only the HTTP status or exception class is retained. Exhausted deliveries are
+audited and can be manually requeued from **Notifications**; successful
+deliveries also create audit evidence. Tune `persistent_failure_attempts`,
+`max_attempts`, retry bounds, and scan interval to the receiver's capacity.
+
+The Users inventory accepts at most 100 accounts per bulk confirmation. Every
+bulk assignment, unassignment, disable, or retry has a preview, a durable parent
+correlation ID, per-account audit events, partial validation reporting, and an
+idempotent confirmation token. Retrying a submitted confirmation does not apply
+the action twice.
+
+### Reconciliation, imports, and access policy
+
+Use **Reconciliation** to compare local desired state with read-only target
+snapshots before changing anything. Preview runs are bounded and classify each
+account as matching, drifted, unknown, or unsupported. Repairs require a
+one-use approval; destructive repairs also require an explicit confirmation.
+Scheduled reconciliation creates reports only, with retry/backoff controlled by
+`reconciliation_policy`; it never repairs automatically.
+
+For larger onboarding or offboarding jobs, use the CSV workflow or the
+`/api/v1/bulk/preview` and `/api/v1/bulk/{workflow_id}/execute` endpoints. A job accepts at
+most 1,000 rows and a CSV upload at most 1 MiB. Preview validates every row
+without mutation, execution is idempotent for the authenticated actor, and the
+result preserves per-row failures under one correlated operation. Generated
+temporary passwords are available through one audited POST download and are
+then erased. CSV exports defend against spreadsheet-formula interpretation.
+
+**Assignment profiles** are immutable, versioned target and membership bundles.
+Publish a draft only after its preview, then preview and confirm each application
+to users. Applying a profile preserves existing direct target assignments as
+explicit exceptions; per-user target and membership include/exclude exceptions
+remain visible and override the profile.
+
+Use a user's **Lifecycle policy** to record an owner, reason, effective dates,
+temporary access, inactivity handling, and an end action. Temporary access must
+have an end date, and scheduled deletion requires explicit confirmation.
+Future access remains disabled until its start date. End-date and inactivity
+workers disable or open a review as configured; they do not silently grant or
+retain access. Access reviews start as drafts, open only on explicit action, and
+capture owner/reason snapshots. Reviewer attestations retain, disable, or stage
+deletion, with deletion requiring a separate confirmation. Configure bounded
+worker timing and reminder delivery under `lifecycle_automation_policy` and
+subscribe notification destinations to `access_review.reminder` when needed.
+
+### Versioned automation API
+
+`/api/v1` exposes capability discovery plus bounded user, target-health,
+operation, reconciliation, bulk, and audit resources. Browser-session clients
+must have completed any required operator MFA; absent or insufficient
+authentication returns JSON `401`/`403` errors and never an HTML redirect.
+
+Every response identifies API version `v1` and a request ID. Collections use
+`page`, `per_page`, `total`, and `pages` metadata. Control request volume with
+`automation_api_policy`; limit responses include `Retry-After`. Mutation
+endpoints require an 8–128 character idempotency key and bind its saved response
+to the actor, method, path, and request fingerprint. Reusing the key returns the
+saved result, while changing the request returns `409`.
+
+Use JSON bulk preview/execution for managed-user changes. Target probe and
+reconciliation approval create normal correlated operations visible through
+`/api/v1/operations`; reconciliation still requires a saved read-only preview,
+one-use approval token, and separate destructive confirmation. API payloads do
+not include password hashes, pending credentials, private/public key material,
+target management addresses, stored target credentials, or unredacted transport
+errors. The interactive OpenAPI document is served at `/docs`.
+
+#### Service accounts and `na-ssoctl`
+
+Root creates service accounts under **Service accounts** and grants only the
+Users/Reconciliation, Targets, and/or Operations/Audit capabilities needed by
+that automation. Service accounts cannot receive Root security capability and
+cannot sign in to the browser. An optional account cutoff disables every token
+at once.
+
+Issue a labelled credential with a bounded lifetime, copy its `nas_…` value
+from the one-time page into the client's secret manager, and send it as
+`Authorization: Bearer <token>`. NA-SSO retains only a keyed hash, prefix,
+expiry, issuer, revocation state, and coarsened last-used time. For rotation,
+issue the replacement, update and verify the client, then revoke the previous
+credential. Revoking the account immediately revokes every credential.
+
+The installed package provides `na-ssoctl`. Prefer a mode-`0600` token file so
+the credential does not enter shell history or an exported process environment,
+then use the preview/apply split:
+
+```sh
+na-ssoctl --base-url https://na-sso.example.lan --token-file /run/secrets/na-sso.token whoami
+na-ssoctl --base-url https://na-sso.example.lan --token-file /run/secrets/na-sso.token bulk-preview accounts.csv --idempotency-key onboarding-2026-07-15
+na-ssoctl --base-url https://na-sso.example.lan --token-file /run/secrets/na-sso.token bulk-apply <workflow-id> --idempotency-key onboarding-2026-07-15
+na-ssoctl --base-url https://na-sso.example.lan --token-file /run/secrets/na-sso.token operation-status <operation-id>
+na-ssoctl --base-url https://na-sso.example.lan --token-file /run/secrets/na-sso.token reconcile-preview --target-id cloud --idempotency-key cloud-check-2026-07-15
+na-ssoctl --base-url https://na-sso.example.lan --token-file /run/secrets/na-sso.token audit-export --output audit.json --operation <operation-id>
+```
+
+The CLI also supports `reconcile-apply`; it requires the saved approval token,
+and destructive repair additionally requires `--confirm-destructive`. CSV or
+JSON bulk inputs contain the same fields as the web/API import. CLI errors print
+only the API error code/message and never the Bearer token.
 
 ## Target registry
 
@@ -170,6 +375,7 @@ consistent:
 # Inspect state and bounded logs.
 ./compose-helper.sh ps
 ./compose-helper.sh logs --tail=100 na-sso
+curl --fail --silent http://127.0.0.1:8000/healthz
 ```
 
 Open <http://localhost:8000>, sign in with the bootstrap administrator, and
@@ -188,6 +394,16 @@ Dockerfile or application changes.
 4. Review the per-target matrix and the password-expiry date.
 5. Inspect failed detail and retry after correcting the target.
 6. Review **Audit** for administrative and connector results.
+
+Audit investigations can be filtered by UTC date, actor, subject, target,
+action, operation ID, and outcome. CSV and JSON downloads export one bounded
+page at a time and are available only to authorised administrators. Configure
+`audit_policy.retention_days` in `na-sso.yaml`; expired audit events are pruned
+daily while correlated lifecycle operations and per-target attempts remain.
+Set the value to `null` only when indefinite retention is intentional, and
+account for the resulting database growth. `audit_policy.export_page_size`
+controls 25–5000 rows per downloaded page. Exported technical detail is
+defensively redacted, but operators must still handle audit files as sensitive.
 
 Initial, administrator-reset, and restore passwords authenticate only to
 NA-SSO. They are never propagated. An administrator reset immediately places
@@ -231,6 +447,12 @@ volume is explicitly intended.
   lock and durable external queue before scaling to multiple workers.
 - Put the application behind an authenticated TLS ingress appropriate to the
   environment; the Compose file itself does not terminate TLS.
+- Set `NA_SSO_SESSION_COOKIE_SECURE=true` behind that HTTPS ingress. NA-SSO
+  rejects cross-site state-changing browser requests using Fetch Metadata plus
+  Origin/Referer checks, sets Strict SameSite HttpOnly cookies, denies framing
+  and content sniffing, and advertises HSTS on HTTPS responses. Preserve the
+  original Host/scheme through the trusted proxy so same-origin checks compare
+  against the public origin.
 
 ## Backups and recovery
 
@@ -242,6 +464,39 @@ Back up both:
 Losing or changing the secret key makes encrypted target credentials and any
 still-pending propagation secrets unreadable. Test restoration of the volume
 and secret together.
+
+Create a transactionally consistent SQLite backup while the single application
+process is running, copy it off the Docker host with mode `0600`, and remove the
+temporary in-volume copy. Use a deployment-specific encrypted secret store for
+`NA_SSO_SECRET_KEY`; never write it into the database archive.
+
+```sh
+umask 077
+./compose-helper.sh exec -T na-sso python -c 'import sqlite3; source=sqlite3.connect("/data/na-sso.db"); backup=sqlite3.connect("/data/na-sso-backup.db"); source.backup(backup); assert backup.execute("PRAGMA integrity_check").fetchone()[0] == "ok"; backup.close(); source.close()'
+./compose-helper.sh cp na-sso:/data/na-sso-backup.db ./na-sso-backup.db
+./compose-helper.sh exec -T na-sso rm -f /data/na-sso-backup.db
+```
+
+For a local Compose recovery drill, restore the database only while the
+application is stopped. The same `.config/.env`—especially the exact secret
+key—and YAML registry must accompany it. The one-off ownership and integrity
+commands use the same named volume as the stopped service.
+
+```sh
+./compose-helper.sh stop
+./compose-helper.sh create na-sso
+./compose-helper.sh cp ./na-sso-backup.db na-sso:/data/na-sso.db
+./compose-helper.sh run --rm --no-deps --user root --entrypoint chown na-sso na_sso:na_sso /data/na-sso.db
+./compose-helper.sh run --rm --no-deps --entrypoint python na-sso -c 'import sqlite3; db=sqlite3.connect("/data/na-sso.db"); assert db.execute("PRAGMA integrity_check").fetchone()[0] == "ok"; db.close()'
+./compose-helper.sh start
+curl --fail --silent http://127.0.0.1:8000/healthz
+```
+
+After recovery, sign in and probe every enabled target. Verify that service
+accounts, active operations, reconciliation approvals, and encrypted target
+credentials are present before resuming mutations. Practice the equivalent
+atomic volume-snapshot and secret-restore procedure in the actual deployment
+orchestrator; the helper remains a local administration tool.
 
 ## Pre-production verification
 

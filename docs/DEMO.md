@@ -95,8 +95,11 @@ identify the servers and are not login credentials.
 All values and generated keys in this guide are public, disposable demo
 credentials. Never reuse them outside this stack.
 
-After each save, the target should report **fully configured**. If the generated
-key is not present yet, confirm `demo-rebuild` or `demo-up` completed and that
+After each save, the target should report **fully configured**. Expand a target
+to see credential verification separately from current reachability, its
+revision and UTC check history, retry state, and **Test connection**. A failed
+save remains expanded with sanitized inline guidance. If the generated key is
+not present yet, confirm `demo-rebuild` or `demo-up` completed and that
 `.config-demo/management_key` exists.
 
 ## Complete a managed user's first login
@@ -108,8 +111,10 @@ disabled until the user signs in to NA-SSO and chooses a replacement password.
 
 To complete the transition:
 
-1. Create the user and assign the desired targets. Copy the generated password
-   before closing its one-time modal, or retain the manually entered value.
+1. Create the user and assign the desired targets. For a generated password,
+   reveal or copy the full value and confirm that it was saved before submitting;
+   closing the modal without confirmation discards it. Otherwise retain the
+   manually entered value.
 2. Sign out as the administrator and sign in as the managed user with that
    temporary password.
 3. Choose a replacement password on the required password-change page.
@@ -119,6 +124,11 @@ To complete the transition:
 The administrator's **Users** table shows the same expiry date. With the demo's
 90-day policy, it is calculated from the user-chosen replacement, not from the
 temporary password.
+
+The demo uses a one-time 14-day grace acknowledgement for an expired password.
+The user sees the resulting date and acknowledgement count before selecting
+**Keep until …**. The original password-change date remains unchanged; after
+the grace period, that same password must be replaced.
 
 The SSH target mode and its management authentication are separate concepts:
 the selected **Authentication** field controls how NA-SSO logs in as
@@ -135,14 +145,68 @@ target's managed-user key propagation:
    password**.
 2. Sign out as the administrator and sign in as that managed user.
 3. Complete the first-login password decision, then open **Account**.
-4. Select **Generate key in this browser** and save the downloaded
-   `na-sso_ed25519` private key. Only its public half is sent to NA-SSO and
-   propagated to the combined SSH target.
-5. Alternatively, use the clearly labelled compatibility fallback; it displays
+4. Select **Generate in browser**, inspect the new fingerprint, then save the
+   `na-sso_ed25519` file or copy the full private-key value.
+5. Confirm that the private key is safe, then select **Enrol public key**. Only
+   its public half is sent to NA-SSO and propagated to the combined SSH target;
+   the previously enrolled key remains active until this succeeds.
+6. Alternatively, use the clearly labelled compatibility fallback; it displays
    a server-generated private key once and does not persist it.
+
+To exercise zero-downtime rotation, add a second named key and select **Replace
+an existing key**. NA-SSO installs the replacement before revoking the old key,
+then retains the revoked fingerprint in account history. **Emergency revoke**
+requires the managed user's current password and removes the selected key from
+every assigned SSH target. Connector metadata reports managed-key last use as
+unsupported until a target can provide trustworthy evidence; NA-SSO does not
+invent a timestamp.
 
 The password-only SSH target receives the managed-user password but ignores
 the enrolled public key. The combined target receives both.
+
+The managed user's **My access** section lists assigned targets, plain-language
+propagation state, supported sign-in method, and scheduled retry time. Failures
+show the demo's configured operator-help guidance without exposing target
+management credentials or raw connector detail.
+
+## Exercise automation and service accounts
+
+Only the protected Root account can create service accounts. Open **Service
+accounts**, choose the smallest capabilities needed, and issue a short-lived
+credential. The `nas_...` token is displayed once; copy it before leaving the
+page. Rotation can overlap an old and new credential, and either a credential
+or the whole account can be revoked independently.
+
+The versioned API advertises the resources available to that credential:
+
+```sh
+curl -H 'Authorization: Bearer nas_REPLACE_WITH_DEMO_TOKEN' \
+  http://localhost:8001/api/v1
+```
+
+Use `na-ssoctl --base-url http://localhost:8001 --token-file <path> ...` for
+bounded user and target listings, bulk preview/apply, reconciliation
+preview/apply, operation status, and audit export. Prefer `--token-file` to
+placing a credential directly in shell history. API responses include a request
+ID and a consistent envelope; supported mutations require an idempotency key.
+See [CONNECTORS.md](CONNECTORS.md) for the connector capability document and
+dry-run/inspection contract exposed by target responses.
+
+## Review unmanaged target accounts
+
+Open **Unmanaged accounts** as Root and start a read-only discovery scan. The
+SSH demo targets will normally report `provisioner`; discovery itself never
+changes a remote system. You can:
+
+- Ignore an expected account and retain that decision across later scans.
+- Adopt an account into NA-SSO without mutating it remotely; the managed record
+  begins in the normal password-change-required state.
+- Review protected exclusions configured for service and break-glass users.
+
+Remote removal is disabled in the demo policy by default. When an operator
+explicitly enables it in a disposable environment, removal still requires
+Root, a short-lived one-use approval token, exact account confirmation, and a
+recovery acknowledgement.
 
 ## What is generated
 
@@ -177,6 +241,27 @@ Useful evaluation flows include:
 5. Delete and restore with a temporary password, complete **CHPW** again, and
    explicitly purge a completed record.
 6. Review administrative and connector events under **Audit**.
+7. Exercise search, lifecycle/target/issue filters, sorting, the dedicated
+   account detail page, and the mobile card inventory.
+8. Select accounts for bulk onboarding assignment, offboarding unassignment,
+   disable, or retry; inspect the no-change preview, then confirm and note the
+   partial-outcome correlation ID.
+9. Upload a CSV with onboard/offboard rows, inspect validation, execute valid
+   rows, download credential-free results, and consume new temporary passwords
+   once.
+10. Open **Reconciliation**, preview a user/target, change a remote mock record
+    or assignment, and approve a correlated repair.
+11. Publish an assignment-profile version, preview it against a user, preserve
+    a direct target as an exception, and add a visible membership override.
+12. Record owner/reason and a temporary lifecycle window, then create and open
+    an access review, send a reminder, and attest a retain or disable decision.
+13. Create a scoped service account, call `/api/v1`, rotate its one-time token,
+    and verify revoked credentials fail without leaking secret material.
+14. Run unmanaged-account discovery, ignore the SSH `provisioner` account, and
+    confirm a second scan remains read-only and preserves that decision.
+15. Enrol two named SSH keys and replace the first with the second; confirm the
+    account history shows the old fingerprint revoked and the SSH target holds
+    exactly one active key.
 
 Mock API user state is in memory and resets whenever `mock-targets` restarts.
 The NA-SSO demo database persists independently, so delete evaluated users

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Bulk onboarding and offboarding{% endblock %}
+{% block nav %}{% with active_nav='users' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
+{% block content %}
+<section class="section container">
+  {% include "_feedback.html" %}
+  <div class="section-head"><div class="section-kicker">// CSV and API workflow</div><h1 class="section-title">Bulk onboarding and offboarding</h1><a class="section-all" href="/users">Users</a></div>
+  <p class="section-desc">Upload a UTF-8 CSV for a no-change validation preview. Execution uses the saved preview and idempotency key, records partial outcomes, and produces downloadable results.</p>
+  <div class="grid-2">
+    <article class="card stack-2">
+      <div class="card-meta">CSV preview</div><h2 class="card-title">Upload accounts</h2>
+      <form method="post" action="/users/bulk/import/preview" enctype="multipart/form-data" class="stack-2">
+        <div class="field"><label class="label" for="csv_file">CSV file</label><input class="input" id="csv_file" name="csv_file" type="file" accept="text/csv,.csv" required><p class="field-hint">Required columns: <code>username</code>, <code>action</code>. Optional: <code>display_name</code>, <code>email</code>, <code>target_ids</code>. Use <code>onboard</code> or <code>offboard</code>; separate target IDs with <code>|</code>. Maximum {{ max_rows }} rows and 1 MiB.</p></div>
+        <button class="btn btn-primary" type="submit">Validate and preview</button>
+      </form>
+    </article>
+    <article class="card stack-2">
+      <div class="card-meta">Safety contract</div><h2 class="card-title">Preview before execution</h2>
+      <div class="data-list"><div class="data-row"><div class="data-key">Onboard</div><div class="data-value">Create or update ordinary accounts and map target assignments.</div></div><div class="data-row"><div class="data-key">Offboard</div><div class="data-value">Unassign and remotely disable the saved target mapping.</div></div><div class="data-row"><div class="data-key">New accounts</div><div class="data-value">Temporary passwords are available through one download, then erased.</div></div><div class="data-row"><div class="data-key">Replay</div><div class="data-value">The same idempotency key returns the original workflow without repeating changes.</div></div></div>
+    </article>
+  </div>
+  <div class="section-head"><div class="section-kicker">// Recent imports</div><h2 class="section-title">Your workflows</h2></div>
+  {% if workflows %}<div class="table-wrap"><table class="table"><thead><tr><th>Created (UTC)</th><th>Source</th><th>Status</th><th>Rows</th><th>Succeeded</th><th>Failed</th><th>Correlation</th></tr></thead><tbody>{% for workflow in workflows %}<tr><td>{{ workflow.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td><td>{{ workflow.source }}</td><td><span class="badge {{ 'badge-shipped' if workflow.status == 'completed' else ('badge-danger' if workflow.status in ['failed','partially_failed'] else 'badge-planned') }}">{{ workflow.status | replace('_',' ') }}</span></td><td>{{ workflow.row_count }}</td><td>{{ workflow.succeeded_count }}</td><td>{{ workflow.failed_count }}</td><td><a href="/users/bulk/import/{{ workflow.id }}">{{ workflow.id[:8] }}</a></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="alert alert-info"><div class="alert-title">No import workflows</div>Upload a CSV to create the first validation preview.</div>{% endif %}
+</section>
+{% endblock %}

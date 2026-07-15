@@ -7,9 +7,6 @@
     <div class="kicker">// Admin access</div>
     <h1 class="section-title">Sign in</h1>
   </div>
-  {% if error %}
-  <div class="alert alert-danger"><div class="alert-title">Sign-in failed</div>{{ error }}</div>
-  {% endif %}
   <form method="post" action="/login" class="stack-3">
     <div class="field">
       <label class="label" for="username">Username</label>

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Unmanaged accounts{% endblock %}
+{% block nav %}{% with active_nav='unmanaged' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
+{% block content %}
+<section class="section">
+  <div class="section-head">
+    <div class="section-kicker">// Read-only discovery</div>
+    <h1 class="section-title">Unmanaged accounts</h1>
+    <p class="section-desc">Find target-local identities that are not assigned to NA-SSO. Discovery never changes a target; every disposition is explicit and audited.</p>
+  </div>
+
+  {% for error in errors %}<div class="alert alert-danger" role="alert"><div class="alert-title">Discovery incomplete</div>{{ error }}</div>{% endfor %}
+  {% if not policy.enabled %}<div class="alert alert-info"><div class="alert-title">Discovery disabled</div>Enable <code>unmanaged_account_policy.enabled</code> in configuration.</div>{% endif %}
+
+  <section class="card">
+    <div class="card-meta">Inventory refresh</div>
+    <h2 class="card-title">Discover without mutation</h2>
+    <form method="post" action="/unmanaged-accounts/discover" class="form-row">
+      <div class="field"><label class="label" for="discovery-target">Target scope</label><select class="input" id="discovery-target" name="target_id"><option value="">All ready targets</option>{% for target in targets %}<option value="{{ target.target_id }}">{{ target.display_name }}</option>{% endfor %}</select></div>
+      <button class="btn btn-primary" type="submit"{% if not policy.enabled %} disabled{% endif %}>Run discovery</button>
+    </form>
+    <p class="field-hint">Configured exclusions and SSH UID &lt; {{ policy.ssh_min_uid }} accounts are omitted. Results are bounded to {{ policy.max_accounts_per_target }} accounts per target.</p>
+  </section>
+
+  <div class="stack-2">
+  {% for row in rows %}
+    <article class="card">
+      <div class="card-meta">{{ row.target_name }} · {{ row.target_type }}</div>
+      <h2 class="card-title">{{ row.username }}</h2>
+      <div class="data-list">
+        <div class="data-row"><div class="data-key">Observation</div><div class="data-value"><span class="badge {{ 'badge-warning' if row.present and row.decision == 'pending' else 'badge-neutral' }}">{{ row.decision|replace('_', ' ') }}</span> · {{ 'present' if row.present else 'no longer observed' }}</div></div>
+        <div class="data-row"><div class="data-key">Profile</div><div class="data-value">{{ row.display_name or 'not reported' }}<small>{{ row.email or 'Email not reported' }}</small></div></div>
+        <div class="data-row"><div class="data-key">Remote state</div><div class="data-value">{{ row.remote_status }}{% if row.remote_uid is not none %}<small>UID {{ row.remote_uid }}</small>{% endif %}</div></div>
+        <div class="data-row"><div class="data-key">Evidence</div><div class="data-value">First seen {{ row.first_seen_at.strftime('%Y-%m-%d %H:%M UTC') }}<small>Last seen {{ row.last_seen_at.strftime('%Y-%m-%d %H:%M UTC') }}</small></div></div>
+      </div>
+      {% if row.present and row.decision in ['pending', 'ignored'] %}
+      <div class="stack-2">
+        <form method="post" action="/unmanaged-accounts/{{ row.id }}/ignore"><button class="btn btn-secondary" type="submit">Ignore account</button></form>
+        <details>
+          <summary>Adopt into NA-SSO</summary>
+          <p>Links the remote identity without changing it. A new local account receives a temporary password and must change it before target synchronization.</p>
+          <form method="post" action="/unmanaged-accounts/{{ row.id }}/adopt" class="stack-2">
+            <div class="field"><label class="label" for="password-{{ row.id }}">Temporary password</label><input class="input" id="password-{{ row.id }}" name="temporary_password" type="password" autocomplete="new-password"></div>
+            <div class="field"><label class="label" for="confirm-{{ row.id }}">Confirm temporary password</label><input class="input" id="confirm-{{ row.id }}" name="confirm_password" type="password" autocomplete="new-password"></div>
+            <button class="btn btn-primary" type="submit">Adopt without remote mutation</button>
+          </form>
+        </details>
+        {% if permissions.roles and policy.allow_removal %}
+        <details class="danger-zone">
+          <summary>Approve remote removal</summary>
+          <p>This saves a one-use approval; it does not delete the account yet. Confirm recovery or backup of anything owned by this identity.</p>
+          <form method="post" action="/unmanaged-accounts/{{ row.id }}/approve-removal" class="stack-2">
+            <div class="field"><label class="label" for="remove-{{ row.id }}">Type {{ row.username }}</label><input class="input" id="remove-{{ row.id }}" name="confirmation" autocomplete="off"></div>
+            <label class="checkbox"><input type="checkbox" name="recovery_acknowledged" value="true"> I verified ownership, dependencies, and recovery needs for this target-local account.</label>
+            <button class="btn btn-danger" type="submit">Approve removal</button>
+          </form>
+        </details>
+        {% endif %}
+      </div>
+      {% elif row.present and row.decision == 'removal_approved' and permissions.roles %}
+      <div class="alert alert-danger"><div class="alert-title">One-use removal approved</div>The saved profile above is the recovery evidence. Recheck dependencies before execution.</div>
+      <form method="post" action="/unmanaged-accounts/{{ row.id }}/execute-removal" class="stack-2">
+        <input type="hidden" name="token" value="{{ row.removal_token }}">
+        <div class="field"><label class="label" for="execute-{{ row.id }}">Type {{ row.username }} again</label><input class="input" id="execute-{{ row.id }}" name="confirmation" autocomplete="off"></div>
+        <button class="btn btn-danger" type="submit">Delete account from {{ row.target_name }}</button>
+      </form>
+      {% endif %}
+    </article>
+  {% else %}<div class="alert alert-info"><div class="alert-title">No observations yet</div>Run read-only discovery against a ready target.</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}

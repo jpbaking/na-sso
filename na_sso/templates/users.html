@@ -1,11 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Users{% endblock %}
-{% block nav %}
-<!-- the page's ONE amber element -->
-<li><a href="/users" class="nav-link active">Users</a></li>
-<li><a href="/status" class="nav-link">Targets</a></li>
-<li><a href="/audit" class="nav-link">Audit</a></li>
-{% endblock %}
+{% block nav %}{% with active_nav='users' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
 {% block content %}
 <section class="section container">
   <div class="section-head">
@@ -13,73 +8,120 @@
     <h1 class="section-title">Users</h1>
     <a class="section-all" href="/users/new">Add user</a>
   </div>
-  {% if users %}
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>Username</th><th>Name</th><th>Status</th><th>Password expires</th>
-          {% for target in targets %}<th>{{ target.display_name }}</th>{% endfor %}<th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for u in users %}
-        {% set states = {} %}
-        {% for s in u.sync_states %}{% if states.update({s.target: s}) %}{% endif %}{% endfor %}
-        <tr>
-          <td>{% if u.desired_action == "delete" %}{{ u.username }}{% else %}<a href="/users/{{ u.id }}">{{ u.username }}</a>{% endif %}</td>
-          <td>{{ u.display_name or "—" }}</td>
-          <td>
-            {% if u.desired_action == "delete" and u.deleted_at %}<span class="badge badge-planned">deleted</span>
-            {% elif u.desired_action == "delete" %}<span class="badge badge-danger">deleting</span>
-            {% elif u.status == "disabled" %}<span class="badge badge-danger">disabled</span>
-            {% elif u.password_decision_kind in ["initial", "reset"] %}<span class="badge badge-planned">CHPW</span>
-            {% else %}<span class="badge badge-live">active</span>{% endif %}
-          </td>
-          <td>{% if u.is_root %}<span class="muted">N/A</span>{% elif u.password_expires_at %}{{ u.password_expires_at.strftime('%Y-%m-%d') }}{% elif u.password_decision_kind in ["initial", "reset"] %}<span class="muted">after CHPW</span>{% else %}<span class="muted">never</span>{% endif %}</td>
-          {% for target in targets %}{% set t = target.target_id %}
-          {% set s = states.get(t) %}
-          {% if u.is_root %}<td><span class="muted">N/A</span></td>{% else %}
-          <td data-sync-cell data-user-id="{{ u.id }}" data-target="{{ t }}">
-            {% if s and s.state == "ok" %}<span class="badge badge-shipped">ok</span>
-            {% elif s and s.state == "failed" %}
-            <span class="badge badge-danger" title="{{ s.detail }}">failed</span>
-            {% if s.next_retry_at %}<small>attempt {{ s.attempt_count }}; auto retry scheduled</small>{% endif %}
-            <form method="post" action="/users/{{ u.id }}/retry/{{ t }}">
-              <button type="submit" class="btn btn-quiet btn-sm">Retry</button>
-            </form>
-            {% elif s and s.state == "chpw" %}<span class="badge badge-planned">CHPW</span>
-            {% elif s and s.state == "awaiting_credentials" %}<span class="badge badge-planned">awaiting credentials</span>
-            {% elif s and (s.state == "unassigned" or not s.assigned) %}<span class="badge badge-planned">unassigned; disabled</span>
-            {% elif s and s.retired %}<span class="badge badge-planned">retired</span>
-            {% else %}<span class="badge badge-planned">not assigned</span>{% endif %}
-          </td>
-          {% endif %}
+
+  <form method="get" action="/users" class="card stack-2" aria-label="Filter users">
+    <div class="grid-3">
+      <div class="field">
+        <label class="label" for="user-search">Search</label>
+        <input class="input" id="user-search" name="q" type="search" value="{{ inventory.params.search }}" placeholder="Username, name or email">
+      </div>
+      <div class="field">
+        <label class="label" for="lifecycle-filter">Lifecycle</label>
+        <select class="select" id="lifecycle-filter" name="lifecycle">
+          {% for value, label in [('all','All'),('active','Active'),('chpw','Password change required'),('expired','Password expired'),('disabled','Disabled'),('deleting','Deleting'),('deleted','Deleted'),('protected','Protected')] %}
+          <option value="{{ value }}"{% if inventory.params.lifecycle == value %} selected{% endif %}>{{ label }}</option>
           {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="target-filter">Assigned target</label>
+        <select class="select" id="target-filter" name="target">
+          <option value="">Any target</option>
+          {% for target in targets %}<option value="{{ target.target_id }}"{% if inventory.params.target == target.target_id %} selected{% endif %}>{{ target.display_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="issues-filter">Issues</label>
+        <select class="select" id="issues-filter" name="issues">
+          {% for value, label in [('all','Any'),('attention','Needs attention'),('retrying','Retry scheduled'),('none','No issues')] %}
+          <option value="{{ value }}"{% if inventory.params.issues == value %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="sort-users">Sort</label>
+        <select class="select" id="sort-users" name="sort">
+          {% for value, label in [('username','Username'),('name','Name'),('lifecycle','Lifecycle'),('coverage','Coverage'),('issues','Issues'),('password','Password')] %}
+          <option value="{{ value }}"{% if inventory.params.sort == value %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label class="label" for="sort-direction">Direction</label>
+        <select class="select" id="sort-direction" name="direction">
+          <option value="asc"{% if inventory.params.direction == 'asc' %} selected{% endif %}>Ascending</option>
+          <option value="desc"{% if inventory.params.direction == 'desc' %} selected{% endif %}>Descending</option>
+        </select>
+      </div>
+    </div>
+    <input type="hidden" name="page" value="1">
+    <input type="hidden" name="per_page" value="{{ inventory.params.per_page }}">
+    <div class="hero-actions">
+      <button class="btn btn-primary btn-sm" type="submit">Apply filters</button>
+      <a class="btn btn-secondary btn-sm" href="/users">Clear</a>
+    </div>
+  </form>
+
+  <div class="data-list" aria-live="polite">
+    <div class="data-row"><div class="data-key">Results</div><div class="data-value">{{ inventory.total }} accounts · page {{ inventory.params.page }} of {{ inventory.pages }}</div></div>
+  </div>
+
+  {% if inventory.items %}
+  <form id="bulk-form" method="post" action="/users/bulk/preview" class="card stack-2">
+    <div class="grid-3">
+      <div class="field"><label class="label" for="bulk-action">Bulk action</label><select class="select" id="bulk-action" name="action" required><option value="">Choose action</option><option value="assign">Assign target (onboard)</option><option value="unassign">Unassign and disable target (offboard)</option><option value="disable">Disable accounts</option><option value="retry">Retry failed targets</option></select></div>
+      <div class="field"><label class="label" for="bulk-target">Target when required</label><select class="select" id="bulk-target" name="target_id"><option value="">All failed targets</option>{% for target in targets %}<option value="{{ target.target_id }}">{{ target.display_name }}</option>{% endfor %}</select></div>
+      <div class="field"><div class="label">Review first</div><button class="btn btn-primary btn-sm" type="submit">Preview bulk action</button><div class="field-hint">Up to 100 selected accounts. No change occurs on preview.</div></div>
+    </div>
+    <div><a href="/users/bulk/import">Use CSV or API bulk onboarding and offboarding</a></div>
+  </form>
+  <div class="table-wrap inventory-desktop">
+    <table class="table">
+      <thead><tr><th><span class="sr-only">Select</span></th><th>User</th><th>Lifecycle</th><th>Target coverage</th><th>Issues</th><th>Password expires</th><th>Actions</th></tr></thead>
+      <tbody>
+      {% for item in inventory.items %}{% set u = item.user %}{% set summary = item.summary %}{% set operation = operation_views.get(u.id) %}
+        <tr>
+          <td><label class="checkbox"><input form="bulk-form" type="checkbox" name="user_ids" value="{{ u.id }}"{% if u.is_root or (u.role != 'user' and not permissions.roles) %} disabled{% endif %}><span class="sr-only">Select {{ u.username }}</span></label></td>
+          <td>{% if u.is_root %}<strong>{{ u.username }}</strong>{% else %}<a href="/users/{{ u.id }}">{{ u.username }}</a>{% endif %}<small>{{ u.display_name or 'No display name' }}{% if u.email %} · {{ u.email }}{% endif %} · {{ role_definition(u.role).label }}</small></td>
           <td>
-            {% if u.desired_action == "delete" %}
-            <form method="post" action="/users/{{ u.id }}/restore">
-              <input type="password" name="password" required placeholder="New password">
-              <button type="submit" class="btn btn-primary btn-sm">Restore</button>
-            </form>
-            {% if u.deleted_at %}<form method="post" action="/users/{{ u.id }}/purge" onsubmit="return confirm('Permanently purge {{ u.username }} locally?')">
-              <button type="submit" class="btn btn-danger btn-sm">Purge</button>
-            </form>{% endif %}
-            {% else %}<form method="post" action="/users/{{ u.id }}/delete"
-                  onsubmit="return confirm('Delete {{ u.username }} everywhere?')">
-              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-            </form>{% endif %}
+            <span class="badge {{ 'badge-danger' if summary.lifecycle in ['disabled','deleting'] else ('badge-planned' if summary.lifecycle in ['chpw','expired','deleted','protected'] else 'badge-live') }}">{{ summary.lifecycle | replace('_',' ') }}</span>
+            {% if u.desired_action == 'delete' and operation and operation.command == 'delete' %}<div data-operation-cell data-user-id="{{ u.id }}" aria-live="polite"><small>{{ operation.completed_targets }} of {{ operation.total_targets }} targets complete · operation {{ operation.id[:8] }}</small>{% if operation.blocking_targets %}<small>Waiting for {{ operation.blocking_targets | join(', ') }}</small>{% endif %}</div>{% endif %}
+          </td>
+          <td>{% if u.is_root %}<span class="muted">N/A</span>{% elif summary.assigned_targets %}{{ summary.healthy_targets }}/{{ summary.assigned_targets }} healthy{% else %}<span class="muted">Local only</span>{% endif %}</td>
+          <td>{% if u.is_root %}<span class="muted">N/A</span>{% elif summary.issue_count %}<span class="badge badge-danger">{{ summary.issue_count }} {{ 'needs' if summary.issue_count == 1 else 'need' }} attention</span>{% else %}<span class="muted">None</span>{% endif %}</td>
+          <td>{% if u.is_root %}<span class="muted">N/A</span>{% elif u.password_expires_at %}{{ u.password_expires_at.strftime('%Y-%m-%d') }}{% elif u.password_decision_kind in ['initial','reset'] %}<span class="muted">after CHPW</span>{% else %}<span class="muted">never</span>{% endif %}</td>
+          <td>
+            {% if u.is_root %}<span class="muted">Protected system account</span>
+            {% elif u.role != 'user' and not permissions.roles %}<a class="btn btn-secondary btn-sm" href="/users/{{ u.id }}">View</a> <span class="muted">Root-managed role</span>
+            {% elif u.desired_action == 'delete' and u.deleted_at %}<a class="btn btn-primary btn-sm" href="/users/{{ u.id }}/restore">Restore</a> <a class="btn btn-danger btn-sm" href="/users/{{ u.id }}/purge">Purge</a>
+            {% elif u.desired_action == 'delete' %}<span class="muted">Deletion must finish before recovery</span>
+            {% else %}<a class="btn btn-secondary btn-sm" href="/users/{{ u.id }}">View</a> <a class="btn btn-danger btn-sm" href="/users/{{ u.id }}/delete">Delete</a>{% endif %}
           </td>
         </tr>
-        {% endfor %}
+      {% endfor %}
       </tbody>
     </table>
   </div>
-  {% else %}
-  <div class="alert alert-info">
-    <div class="alert-title">No users yet</div>
-    Create the first managed account and it will be provisioned to every enabled target.
+
+  <div class="inventory-cards stack-2" role="list">
+    {% for item in inventory.items %}{% set u = item.user %}{% set summary = item.summary %}
+    <article class="card" role="listitem">
+      {% if not u.is_root and (u.role == 'user' or permissions.roles) %}<label class="checkbox"><input form="bulk-form" type="checkbox" name="user_ids" value="{{ u.id }}"> Select {{ u.username }}</label>{% endif %}
+      <div class="card-meta">{{ summary.lifecycle | replace('_',' ') }}</div>
+      <h2 class="card-title">{{ u.username }}</h2>
+      <p class="card-desc">{{ u.display_name or 'No display name' }} · {{ role_definition(u.role).label }}{% if not u.is_root %} · {{ summary.healthy_targets }}/{{ summary.assigned_targets }} assigned targets healthy · {{ summary.issue_count }} issues{% endif %}</p>
+      {% if u.is_root %}<span class="muted">Protected system account</span>{% elif u.role != 'user' and not permissions.roles %}<div class="hero-actions"><a class="btn btn-secondary btn-sm" href="/users/{{ u.id }}">View</a><span class="muted">Root-managed role</span></div>{% elif u.desired_action != 'delete' %}<div class="hero-actions"><a class="btn btn-secondary btn-sm" href="/users/{{ u.id }}">View</a><a class="btn btn-danger btn-sm" href="/users/{{ u.id }}/delete">Delete</a></div>{% elif u.deleted_at %}<div class="hero-actions"><a class="btn btn-primary btn-sm" href="/users/{{ u.id }}/restore">Restore</a><a class="btn btn-danger btn-sm" href="/users/{{ u.id }}/purge">Purge</a></div>{% else %}<span class="muted">Deletion in progress</span>{% endif %}
+    </article>
+    {% endfor %}
   </div>
+
+  <nav class="hero-actions" aria-label="User result pages">
+    {% if inventory.has_previous %}<a class="btn btn-secondary btn-sm" rel="prev" href="{{ inventory.params.url(page=inventory.params.page - 1) }}">Previous</a>{% endif %}
+    <span class="muted">Page {{ inventory.params.page }} of {{ inventory.pages }}</span>
+    {% if inventory.has_next %}<a class="btn btn-secondary btn-sm" rel="next" href="{{ inventory.params.url(page=inventory.params.page + 1) }}">Next</a>{% endif %}
+  </nav>
+  {% else %}
+  <div class="alert alert-info"><div class="alert-title">No matching users</div>Clear or change the filters, or add a managed account.</div>
   {% endif %}
 </section>
 {% endblock %}

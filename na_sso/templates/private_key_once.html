@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Save private key{% endblock %}
 {% block nav %}
+{% with active_nav='' %}{% include "_admin_nav.html" %}{% endwith %}
 <!-- the page's ONE amber element -->
-<li><a href="/account" class="nav-link active">Account</a></li>
+<li><a href="/account" class="nav-link active">My account</a></li>
+<li><a href="/account/password" class="nav-link">Change password</a></li>
+{% if permissions.users or permissions.targets or permissions.audit %}<li><a href="/account/mfa" class="nav-link">MFA</a></li>{% endif %}
 {% endblock %}
 {% block content %}
 <section class="section container-narrow">

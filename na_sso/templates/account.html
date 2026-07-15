@@ -1,8 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Account{% endblock %}
 {% block nav %}
+{% with active_nav='' %}{% include "_admin_nav.html" %}{% endwith %}
 <!-- the page's ONE amber element -->
-<li><a href="/account" class="nav-link active">Account</a></li>
+<li><a href="/account" class="nav-link active">My account</a></li>
+<li><a href="/account/password" class="nav-link">Change password</a></li>
+{% if permissions.users or permissions.targets or permissions.audit %}<li><a href="/account/mfa" class="nav-link">MFA</a></li>{% endif %}
 {% endblock %}
 {% block content %}
 <section class="section container-narrow">
@@ -26,7 +29,7 @@
     </div>
     <div class="data-row">
       <div class="data-key">Role</div>
-      <div class="data-value">{{ account.role }}</div>
+      <div class="data-value">{{ role_info.label }}<small>{{ role_info.description }}</small></div>
     </div>
     <div class="data-row">
       <div class="data-key">Status</div>
@@ -38,11 +41,33 @@
     </div>
     {% if account.role != 'root' %}
     <div class="data-row">
-      <div class="data-key">SSH key</div>
-      <div class="data-value">{{ 'enrolled' if account.has_ssh_key else 'not enrolled' }}</div>
+      <div class="data-key">SSH keys</div>
+      <div class="data-value">{{ (active_ssh_keys|length ~ ' enrolled · ' ~ ssh_fingerprint) if active_ssh_keys and ssh_fingerprint else 'not enrolled' }}</div>
     </div>
     {% endif %}
   </div>
+
+  {% if account.role != 'root' %}
+  <div class="section-head">
+    <div class="section-kicker">// My access</div>
+    <h2 class="section-title">Assigned targets</h2>
+  </div>
+  <div class="stack-2">
+    {% for item in access %}
+    <article class="card">
+      <div class="card-meta">{{ item.type }} · {{ item.credential_mode }}</div>
+      <h3 class="card-title">{{ item.name }}</h3>
+      <p class="card-desc">{{ item.view.presentation.description }}</p>
+      <div class="data-list">
+        <div class="data-row"><div class="data-key">Access state</div><div class="data-value"><span class="badge {{ item.view.presentation.badge_class }}" aria-label="{{ item.view.presentation.label }}. {{ item.view.presentation.description }}">{{ item.view.presentation.label }}</span></div></div>
+        <div class="data-row"><div class="data-key">Sign-in method</div><div class="data-value">{{ item.credential_mode }}</div></div>
+        {% if item.next_retry_at %}<div class="data-row"><div class="data-key">Retry</div><div class="data-value">Automatic retry after {{ item.next_retry_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC</div></div>{% endif %}
+      </div>
+      {% if item.needs_support %}<div class="alert alert-info"><div class="alert-title">Operator help needed</div><div>{{ support.guidance }}</div>{% if support.url %}<a class="btn btn-secondary btn-sm" href="{{ support.url }}">{{ support.label }}</a>{% else %}<div class="field-hint">{{ support.label }}</div>{% endif %}</div>{% endif %}
+    </article>
+    {% else %}<div class="alert alert-info"><div class="alert-title">Local account only</div>No propagation targets are assigned to this account.</div>{% endfor %}
+  </div>
+  {% endif %}
 
   <div class="stack-4">
     <section class="card">
@@ -55,10 +80,23 @@
     {% if account.role != 'root' %}
     <section class="card">
       <div class="card-meta">SSH access</div>
-      <h2 class="card-title">SSH key</h2>
-      <p class="card-desc">Generate an Ed25519 key in this browser. The private key is downloaded directly and is never sent to NA-SSO.</p>
+      <h2 class="card-title">SSH keys</h2>
+      <p class="card-desc">Use separate named keys for each device. Private keys stay in your browser; NA-SSO stores and propagates only public keys.</p>
+      {% if ssh_keys %}
+      <div class="data-list">
+        {% for key in ssh_keys %}
+        <div class="data-row">
+          <div class="data-key">{{ key.name }}<small>{{ key.algorithm|upper }} · enrolled {{ key.enrolled_at.strftime('%Y-%m-%d') }}</small></div>
+          <div class="data-value"><span class="badge {{ 'badge-success' if key.status == 'active' else 'badge-neutral' }}">{{ key.status }}</span> <code>{{ key.fingerprint }}</code><small>Expires {{ key.expires_at.strftime('%Y-%m-%d') if key.expires_at else 'never' }} · Last used: {{ key.last_used_at.strftime('%Y-%m-%d %H:%M UTC') if key.last_used_at else 'not reported by target' }}</small>
+            {% if key.status == 'active' %}<form method="post" action="/account/ssh-key/{{ key.id }}/revoke"><button class="btn btn-danger btn-sm" type="submit">Revoke key</button></form>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}<div class="alert alert-info"><div class="alert-title">No active keys</div>Enrol a key before using a key-enabled SSH target.</div>{% endif %}
+      <p class="card-desc">Generate an Ed25519 key in this browser, save and confirm the private key, then enrol only its public half. For replacement, the old key remains active until the new key reaches its targets.</p>
       <div class="hero-actions">
-        <button class="btn btn-primary" id="generate-key" type="button">Generate in browser</button>
+        <button class="btn btn-primary" id="generate-key" type="button">1. Generate in browser</button>
         {% if fallback_enabled %}
         <form method="post" action="/account/ssh-key/generate">
           <button class="btn btn-secondary" type="submit">Compatibility fallback</button>
@@ -68,9 +106,42 @@
       {% if fallback_enabled %}
       <p class="field-hint">The compatibility fallback handles the key server-side and shows the private key once without persisting it.</p>
       {% endif %}
-      <form id="key-form" method="post" action="/account/ssh-key">
-        <input type="hidden" name="public_key" id="public-key">
-      </form>
+      <div class="stack-2" id="key-handoff" hidden>
+        <div class="data-list">
+          <div class="data-row">
+            <div class="data-key">New key fingerprint</div>
+            <div class="data-value" id="new-key-fingerprint"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label" for="private-key-output">Private key — save this; it will not be sent to NA-SSO</label>
+          <textarea class="input" id="private-key-output" rows="8" readonly></textarea>
+        </div>
+        <button class="btn btn-secondary" id="save-private-key" type="button">2. Save private key file</button>
+        <label class="checkbox"><input id="confirm-private-key" type="checkbox"> I saved the private key file or copied the full value above.</label>
+        <form id="key-form" method="post" action="/account/ssh-key">
+          <input type="hidden" name="public_key" id="public-key">
+          <div class="field"><label class="label" for="key-name">Key name</label><input class="input" id="key-name" name="name" required maxlength="80" value="Personal device"></div>
+          <div class="field"><label class="label" for="key-expiry">Expiry date</label><input class="input" id="key-expiry" name="expires_on" type="date"><div class="field-hint">If omitted, policy uses {{ ssh_key_policy.default_expiry_days ~ ' days' if ssh_key_policy.default_expiry_days else 'no expiry' }}.</div></div>
+          {% if active_ssh_keys %}<div class="field"><label class="label" for="replace-key">Replace an existing key (optional)</label><select class="input" id="replace-key" name="replace_key_id"><option value="">Keep all existing keys</option>{% for key in active_ssh_keys %}<option value="{{ key.id }}">{{ key.name }} — {{ key.fingerprint }}</option>{% endfor %}</select></div>{% endif %}
+          <button class="btn btn-primary" id="enrol-key" type="submit" disabled aria-disabled="true">3. Enrol public key</button>
+        </form>
+      </div>
+      {% if active_ssh_keys %}
+      <details class="danger-zone">
+        <summary>Emergency key removal</summary>
+        <p>Remove every active SSH key if a device or private key may be compromised.</p>
+        <form method="post" action="/account/ssh-keys/emergency-revoke" class="stack-2">
+          <div class="field"><label class="label" for="emergency-password">Current password</label><input class="input" id="emergency-password" name="current_password" type="password" required autocomplete="current-password"></div>
+          <div class="field"><label class="label" for="emergency-confirmation">Type REVOKE ALL KEYS</label><input class="input" id="emergency-confirmation" name="confirmation" required autocomplete="off"></div>
+          <button class="btn btn-danger" type="submit">Revoke all SSH keys</button>
+        </form>
+      </details>
+      {% endif %}
+      <div class="alert alert-danger" id="key-generation-error" role="alert" tabindex="-1" hidden>
+        <div class="alert-title">Browser key generation unavailable</div>
+        <div>Use the compatibility fallback if it is enabled.</div>
+      </div>
     </section>
     {% endif %}
   </div>
@@ -85,6 +156,27 @@ const joinBytes=(...arrays)=>{
   return output;
 };
 const base64=bytes=>btoa(String.fromCharCode(...bytes));
+const handoff=document.getElementById('key-handoff');
+const privateKeyOutput=document.getElementById('private-key-output');
+const savePrivateKey=document.getElementById('save-private-key');
+const confirmPrivateKey=document.getElementById('confirm-private-key');
+const enrolKey=document.getElementById('enrol-key');
+const fingerprint=document.getElementById('new-key-fingerprint');
+const generationError=document.getElementById('key-generation-error');
+let privateKeyUrl='';
+const setEnrolmentGate=()=>{
+  enrolKey.disabled=!confirmPrivateKey.checked;
+  enrolKey.setAttribute('aria-disabled',String(enrolKey.disabled));
+};
+confirmPrivateKey.addEventListener('change',setEnrolmentGate);
+savePrivateKey.addEventListener('click',()=>{
+  if(!privateKeyUrl)return;
+  const link=document.createElement('a');
+  link.href=privateKeyUrl;
+  link.download='na-sso_ed25519';
+  link.click();
+  confirmPrivateKey.focus();
+});
 document.getElementById('generate-key').addEventListener('click',async()=>{
   try{
     const keys=await crypto.subtle.generateKey({name:'Ed25519'},true,['sign','verify']);
@@ -92,18 +184,24 @@ document.getElementById('generate-key').addEventListener('click',async()=>{
     const label=new TextEncoder().encode('ssh-ed25519');
     const blob=joinBytes(uint32(label.length),label,uint32(raw.length),raw);
     document.getElementById('public-key').value='ssh-ed25519 '+base64(blob);
+    const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',blob));
+    fingerprint.textContent='SHA256:'+base64(digest).replace(/=+$/,'');
     const pkcs8=new Uint8Array(await crypto.subtle.exportKey('pkcs8',keys.privateKey));
     const pem='-----BEGIN PRIVATE KEY-----\n'+base64(pkcs8).match(/.{1,64}/g).join('\n')+'\n-----END PRIVATE KEY-----\n';
-    const link=document.createElement('a');
-    link.href=URL.createObjectURL(new Blob([pem],{type:'application/x-pem-file'}));
-    link.download='na-sso_ed25519';
-    link.click();
-    URL.revokeObjectURL(link.href);
-    document.getElementById('key-form').submit();
+    if(privateKeyUrl)URL.revokeObjectURL(privateKeyUrl);
+    privateKeyUrl=URL.createObjectURL(new Blob([pem],{type:'application/x-pem-file'}));
+    privateKeyOutput.value=pem;
+    confirmPrivateKey.checked=false;
+    setEnrolmentGate();
+    handoff.hidden=false;
+    generationError.hidden=true;
+    savePrivateKey.focus();
   }catch(error){
-    alert('Browser key generation is unavailable; use the compatibility fallback if enabled.');
+    generationError.hidden=false;
+    generationError.focus();
   }
 });
+window.addEventListener('pagehide',()=>{if(privateKeyUrl)URL.revokeObjectURL(privateKeyUrl);});
 </script>
 {% endif %}
 {% endblock %}

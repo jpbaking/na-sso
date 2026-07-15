@@ -16,6 +16,17 @@
   "use strict";
 
   /* ---------------- Modal ---------------- */
+  var modalFocusable = [
+    "a[href]", "button:not([disabled])", "input:not([disabled]):not([type='hidden'])",
+    "select:not([disabled])", "textarea:not([disabled])", "[tabindex]:not([tabindex='-1'])"
+  ].join(",");
+
+  function visibleModalControls(dlg) {
+    return Array.prototype.slice.call(dlg.querySelectorAll(modalFocusable)).filter(function (item) {
+      return item.getClientRects().length && window.getComputedStyle(item).visibility !== "hidden";
+    });
+  }
+
   function initModals() {
     document.querySelectorAll("[data-modal-open]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -30,6 +41,26 @@
       /* Click on the backdrop (the dialog element itself) closes it. */
       dlg.addEventListener("click", function (e) {
         if (e.target === dlg) dlg.close();
+      });
+      /* Chromium can move focus to the document after the final dialog control.
+         Keep keyboard navigation within the active modal in both directions. */
+      dlg.addEventListener("keydown", function (e) {
+        if (e.key !== "Tab" || !dlg.open) return;
+        var controls = visibleModalControls(dlg);
+        if (!controls.length) {
+          e.preventDefault();
+          dlg.focus();
+          return;
+        }
+        var first = controls[0];
+        var last = controls[controls.length - 1];
+        if (e.shiftKey && (document.activeElement === first || !dlg.contains(document.activeElement))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (document.activeElement === last || !dlg.contains(document.activeElement))) {
+          e.preventDefault();
+          first.focus();
+        }
       });
     });
   }

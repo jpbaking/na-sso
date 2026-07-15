@@ -1,0 +1,16 @@
+{% if feedback or error %}
+<section class="section container-narrow" aria-label="Action feedback">
+  {% if feedback %}
+  <div class="alert alert-{{ feedback.level }}" role="status" tabindex="-1" data-feedback>
+    <div class="alert-title">{{ feedback.title }}</div>
+    <div>{{ feedback.message }}</div>
+  </div>
+  {% endif %}
+  {% if error %}
+  <div class="alert alert-danger" id="error-summary" role="alert" tabindex="-1" data-error-summary>
+    <div class="alert-title">{{ error_title | default('Not saved') }}</div>
+    <div>{{ error }}</div>
+  </div>
+  {% endif %}
+</section>
+{% endif %}

@@ -21,6 +21,22 @@ tracked independently, so a partial outage stays visible and recoverable.
 - Recover automatically with persistent capped exponential backoff, or retry
   an individual target immediately.
 - Keep an audit trail of administrative actions and connector results.
+- Compare desired assignments, profile, status, groups/roles, and SSH key
+  fingerprints with read-only target state, then explicitly approve repair.
+- Manage separate named SSH keys per device with add-before-revoke rotation,
+  expiry, individual revocation, and password-confirmed emergency removal.
+- Reuse immutable assignment-profile versions while preserving visible
+  per-user target and membership exceptions.
+- Preview and replay-safe execute CSV/API onboarding and offboarding with
+  downloadable partial outcomes.
+- Record account ownership and purpose, schedule temporary-access transitions,
+  and run attested access reviews with reminders.
+- Automate bounded user, target-health, operation, reconciliation, bulk, and
+  audit workflows through a versioned, rate-limited, idempotent API.
+- Use scoped, expiring, independently revocable service-account credentials and
+  `na-ssoctl` for scripted preview/apply/status/export workflows.
+- Discover target-local accounts without mutation, then explicitly adopt,
+  persistently ignore, or Root-approve a guarded one-use removal.
 
 ## Security by design
 
@@ -82,6 +98,10 @@ Prepare configuration, target permissions, backups, and normal operations:
 Understand the implementation, synchronization model, and engineering workflow:
 
 **[Developer guide](docs/DEVELOPER.md)**
+
+Extend target support against the versioned capability and conformance rules:
+
+**[Connector contract](docs/CONNECTORS.md)**
 
 NA-SSO is intentionally not SSO. It is a practical control plane for
 environments where important systems still own local users and those accounts

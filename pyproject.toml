@@ -16,13 +16,19 @@ dependencies = [
     "pydantic-settings>=2.3",
     "pyyaml>=6.0",
     "asyncssh>=2.21",
+    "webauthn>=3.0,<4",
 ]
+
+[project.scripts]
+na-ssoctl = "na_sso.cli:main"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
     "respx>=0.21",
+    "httpx2>=2.7,<3",
+    "ruff>=0.15,<1",
 ]
 
 [build-system]

@@ -25,7 +25,8 @@ Owns detailed operator guidance under `docs/`. Product positioning remains in th
 
 - **Demo guide** — Evaluates the complete application with isolated mock API and SSH targets. Start: `DEMO.md`.
 - **Developer guide** — Explains code ownership, internal architecture, synchronization state, and engineering verification. Start: `DEVELOPER.md`.
-- **Next-phase product plan** — Records the hands-on admin/user UX audit, confirmed issues, prioritized remediation, and feature-expansion roadmap. Start: `NEXT-PHASE.md`.
+- **Connector extension contract** — Defines the versioned adapter interface, machine-readable capabilities, read-only discovery/dry-run rules, error taxonomy, timeouts, security boundaries, and conformance workflow. Start: `CONNECTORS.md`.
+- **Next-phase delivery record** — Preserves the admin/user UX audit and feature roadmap, and maps every confirmed issue and prioritised expansion to its delivered implementation and evidence. Start: `NEXT-PHASE.md`.
 - **Production guide** — Configures, secures, validates, operates, and backs up the normal runtime. Start: `PRODUCTION.md`.
 
 ## Child DOX Index

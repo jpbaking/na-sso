@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Notifications{% endblock %}
+{% block nav %}{% with active_nav='notifications' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
+{% block content %}
+<section class="section container">
+  <div class="section-head"><div class="section-kicker">// Outbound operations</div><h1 class="section-title">Notifications</h1></div>
+  <p class="section-desc">{{ 'Delivery is enabled' if policy.enabled else 'Delivery is disabled by policy' }}. Payloads contain an allowlisted event summary, never passwords, keys, connector detail, or endpoint secrets.</p>
+  <div class="stack-2">
+  {% for endpoint in policy.endpoints %}{% set state = states.get(endpoint.id) %}{% set active = endpoint.enabled and not (state and state.disabled) %}
+    <article class="card stack-2">
+      <div class="card-meta">{{ endpoint.id }} · <span class="badge {{ 'badge-live' if active else 'badge-planned' }}">{{ 'enabled' if active else 'disabled' }}</span></div>
+      <h2 class="card-title">{{ endpoint.url }}</h2>
+      <p class="card-desc">{{ endpoint.events | join(', ') }}</p>
+      <div class="data-list"><div class="data-row"><div class="data-key">Signing</div><div class="data-value">HMAC-SHA256 · secret write-only</div></div>{% if state %}<div class="data-row"><div class="data-key">Last control change</div><div class="data-value">{{ state.updated_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC · {{ state.updated_by }}</div></div>{% endif %}</div>
+      {% if endpoint.enabled %}<form method="post" action="/notifications/endpoints/{{ endpoint.id }}/toggle"><input type="hidden" name="enabled" value="{{ 'false' if active else 'true' }}"><button class="btn {{ 'btn-danger' if active else 'btn-primary' }}" type="submit">{{ 'Disable destination' if active else 'Enable destination' }}</button></form>{% else %}<p class="muted">Disabled by YAML configuration.</p>{% endif %}
+    </article>
+  {% else %}<div class="alert alert-info"><div class="alert-title">No destinations configured</div>Add signed webhook endpoints in <code>notification_policy.endpoints</code>.</div>{% endfor %}
+  </div>
+
+  <div class="section-head"><div class="section-kicker">// Durable queue</div><h2 class="section-title">Recent deliveries</h2></div>
+  {% if deliveries %}<div class="table-wrap inventory-desktop"><table class="table"><thead><tr><th>Created (UTC)</th><th>Destination</th><th>Event</th><th>Status</th><th>Attempts</th><th>Safe error</th><th>Action</th></tr></thead><tbody>{% for delivery in deliveries %}<tr><td>{{ delivery.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td><td>{{ delivery.endpoint_id }}</td><td>{{ delivery.event_type }}</td><td><span class="badge {{ 'badge-shipped' if delivery.status == 'delivered' else ('badge-danger' if delivery.status == 'failed' else 'badge-planned') }}">{{ delivery.status }}</span></td><td>{{ delivery.attempt_count }}</td><td>{{ delivery.last_error or '—' }}</td><td>{% if delivery.status in ['failed','disabled'] %}<form method="post" action="/notifications/deliveries/{{ delivery.id }}/retry"><button class="btn btn-secondary btn-sm" type="submit">Retry</button></form>{% else %}<span class="muted">—</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+  <div class="inventory-cards stack-2" role="list">{% for delivery in deliveries %}<article class="card" role="listitem"><div class="card-meta">{{ delivery.created_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC · {{ delivery.status }}</div><h3 class="card-title">{{ delivery.event_type }}</h3><p class="card-desc">{{ delivery.endpoint_id }} · attempt {{ delivery.attempt_count }}{% if delivery.last_error %} · {{ delivery.last_error }}{% endif %}</p>{% if delivery.status in ['failed','disabled'] %}<form method="post" action="/notifications/deliveries/{{ delivery.id }}/retry"><button class="btn btn-secondary btn-sm" type="submit">Retry delivery</button></form>{% endif %}</article>{% endfor %}</div>
+  {% else %}<div class="alert alert-info"><div class="alert-title">No delivery records</div>Matching events will appear here after they are queued.</div>{% endif %}
+</section>
+{% endblock %}

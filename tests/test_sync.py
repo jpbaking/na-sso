@@ -1,5 +1,10 @@
 from na_sso.connectors.base import Connector, SyncResult
-from na_sso.models import ManagedUser
+from na_sso.models import (
+    LifecycleOperation,
+    ManagedUser,
+    OperationTargetAttempt,
+    SyncState,
+)
 from na_sso.security import encrypt_secret
 
 
@@ -66,6 +71,7 @@ async def test_sync_partial_failure_keeps_secret_and_retry_succeeds(client, monk
     good = StubConnector("opnsense")
     flaky = StubConnector("nexus", ok=False)
     monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [good, flaky])
+    monkeypatch.setattr("na_sso.status.get_connectors", lambda: [good, flaky])
     user_id = _stored_user()
 
     from na_sso.sync import sync_user
@@ -80,6 +86,16 @@ async def test_sync_partial_failure_keeps_secret_and_retry_succeeds(client, monk
             "opnsense": "ok",
             "nexus": "failed",
         }
+        operation_id = next(
+            state.operation_id for state in user.sync_states if state.target == "nexus"
+        )
+        assert db.get(LifecycleOperation, operation_id).status == "partially_failed"
+    from na_sso.status import sync_snapshot
+    progress = next(item for item in sync_snapshot()["users"] if item["id"] == user_id)
+    assert progress["operation"]["id"] == operation_id
+    assert progress["operation"]["completed_targets"] == 2
+    assert progress["operation"]["failed_targets"] == 1
+    assert progress["operation"]["blocking_targets"] == ["nexus"]
 
     flaky.ok = True
     await sync_user(user_id, target="nexus")
@@ -87,6 +103,16 @@ async def test_sync_partial_failure_keeps_secret_and_retry_succeeds(client, monk
         user = db.get(ManagedUser, user_id)
         assert user.pending_secret is None
         assert all(state.state == "ok" for state in user.sync_states)
+        assert all(state.operation_id == operation_id for state in user.sync_states)
+        operation = db.get(LifecycleOperation, operation_id)
+        assert operation.status == "succeeded"
+        attempts = db.query(OperationTargetAttempt).filter_by(
+            operation_id=operation_id, target="nexus"
+        ).order_by(OperationTargetAttempt.attempt_number).all()
+        assert [attempt.attempt_number for attempt in attempts] == [1, 2]
+    completed = next(item for item in sync_snapshot()["users"] if item["id"] == user_id)
+    assert completed["operation"]["status"] == "succeeded"
+    assert completed["operation"]["blocking_targets"] == []
 
 
 async def test_sync_disable_and_delete(client, monkeypatch):
@@ -109,6 +135,196 @@ async def test_sync_disable_and_delete(client, monkeypatch):
         user = db.get(ManagedUser, user_id)
         assert user is not None and user.deleted_at is not None
     assert connector.calls[-1] == ("delete", "syncme")
+
+
+async def test_delete_overrides_chpw_and_reaches_terminal_state(client, monkeypatch):
+    connector = StubConnector("nextcloud")
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [connector])
+    user_id = _stored_user()
+    from na_sso.db import get_session
+    from na_sso.sync import sync_user
+
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        user.desired_action = "delete"
+        user.password_decision_required = True
+        user.password_decision_kind = "reset"
+        db.add(SyncState(
+            user=user,
+            target="nextcloud",
+            target_type="nextcloud",
+            assigned=True,
+            state="chpw",
+        ))
+        db.commit()
+
+    operation_id = await sync_user(user_id, action="delete")
+
+    assert connector.calls == [("delete", "syncme")]
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        state = user.sync_states[0]
+        operation = db.get(LifecycleOperation, operation_id)
+        assert user.deleted_at is not None
+        assert state.state == "ok"
+        assert operation.status == "succeeded"
+        assert operation.completed_targets == 1 and operation.failed_targets == 0
+
+
+def test_restore_is_rejected_until_delete_is_terminal(admin_client):
+    from na_sso.db import get_session
+    from na_sso.security import verify_password
+
+    admin_client.post("/users/new", data={
+        "username": "restore-race",
+        "display_name": "Restore Race",
+        "email": "",
+        "password": "V4lid!Copper-Zebra-2026",
+    })
+    with get_session() as db:
+        user = db.query(ManagedUser).filter_by(username="restore-race").one()
+        user.desired_action = "delete"
+        user.deletion_requested_at = user.created_at
+        user.deleted_at = None
+        original_hash = user.password_hash
+        db.commit()
+        user_id = user.id
+
+    page = admin_client.get("/users")
+    assert f'action="/users/{user_id}/restore"' not in page.text
+    assert "Deletion must finish before recovery" in page.text
+
+    response = admin_client.post(
+        f"/users/{user_id}/restore",
+        data={"password": "N3w!Marble-Quartz-2027"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        assert user.desired_action == "delete" and user.deleted_at is None
+        assert user.password_hash == original_hash
+        assert not verify_password("N3w!Marble-Quartz-2027", user.password_hash)
+
+    feedback = admin_client.get("/users")
+    assert "Restore unavailable" in feedback.text
+    assert "only after remote deletion completes" in feedback.text
+
+
+def test_completed_delete_restores_to_chpw_without_recreating_remote_account(
+    admin_client, monkeypatch
+):
+    connector = StubConnector("nextcloud")
+    monkeypatch.setattr("na_sso.users.get_connectors", lambda: [connector])
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [connector])
+    monkeypatch.setattr("na_sso.connectors.get_connectors", lambda: [connector])
+    from na_sso.db import get_session
+
+    response = admin_client.post("/users/new", data={
+        "username": "restore-terminal",
+        "display_name": "Terminal Restore",
+        "email": "",
+        "password": "V4lid!Copper-Zebra-2026",
+        "target_ids": "nextcloud",
+    })
+    assert response.status_code == 200
+    with get_session() as db:
+        user = db.query(ManagedUser).filter_by(username="restore-terminal").one()
+        user_id = user.id
+        assert user.sync_states[0].state == "chpw"
+    assert connector.calls == []
+
+    admin_client.post(f"/users/{user_id}/delete")
+    assert connector.calls == [("delete", "restore-terminal")]
+
+    admin_client.post(
+        f"/users/{user_id}/restore",
+        data={"password": "N3w!Marble-Quartz-2027"},
+    )
+
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        operation = (
+            db.query(LifecycleOperation)
+            .filter_by(user_id=user_id, command="restore")
+            .order_by(LifecycleOperation.created_at.desc())
+            .first()
+        )
+        assert user.desired_action == "ensure" and user.deleted_at is None
+        assert user.sync_states[0].state == "chpw"
+        assert operation is not None and operation.status == "succeeded"
+        assert user.active_operation_id is None
+    assert connector.calls == [("delete", "restore-terminal")]
+
+
+def test_update_is_rejected_while_operation_is_running(admin_client):
+    from na_sso.db import get_session
+    from na_sso.lifecycle import LifecycleCommand
+    from na_sso.operations import create_operation, start_operation
+
+    admin_client.post("/users/new", data={
+        "username": "busy-user",
+        "display_name": "Before",
+        "email": "",
+        "password": "V4lid!Copper-Zebra-2026",
+    })
+    with get_session() as db:
+        user = db.query(ManagedUser).filter_by(username="busy-user").one()
+        operation = create_operation(db, user, LifecycleCommand.UPDATE, "system")
+        start_operation(operation, 1)
+        db.commit()
+        user_id = user.id
+
+    response = admin_client.post(
+        f"/users/{user_id}",
+        data={"display_name": "After", "email": "", "password": "", "status": "active"},
+    )
+
+    assert response.status_code == 409
+    assert "another lifecycle operation is running" in response.text
+    with get_session() as db:
+        assert db.get(ManagedUser, user_id).display_name == "Before"
+
+
+def test_users_html_and_sse_share_unassigned_state_presentation(admin_client, monkeypatch):
+    connector = StubConnector("nextcloud")
+    monkeypatch.setattr("na_sso.users.get_connectors", lambda: [connector])
+    monkeypatch.setattr("na_sso.status.get_connectors", lambda: [connector])
+    from na_sso.db import get_session
+    from na_sso.status import sync_snapshot
+
+    with get_session() as db:
+        user = ManagedUser(username="unassigned-view", display_name="Unassigned")
+        db.add(user)
+        db.flush()
+        db.add(SyncState(
+            user=user,
+            target="nextcloud",
+            target_type="nextcloud",
+            assigned=False,
+            state="unassigned",
+            detail="saved",
+        ))
+        not_assigned = ManagedUser(username="not-assigned-view", display_name="Never Assigned")
+        db.add(not_assigned)
+        db.commit()
+        user_id = user.id
+        not_assigned_id = not_assigned.id
+
+    assigned_page = admin_client.get(f"/users/{user_id}")
+    unassigned_page = admin_client.get(f"/users/{not_assigned_id}")
+    snapshot = next(item for item in sync_snapshot()["users"] if item["id"] == user_id)
+    not_assigned_snapshot = next(
+        item for item in sync_snapshot()["users"] if item["id"] == not_assigned_id
+    )
+
+    assert "Unassigned; disabled" in assigned_page.text
+    assert "Not assigned" in unassigned_page.text
+    assert snapshot["states"]["nextcloud"]["state"] == "unassigned"
+    assert snapshot["states"]["nextcloud"]["presentation"]["label"] == "Unassigned; disabled"
+    assert not_assigned_snapshot["states"]["nextcloud"]["state"] == "not_assigned"
+    assert not_assigned_snapshot["states"]["nextcloud"]["presentation"]["label"] == "Not assigned"
 
 
 async def test_failed_delete_schedules_and_retries_delete(client, monkeypatch):

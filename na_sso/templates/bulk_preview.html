@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Preview bulk action{% endblock %}
+{% block nav %}{% with active_nav='users' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
+{% block content %}
+<section class="section container-narrow">
+  <div class="section-head"><div class="section-kicker">// Confirmation</div><h1 class="section-title">Preview bulk action</h1></div>
+  <div class="alert alert-info">
+    <div class="alert-title">{{ action_label }}</div>
+    <div>{{ users | length }} eligible account(s){% if target %} · {{ target.display_name }}{% endif %}. {% if excluded %}{{ excluded }} missing or protected selection(s) will be reported as failures. {% endif %}No changes have been made.</div>
+  </div>
+  <div class="data-list">
+    {% for user in users %}<div class="data-row"><div class="data-key">{{ user.username }}</div><div class="data-value">{{ user.display_name or 'No display name' }}</div></div>{% endfor %}
+  </div>
+  <form method="post" action="/users/bulk/execute" class="stack-3">
+    {% for user_id in selected_ids %}<input type="hidden" name="user_ids" value="{{ user_id }}">{% endfor %}
+    <input type="hidden" name="action" value="{{ action }}">
+    <input type="hidden" name="target_id" value="{{ target_id }}">
+    <input type="hidden" name="replay_token" value="{{ replay_token }}">
+    <div class="hero-actions">
+      <button class="btn btn-primary" type="submit"{% if error %} disabled aria-disabled="true"{% endif %}>Confirm {{ action_label | lower }}</button>
+      <a class="btn btn-secondary" href="/users">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

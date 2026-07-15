@@ -1,26 +1,19 @@
 {% extends "base.html" %}
 {% block title %}{{ user.username if user else "New user" }}{% endblock %}
-{% block nav %}
-<!-- the page's ONE amber element -->
-<li><a href="/users" class="nav-link active">Users</a></li>
-<li><a href="/status" class="nav-link">Targets</a></li>
-<li><a href="/audit" class="nav-link">Audit</a></li>
-{% endblock %}
+{% block nav %}{% with active_nav='users' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
 {% block content %}
 <section class="section container-narrow">
   <div class="section-head">
     <div class="section-kicker">// {{ "Edit account" if user else "New account" }}</div>
     <h1 class="section-title">{{ user.username if user else "Add user" }}</h1>
   </div>
-  {% if error %}
-  <div class="alert alert-danger"><div class="alert-title">Not saved</div>{{ error }}</div>
-  {% endif %}
   <form method="post" action="{{ '/users/' ~ user.id if user else '/users/new' }}" class="stack-3">
     {% if not user %}
     <div class="field">
       <label class="label" for="username">Username</label>
       <input class="input" id="username" name="username" required maxlength="64"
-             pattern="[a-z0-9](?:[a-z0-9_.-]*[a-z0-9])?"
+             pattern="[a-z0-9](?:[a-z0-9_.\-]*[a-z0-9])?"
+             value="{{ form_values.get('username', '') }}"
              autocapitalize="none" spellcheck="false">
       <div class="field-hint">Lowercase letters, digits, underscores, dots and hyphens. Separators cannot be first or last. Used on every target.</div>
     </div>
@@ -28,17 +21,18 @@
     <div class="field">
       <label class="label" for="display_name">Display name</label>
       <input class="input" id="display_name" name="display_name"
-             value="{{ user.display_name if user else '' }}">
+             value="{{ form_values.get('display_name', user.display_name if user else '') }}">
     </div>
     <div class="field">
       <label class="label" for="email">Email</label>
       <input class="input" id="email" name="email" type="email"
-             value="{{ user.email if user else '' }}">
+             value="{{ form_values.get('email', user.email if user else '') }}">
     </div>
     <div class="field">
       <label class="label" for="password">{{ "New password (leave blank to keep)" if user else "Password" }}</label>
       <input class="input" id="password" name="password" type="password" {{ '' if user else 'required' }}>
       <input id="password-generated" name="password_generated" type="hidden" value="false">
+      <input id="credential-handoff-confirmed" name="credential_handoff_confirmed" type="hidden" value="false">
       <button class="btn btn-secondary btn-sm" type="button" id="generate-password">Generate</button>
       <div class="field-hint">Password history is checked securely when you submit.</div>
       <div class="data-list" id="password-checks" aria-live="polite"></div>
@@ -50,7 +44,7 @@
     <div class="field">
       <div class="label">Target assignments</div>
       <div class="hero-actions"><button class="btn btn-quiet btn-sm" type="button" id="select-all">Select all</button><button class="btn btn-quiet btn-sm" type="button" id="select-none">Unselect all</button></div>
-      {% set assigned = user.sync_states | selectattr('assigned') | map(attribute='target') | list if user else [] %}
+      {% set assigned = form_values.get('target_ids') if form_values.get('target_ids') is not none else (user.sync_states | selectattr('assigned') | map(attribute='target') | list if user else []) %}
       {% for target in targets %}
       <label class="checkbox"><input type="checkbox" name="target_ids" value="{{ target.target_id }}" {{ 'checked' if target.target_id in assigned else '' }}> {{ target.display_name }} <span class="muted">({{ target.target_type }})</span></label>
       {% else %}<div class="field-hint">No active targets are configured. New users remain local-only.</div>{% endfor %}
@@ -65,8 +59,17 @@
       </select>
     </div>
     {% endif %}
+    {% if permissions.roles %}
+    <div class="field">
+      <label class="label" for="role">Access role</label>
+      <select class="select" id="role" name="role">
+        {% for option in assignable_roles %}<option value="{{ option.value }}"{% if form_values.get('role', user.role if user else 'user') == option.value %} selected{% endif %}>{{ option.label }} — {{ option.description }}</option>{% endfor %}
+      </select>
+      <div class="field-hint">Only the protected root security administrator can assign scoped operator roles.</div>
+    </div>
+    {% endif %}
     <div class="hero-actions">
-      <button type="submit" class="btn btn-primary">{{ "Save changes" if user else "Create user" }}</button>
+      <button type="submit" class="btn btn-primary" id="user-submit">{{ "Save changes" if user else "Create user" }}</button>
       <a href="/users" class="btn btn-secondary">Cancel</a>
     </div>
   </form>
@@ -88,11 +91,13 @@
     <button class="modal-close" type="button" data-modal-close aria-label="Close">Close</button>
   </div>
   <div class="modal-body stack-2">
+    <label class="label" for="generated-password-value">Full generated password</label>
     <div class="result-row">
-      <code class="result-link" id="generated-password-preview"></code>
+      <input class="input" id="generated-password-value" type="password" readonly aria-describedby="generated-password-guidance">
+      <button class="copy-btn" id="reveal-generated-password" type="button">Show</button>
       <button class="copy-btn" id="copy-generated-password" type="button">Copy</button>
     </div>
-    <div class="alert alert-info">
+    <div class="alert alert-info" id="generated-password-guidance">
       <div class="stack-1">
         <div class="alert-title">Copy this password now</div>
         <div>The full password will not be shown again after this window is closed.</div>
@@ -100,13 +105,15 @@
     </div>
   </div>
   <div class="modal-foot">
-    <button class="btn btn-primary" type="button" data-modal-close>I have copied it</button>
+    <button class="btn btn-primary" id="confirm-password-handoff" type="button">I saved this password</button>
   </div>
 </dialog>
 <script src="/design/components.js"></script>
 <script>
 const password=document.getElementById('password');
 const passwordGenerated=document.getElementById('password-generated');
+const credentialHandoffConfirmed=document.getElementById('credential-handoff-confirmed');
+const userSubmit=document.getElementById('user-submit');
 const confirmPasswordField=document.getElementById('confirm-password-field');
 const confirmPassword=document.getElementById('confirm-password');
 const boxes=[...document.querySelectorAll('input[name="target_ids"]')];
@@ -116,20 +123,37 @@ const policy={{ password_policy.model_dump() | tojson }};
 function randomPassword(){const chars='abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789-_.!@#%+';const length=Math.max(20,policy.min_length);const bytes=crypto.getRandomValues(new Uint8Array(length-4));return [...bytes].map(x=>chars[x%chars.length]).join('')+'aA1!'}
 function checks(){const value=password.value;const rows=[['Minimum length',value.length>=policy.min_length],['Lowercase',!policy.require_lowercase||/[a-z]/.test(value)],['Uppercase',!policy.require_uppercase||/[A-Z]/.test(value)],['Digit',!policy.require_digit||/\d/.test(value)],['Symbol',!policy.require_symbol||/[^A-Za-z0-9]/.test(value)]];document.getElementById('password-checks').innerHTML=rows.map(([label,ok])=>`<div class="data-row"><div class="data-key">${label}</div><div class="data-value">${ok?'passed':'not yet'}</div></div>`).join('')}
 const generatedPasswordModal=document.getElementById('generated-password-modal');
-const generatedPasswordPreview=document.getElementById('generated-password-preview');
+const generatedPasswordValue=document.getElementById('generated-password-value');
+const revealGeneratedPassword=document.getElementById('reveal-generated-password');
 const copyGeneratedPassword=document.getElementById('copy-generated-password');
+const confirmPasswordHandoff=document.getElementById('confirm-password-handoff');
 let generatedPassword='';
+const syncHandoffGate=()=>{
+  const blocked=passwordGenerated.value==='true'&&credentialHandoffConfirmed.value!=='true';
+  userSubmit.disabled=blocked;
+  userSubmit.setAttribute('aria-disabled',String(blocked));
+};
 document.getElementById('generate-password').onclick=()=>{
   generatedPassword=randomPassword();
   password.value=generatedPassword;
   passwordGenerated.value='true';
+  credentialHandoffConfirmed.value='false';
   confirmPasswordField.hidden=true;
   confirmPassword.required=false;
   confirmPassword.value='';
-  generatedPasswordPreview.textContent=`${generatedPassword.slice(0,8)}…${generatedPassword.slice(-4)}`;
+  generatedPasswordValue.type='password';
+  generatedPasswordValue.value=generatedPassword;
+  revealGeneratedPassword.textContent='Show';
   copyGeneratedPassword.textContent='Copy';
   checks();
+  syncHandoffGate();
   generatedPasswordModal.showModal();
+};
+revealGeneratedPassword.onclick=()=>{
+  const reveal=generatedPasswordValue.type==='password';
+  generatedPasswordValue.type=reveal?'text':'password';
+  revealGeneratedPassword.textContent=reveal?'Hide':'Show';
+  if(reveal){generatedPasswordValue.focus();generatedPasswordValue.select();}
 };
 copyGeneratedPassword.onclick=async()=>{
   if(!generatedPassword)return;
@@ -137,20 +161,41 @@ copyGeneratedPassword.onclick=async()=>{
     await navigator.clipboard.writeText(generatedPassword);
     copyGeneratedPassword.textContent='Copied';
   }catch(error){
-    copyGeneratedPassword.textContent='Copy failed';
+    generatedPasswordValue.type='text';
+    generatedPasswordValue.focus();
+    generatedPasswordValue.select();
+    copyGeneratedPassword.textContent='Select and copy';
   }
 };
+confirmPasswordHandoff.onclick=()=>{
+  if(!generatedPassword)return;
+  credentialHandoffConfirmed.value='true';
+  syncHandoffGate();
+  generatedPasswordModal.close();
+};
 generatedPasswordModal.addEventListener('close',()=>{
+  if(credentialHandoffConfirmed.value!=='true'){
+    password.value='';
+    passwordGenerated.value='false';
+    confirmPasswordField.hidden=true;
+    confirmPassword.required=false;
+    checks();
+  }
   generatedPassword='';
-  generatedPasswordPreview.textContent='';
+  generatedPasswordValue.value='';
+  generatedPasswordValue.type='password';
   copyGeneratedPassword.textContent='Copy';
+  syncHandoffGate();
 });
 password.addEventListener('input',()=>{
   passwordGenerated.value='false';
+  credentialHandoffConfirmed.value='false';
   confirmPasswordField.hidden=password.value.length===0;
   confirmPassword.required=password.value.length>0;
   checks();
+  syncHandoffGate();
 });
 checks();
+syncHandoffGate();
 </script>
 {% endblock %}

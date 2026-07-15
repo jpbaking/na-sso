@@ -1,0 +1,77 @@
+/* NA-SSO shell adaptations that are not part of the copied design kit. */
+.inventory-cards {
+  display: none;
+}
+
+.mobile-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .nav {
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: var(--space-2);
+    padding-block: var(--space-2);
+  }
+
+  .desktop-nav {
+    display: none;
+  }
+
+  .mobile-nav {
+    display: block;
+    margin-left: auto;
+    position: relative;
+  }
+
+  .mobile-nav > summary {
+    list-style: none;
+  }
+
+  .mobile-nav > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .mobile-nav-links {
+    align-items: stretch;
+    background: var(--base);
+    border: var(--border);
+    flex-direction: column;
+    padding: var(--space-2);
+    position: absolute;
+    right: 0;
+    top: 100%;
+    width: max-content;
+    z-index: 100;
+  }
+
+  .inventory-desktop {
+    display: none;
+  }
+
+  .inventory-cards {
+    display: block;
+  }
+
+  .card .data-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .card .data-key {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .card .data-value {
+    max-width: 100%;
+    min-width: 0;
+    text-align: left;
+  }
+}
+.alert code,
+.card code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

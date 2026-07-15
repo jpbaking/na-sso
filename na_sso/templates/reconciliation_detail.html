@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Reconciliation {{ run.id[:8] }}{% endblock %}
+{% block nav %}{% with active_nav='reconciliation' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
+{% block content %}
+<section class="section container">
+  {% include "_feedback.html" %}
+  <div class="section-head"><div class="section-kicker">// Correlation {{ run.id[:8] }}</div><h1 class="section-title">Reconciliation preview</h1><a class="section-all" href="/reconciliation">All runs</a></div>
+  <p class="section-desc">{{ run.detail }}</p>
+  <div class="grid-stats">
+    <div class="stat"><div class="stat-value">{{ run.total_targets }}</div><div class="stat-label">Target accounts</div></div>
+    <div class="stat"><div class="stat-value">{{ run.drifted_targets }}</div><div class="stat-label">Drifted</div></div>
+    <div class="stat"><div class="stat-value">{{ run.unknown_targets }}</div><div class="stat-label">Unknown</div></div>
+    <div class="stat"><div class="stat-value">{{ run.destructive_targets }}</div><div class="stat-label">Destructive</div></div>
+  </div>
+
+  {% if run.status == 'previewed' and run.drifted_targets %}
+  <article class="card stack-2">
+    <div class="card-meta">Explicit approval</div><h2 class="card-title">Repair this saved preview</h2>
+    <p class="card-desc">Repair updates only drifted account targets. Unknown and unsupported fields are left unchanged. Replaying this approval token cannot repeat the repair.</p>
+    {% if run.destructive_targets %}<div class="alert alert-danger"><div class="alert-title">Remote account deletion</div>{{ run.destructive_targets }} target account(s) are present but desired absent. Approval can delete them remotely.</div>{% endif %}
+    <form method="post" action="/reconciliation/{{ run.id }}/approve" class="stack-2">
+      <input type="hidden" name="approval_token" value="{{ run.approval_token }}">
+      {% if run.destructive_targets %}<label class="checkbox"><input type="checkbox" name="confirm_destructive" value="yes" required><span>I approve deletion of the remote accounts identified in this preview.</span></label>{% endif %}
+      <button class="btn {{ 'btn-danger' if run.destructive_targets else 'btn-primary' }}" type="submit">Approve correlated repair</button>
+    </form>
+  </article>
+  {% endif %}
+
+  <div class="section-head"><div class="section-kicker">// Field evidence</div><h2 class="section-title">Findings</h2></div>
+  {% if findings %}<div class="table-wrap"><table class="table"><thead><tr><th>User</th><th>Target</th><th>Field</th><th>State</th><th>Desired</th><th>Actual</th><th>Repair</th></tr></thead><tbody>
+    {% for finding in findings %}<tr><td>{{ finding.username }}</td><td>{{ finding.target_name }}</td><td>{{ finding.field | replace('_',' ') }}</td><td><span class="badge {{ 'badge-shipped' if finding.state == 'match' else ('badge-danger' if finding.state == 'drift' else 'badge-planned') }}">{{ finding.state }}</span></td><td>{{ finding.desired or '—' }}</td><td>{{ finding.actual or '—' }}</td><td>{{ finding.repair_status | replace('_',' ') }}{% if finding.operation_id %} · {% if permissions.audit %}<a href="/audit/operations/{{ finding.operation_id }}">{{ finding.operation_id[:8] }}</a>{% else %}{{ finding.operation_id[:8] }}{% endif %}{% endif %}</td></tr>{% endfor %}
+  </tbody></table></div>{% else %}<div class="alert alert-info"><div class="alert-title">No assigned target accounts</div>The selected scope contains no currently assigned, inspectable targets.</div>{% endif %}
+</section>
+{% endblock %}

@@ -1,3 +1,17 @@
 from na_sso.connectors.base import Connector, IdentityCapabilities, IdentityValidation, SyncResult, get_connectors, validate_for_targets
+from na_sso.reconciliation import (
+    DriftState,
+    FieldComparison,
+    InspectionCapabilities,
+    ReconciliationField,
+    ReconciliationReport,
+    ReconciliationStatus,
+    RemoteIdentitySnapshot,
+)
 
-__all__ = ["Connector", "IdentityCapabilities", "IdentityValidation", "SyncResult", "get_connectors", "validate_for_targets"]
+__all__ = [
+    "Connector", "DriftState", "FieldComparison", "IdentityCapabilities",
+    "IdentityValidation", "InspectionCapabilities", "ReconciliationField",
+    "ReconciliationReport", "ReconciliationStatus", "RemoteIdentitySnapshot",
+    "SyncResult", "get_connectors", "validate_for_targets",
+]

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Verify sign-in{% endblock %}
+{% block content %}
+<section class="section container-narrow">
+  <div class="section-head"><div class="section-kicker">// Administrator verification</div><h1 class="section-title">Verify sign-in</h1></div>
+  <p class="section-desc">Complete a second factor for {{ username }}. This protects NA-SSO administration only and does not change target sign-in.</p>
+  {% if error %}<div class="alert alert-danger" role="alert"><div class="alert-title">Verification failed</div>{{ error }}</div>{% endif %}
+  {% if passkeys %}<div class="card stack-2"><h2 class="card-title">Passkey</h2><p class="card-desc">Use an enrolled security key, platform authenticator, or synced passkey.</p><button class="btn btn-primary" id="use-passkey" type="button">Use passkey</button><div class="field-hint" id="passkey-status" role="status"></div></div>{% endif %}
+  {% if totp or root_recovery %}
+  <form method="post" action="/login/mfa/code" class="card stack-2">
+    <h2 class="card-title">Authenticator or recovery code</h2>
+    <div class="field"><label class="label" for="mfa-code">Code</label><input class="input" id="mfa-code" name="code" required autocomplete="one-time-code" inputmode="numeric"><div class="field-hint">Enter a six-digit authenticator code or one saved recovery code{% if root_recovery %}; protected root recovery is also available{% endif %}.</div></div>
+    <button class="btn btn-primary" type="submit">Verify</button>
+  </form>
+  {% endif %}
+  <form method="post" action="/logout"><button class="btn btn-secondary" type="submit">Cancel sign-in</button></form>
+</section>
+{% if passkeys %}<script>
+const b64bytes=value=>Uint8Array.from(atob(value.replace(/-/g,'+').replace(/_/g,'/')+'==='.slice((value.length+3)%4)),c=>c.charCodeAt(0));
+const b64url=value=>btoa(String.fromCharCode(...new Uint8Array(value))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const credentialJSON=credential=>({id:credential.id,type:credential.type,rawId:b64url(credential.rawId),response:{clientDataJSON:b64url(credential.response.clientDataJSON),authenticatorData:b64url(credential.response.authenticatorData),signature:b64url(credential.response.signature),userHandle:credential.response.userHandle?b64url(credential.response.userHandle):null},clientExtensionResults:credential.getClientExtensionResults()});
+document.getElementById('use-passkey').addEventListener('click',async()=>{const status=document.getElementById('passkey-status');try{status.textContent='Waiting for your authenticator…';const options=await fetch('/login/mfa/webauthn/options',{method:'POST'}).then(r=>r.json());options.challenge=b64bytes(options.challenge);options.allowCredentials=(options.allowCredentials||[]).map(item=>({...item,id:b64bytes(item.id)}));const credential=await navigator.credentials.get({publicKey:options});const response=await fetch('/login/mfa/webauthn/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(credentialJSON(credential))});const result=await response.json();if(!response.ok)throw new Error(result.error||'Passkey verification failed');window.location.assign(result.redirect);}catch(error){status.textContent=error.message;}});
+</script>{% endif %}
+{% endblock %}

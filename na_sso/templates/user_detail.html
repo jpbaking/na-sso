@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ user.username }}{% endblock %}
+{% block nav %}{% with active_nav='users' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
+{% block content %}
+<section class="section container-narrow">
+  <div class="section-head"><div class="section-kicker">// Account detail</div><h1 class="section-title">{{ user.username }}</h1><a class="section-all" href="/users">Back to users</a></div>
+  <div class="data-list">
+    <div class="data-row"><div class="data-key">Name</div><div class="data-value">{{ user.display_name or '—' }}</div></div>
+    <div class="data-row"><div class="data-key">Email</div><div class="data-value">{{ user.email or '—' }}</div></div>
+    <div class="data-row"><div class="data-key">Role</div><div class="data-value">{{ role_definition(user.role).label }} · {{ role_definition(user.role).description }}</div></div>
+    <div class="data-row"><div class="data-key">Lifecycle</div><div class="data-value">{{ summary.lifecycle | replace('_',' ') }}</div></div>
+    <div class="data-row"><div class="data-key">Target coverage</div><div class="data-value">{{ summary.healthy_targets }}/{{ summary.assigned_targets }} healthy</div></div>
+    <div class="data-row"><div class="data-key">Issues</div><div class="data-value">{{ summary.issue_count }}</div></div>
+    <div class="data-row"><div class="data-key">Password expires</div><div class="data-value">{{ user.password_expires_at.strftime('%Y-%m-%d') if user.password_expires_at else ('after CHPW' if user.password_decision_kind in ['initial','reset'] else 'never') }}</div></div>
+  </div>
+  {% if can_manage_subject and user.desired_action != 'delete' %}<div class="hero-actions"><a class="btn btn-primary" href="/users/{{ user.id }}/edit">Edit account</a>{% if user.role == 'user' %}<a class="btn btn-secondary" href="/users/{{ user.id }}/assignment-exceptions">Profile and exceptions</a><a class="btn btn-secondary" href="/users/{{ user.id }}/lifecycle-policy">Lifecycle policy</a>{% endif %}<a class="btn btn-danger" href="/users/{{ user.id }}/delete">Delete</a></div>{% elif not can_manage_subject %}<div class="alert alert-info"><div class="alert-title">Root-managed role</div>Only the root security administrator can change or remove this operator account.</div>{% endif %}
+
+  <div class="section-head"><div class="section-kicker">// Target access</div><h2 class="section-title">Assignments and state</h2></div>
+  <div class="stack-2">
+    {% for target in targets %}{% set view = sync_views[user.id][target.target_id] %}
+    <article class="card">
+      <div class="card-meta">{{ target.target_type }}</div>
+      <h3 class="card-title">{{ target.display_name }}</h3>
+      <p class="card-desc">{{ view.presentation.description }}</p>
+      <div class="data-list">
+        <div class="data-row"><div class="data-key">State</div><div class="data-value"><span class="badge {{ view.presentation.badge_class }}" aria-label="{{ view.presentation.label }}. {{ view.detail or view.presentation.description }}">{{ view.presentation.label }}</span></div></div>
+        {% if view.detail %}<div class="data-row"><div class="data-key">Detail</div><div class="data-value">{{ view.detail }}</div></div>{% endif %}
+        {% if view.next_retry_at %}<div class="data-row"><div class="data-key">Retry</div><div class="data-value">Attempt {{ view.attempt_count }} is scheduled</div></div>{% endif %}
+      </div>
+      {% if can_manage_subject and view.presentation.retryable %}<form method="post" action="/users/{{ user.id }}/retry/{{ target.target_id }}"><button class="btn btn-secondary btn-sm" type="submit">Retry {{ target.display_name }}</button></form>{% endif %}
+    </article>
+    {% else %}<div class="alert alert-info"><div class="alert-title">No targets configured</div>This account is local only.</div>{% endfor %}
+  </div>
+</section>
+{% endblock %}
