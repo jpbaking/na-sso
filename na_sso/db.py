@@ -38,6 +38,7 @@ def init_db() -> None:
             "password_hash": "VARCHAR(128)",
             "role": "VARCHAR(16) NOT NULL DEFAULT 'user'",
             "password_decision_required": "BOOLEAN NOT NULL DEFAULT 0",
+            "password_decision_kind": "VARCHAR(16) NOT NULL DEFAULT ''",
             "password_changed_at": "DATETIME",
             "session_version": "INTEGER NOT NULL DEFAULT 1",
             "ssh_public_key": "TEXT",
@@ -57,6 +58,20 @@ def init_db() -> None:
                 if name not in existing:
                     connection.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {definition}"))
         _migrate_legacy_targets(connection)
+        connection.execute(text(
+            "UPDATE managed_users SET password_decision_kind='initial' "
+            "WHERE password_decision_required=1 AND password_decision_kind=''"
+        ))
+        connection.execute(text(
+            "UPDATE managed_users SET pending_secret=NULL "
+            "WHERE password_decision_kind IN ('initial', 'reset')"
+        ))
+        connection.execute(text(
+            "UPDATE sync_states SET state='chpw', detail='password change required before propagation', "
+            "attempt_count=0, next_retry_at=NULL WHERE assigned=1 AND retired=0 "
+            "AND state!='pending_chpw_disable' AND user_id IN "
+            "(SELECT id FROM managed_users WHERE password_decision_kind IN ('initial', 'reset'))"
+        ))
 
 
 def _migrate_legacy_targets(connection) -> None:

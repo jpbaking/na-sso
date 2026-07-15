@@ -38,9 +38,14 @@
     <div class="field">
       <label class="label" for="password">{{ "New password (leave blank to keep)" if user else "Password" }}</label>
       <input class="input" id="password" name="password" type="password" {{ '' if user else 'required' }}>
+      <input id="password-generated" name="password_generated" type="hidden" value="false">
       <button class="btn btn-secondary btn-sm" type="button" id="generate-password">Generate</button>
       <div class="field-hint">Password history is checked securely when you submit.</div>
       <div class="data-list" id="password-checks" aria-live="polite"></div>
+    </div>
+    <div class="field" id="confirm-password-field" hidden>
+      <label class="label" for="confirm-password">Confirm password</label>
+      <input class="input" id="confirm-password" name="confirm_password" type="password" autocomplete="new-password">
     </div>
     <div class="field">
       <div class="label">Target assignments</div>
@@ -83,15 +88,15 @@
     <button class="modal-close" type="button" data-modal-close aria-label="Close">Close</button>
   </div>
   <div class="modal-body stack-2">
-    <div class="result-block">
-      <div class="result-row">
-        <code class="result-link" id="generated-password-preview"></code>
-        <button class="copy-btn" id="copy-generated-password" type="button">Copy</button>
-      </div>
+    <div class="result-row">
+      <code class="result-link" id="generated-password-preview"></code>
+      <button class="copy-btn" id="copy-generated-password" type="button">Copy</button>
     </div>
     <div class="alert alert-info">
-      <div class="alert-title">Copy this password now</div>
-      The full password will not be shown again after this window is closed.
+      <div class="stack-1">
+        <div class="alert-title">Copy this password now</div>
+        <div>The full password will not be shown again after this window is closed.</div>
+      </div>
     </div>
   </div>
   <div class="modal-foot">
@@ -101,6 +106,9 @@
 <script src="/design/components.js"></script>
 <script>
 const password=document.getElementById('password');
+const passwordGenerated=document.getElementById('password-generated');
+const confirmPasswordField=document.getElementById('confirm-password-field');
+const confirmPassword=document.getElementById('confirm-password');
 const boxes=[...document.querySelectorAll('input[name="target_ids"]')];
 document.getElementById('select-all').onclick=()=>boxes.forEach(x=>x.checked=true);
 document.getElementById('select-none').onclick=()=>boxes.forEach(x=>x.checked=false);
@@ -114,6 +122,10 @@ let generatedPassword='';
 document.getElementById('generate-password').onclick=()=>{
   generatedPassword=randomPassword();
   password.value=generatedPassword;
+  passwordGenerated.value='true';
+  confirmPasswordField.hidden=true;
+  confirmPassword.required=false;
+  confirmPassword.value='';
   generatedPasswordPreview.textContent=`${generatedPassword.slice(0,8)}…${generatedPassword.slice(-4)}`;
   copyGeneratedPassword.textContent='Copy';
   checks();
@@ -133,6 +145,12 @@ generatedPasswordModal.addEventListener('close',()=>{
   generatedPasswordPreview.textContent='';
   copyGeneratedPassword.textContent='Copy';
 });
-password.addEventListener('input',checks);checks();
+password.addEventListener('input',()=>{
+  passwordGenerated.value='false';
+  confirmPasswordField.hidden=password.value.length===0;
+  confirmPassword.required=password.value.length>0;
+  checks();
+});
+checks();
 </script>
 {% endblock %}

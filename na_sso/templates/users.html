@@ -18,7 +18,7 @@
     <table class="table">
       <thead>
         <tr>
-          <th>Username</th><th>Name</th><th>Status</th>
+          <th>Username</th><th>Name</th><th>Status</th><th>Password expires</th>
           {% for target in targets %}<th>{{ target.display_name }}</th>{% endfor %}<th></th>
         </tr>
       </thead>
@@ -32,9 +32,11 @@
           <td>
             {% if u.desired_action == "delete" and u.deleted_at %}<span class="badge badge-planned">deleted</span>
             {% elif u.desired_action == "delete" %}<span class="badge badge-danger">deleting</span>
-            {% elif u.status == "active" %}<span class="badge badge-live">active</span>
-            {% else %}<span class="badge badge-danger">disabled</span>{% endif %}
+            {% elif u.status == "disabled" %}<span class="badge badge-danger">disabled</span>
+            {% elif u.password_decision_kind in ["initial", "reset"] %}<span class="badge badge-planned">CHPW</span>
+            {% else %}<span class="badge badge-live">active</span>{% endif %}
           </td>
+          <td>{% if u.is_root %}<span class="muted">N/A</span>{% elif u.password_expires_at %}{{ u.password_expires_at.strftime('%Y-%m-%d') }}{% elif u.password_decision_kind in ["initial", "reset"] %}<span class="muted">after CHPW</span>{% else %}<span class="muted">never</span>{% endif %}</td>
           {% for target in targets %}{% set t = target.target_id %}
           {% set s = states.get(t) %}
           {% if u.is_root %}<td><span class="muted">N/A</span></td>{% else %}
@@ -46,6 +48,7 @@
             <form method="post" action="/users/{{ u.id }}/retry/{{ t }}">
               <button type="submit" class="btn btn-quiet btn-sm">Retry</button>
             </form>
+            {% elif s and s.state == "chpw" %}<span class="badge badge-planned">CHPW</span>
             {% elif s and s.state == "awaiting_credentials" %}<span class="badge badge-planned">awaiting credentials</span>
             {% elif s and (s.state == "unassigned" or not s.assigned) %}<span class="badge badge-planned">unassigned; disabled</span>
             {% elif s and s.retired %}<span class="badge badge-planned">retired</span>

@@ -22,8 +22,10 @@ async def credential_handoff(user_id: int, password: str) -> None:
         user = db.get(ManagedUser, user_id)
         if not user or user.is_root:
             return
+        if user.password_decision_kind in {"initial", "reset"}:
+            return
         waiting = [state for state in user.sync_states if state.assigned and not state.retired
-                   and state.state in {"awaiting_credentials", "expired_disabled"}]
+                   and state.state in {"awaiting_credentials", "expired_disabled", "chpw"}]
         if not waiting:
             return
         user.pending_secret = encrypt_secret(password)
@@ -54,16 +56,18 @@ async def sync_user(user_id: int, action: str | None = None, target: str | None 
             db.flush()
         connectors = [available[state.target] for state in user.sync_states
                       if (state.assigned or state.state == "pending_disable") and not state.retired and state.target in available
+                      and state.state != "chpw"
                       and (target is None or state.target == target)]
         for connector in connectors:
             state = states[connector.target_id]
             if state.state == "awaiting_credentials" and password is None:
                 continue
+            chpw_disable = state.state == "pending_chpw_disable"
             state.state, state.detail, state.next_retry_at = "pending", "", None
             db.commit()
             if operation == "delete":
                 result = await connector.delete_user(user)
-            elif user.status == "disabled" or not state.assigned or (user.password_decision_required and get_settings().config_file):
+            elif user.status == "disabled" or not state.assigned or chpw_disable or user.password_decision_kind == "expired":
                 result = await connector.disable_user(user)
             else:
                 result = await connector.ensure_user(user, password)
@@ -73,7 +77,10 @@ async def sync_user(user_id: int, action: str | None = None, target: str | None 
                 state.attempt_count, state.next_retry_at = 0, None
                 if not state.assigned:
                     state.state = "unassigned"
-                elif user.password_decision_required and get_settings().config_file:
+                elif user.password_decision_kind in {"initial", "reset"}:
+                    state.state = "chpw"
+                    state.detail = "password change required before propagation"
+                elif user.password_decision_kind == "expired":
                     state.state = "expired_disabled"
             else:
                 state.attempt_count += 1
@@ -118,6 +125,7 @@ async def expire_due() -> int:
         ids = []
         for user in users:
             user.password_decision_required = True
+            user.password_decision_kind = "expired"
             for state in user.sync_states:
                 if state.assigned and not state.retired:
                     state.state = "pending_expiry_disable"

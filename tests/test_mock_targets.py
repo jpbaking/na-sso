@@ -292,12 +292,26 @@ def test_application_demo_workflow_with_failure_and_retry(
             user_id = user.id
             assert user.pending_secret is None
             assert {item.target: item.state for item in user.sync_states} == {
-                "opnsense": "ok",
-                "nexus": "ok",
-                "nextcloud": "ok",
+                "opnsense": "chpw",
+                "nexus": "chpw",
+                "nextcloud": "chpw",
             }
 
-        httpx.post(f"{live_mock_url}/__mock__/fail/nexus").raise_for_status()
+        client.post("/logout")
+        assert client.post("/login", data={"username": "demo_user", "password": "V4lid!First-Secret-2026"}, follow_redirects=False).headers["location"] == "/account/password-decision"
+        first_replacement = "V4lid!Orbit-Replacement-2026"
+        assert client.post("/account/password-decision", data={
+            "choice": "change", "current_password": "V4lid!First-Secret-2026",
+            "new_password": first_replacement, "confirm_password": first_replacement,
+        }, follow_redirects=False).headers["location"] == "/login"
+        assert client.post("/login", data={"username": "demo_user", "password": first_replacement}, follow_redirects=False).headers["location"] == "/account"
+        with db.get_session() as session:
+            user = session.get(ManagedUser, user_id)
+            assert user.pending_secret is None
+            assert all(item.state == "ok" for item in user.sync_states)
+
+        client.post("/logout")
+        client.post("/login", data={"username": "admin", "password": "demo-password"})
         assert client.post(
             f"/users/{user_id}",
             data={
@@ -310,8 +324,23 @@ def test_application_demo_workflow_with_failure_and_retry(
         ).status_code == 303
         with db.get_session() as session:
             user = session.get(ManagedUser, user_id)
+            assert user.pending_secret is None
+            assert all(item.state == "chpw" for item in user.sync_states)
+
+        client.post("/logout")
+        assert client.post("/login", data={"username": "demo_user", "password": "V4lid!Second-Secret-2026"}, follow_redirects=False).headers["location"] == "/account/password-decision"
+        httpx.post(f"{live_mock_url}/__mock__/fail/nexus").raise_for_status()
+        second_replacement = "V4lid!Comet-Replacement-2026"
+        assert client.post("/account/password-decision", data={
+            "choice": "change", "current_password": "V4lid!Second-Secret-2026",
+            "new_password": second_replacement, "confirm_password": second_replacement,
+        }, follow_redirects=False).headers["location"] == "/login"
+        with db.get_session() as session:
+            user = session.get(ManagedUser, user_id)
             assert user.pending_secret is not None
             assert {item.target: item.state for item in user.sync_states}["nexus"] == "failed"
+
+        client.post("/login", data={"username": "admin", "password": "demo-password"})
         status_page = client.get("/status")
         users_page = client.get("/users")
         assert "demo_user" not in status_page.text

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Save private key{% endblock %}
+{% block nav %}
+<!-- the page's ONE amber element -->
+<li><a href="/account" class="nav-link active">Account</a></li>
+{% endblock %}
+{% block content %}
+<section class="section container-narrow">
+  <div class="section-head">
+    <div class="section-kicker">// One-time result</div>
+    <h1 class="section-title">Save this private key now</h1>
+  </div>
+  <div class="alert alert-info">
+    <div class="stack-1">
+      <div class="alert-title">Shown once</div>
+      <div>This private key is not persisted. Copy or save it before leaving this page.</div>
+    </div>
+  </div>
+  <div class="field">
+    <label class="label" for="private-key">Private key</label>
+    <textarea class="textarea" id="private-key" rows="14" readonly spellcheck="false">{{ private_key }}</textarea>
+  </div>
+  <div class="hero-actions">
+    <button class="btn btn-primary" id="copy-private-key" type="button">Copy private key</button>
+    <button class="btn btn-secondary" id="save-private-key" type="button">Save as file</button>
+    <a class="btn btn-quiet" href="/account">Return to account</a>
+  </div>
+</section>
+<script>
+const privateKey=document.getElementById('private-key');
+document.getElementById('copy-private-key').addEventListener('click',async event=>{
+  await navigator.clipboard.writeText(privateKey.value);
+  event.currentTarget.textContent='Copied';
+});
+document.getElementById('save-private-key').addEventListener('click',()=>{
+  const link=document.createElement('a');
+  link.href=URL.createObjectURL(new Blob([privateKey.value],{type:'application/x-pem-file'}));
+  link.download='na-sso_ed25519';
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+</script>
+{% endblock %}

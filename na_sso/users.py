@@ -35,10 +35,13 @@ def _targets_context() -> list:
     return get_connectors()
 
 
-def _set_pending(db, user: ManagedUser, password: str | None, target_ids: set[str] | None = None) -> None:
+def _set_pending(db, user: ManagedUser, password: str | None, target_ids: set[str] | None = None,
+                 *, require_password_change: bool = False) -> None:
     """Record a new pending credential and reset all target sync states."""
-    if password is not None:
+    if password is not None and not require_password_change:
         user.pending_secret = encrypt_secret(password)
+    elif require_password_change:
+        user.pending_secret = None
     existing = {s.target: s for s in user.sync_states}
     connectors = {item.target_id: item for item in __import__("na_sso.connectors", fromlist=["get_connectors"]).get_connectors()}
     legacy_mode = not get_settings().config_file
@@ -57,11 +60,16 @@ def _set_pending(db, user: ManagedUser, password: str | None, target_ids: set[st
             state = SyncState(user=user, target=target, target_type=connector.target_type)
             db.add(state)
         newly_assigned = not state.assigned
+        previous_state = state.state
         state.assigned = True
         state.retired = False
         needs_password = connectors[target].capabilities.password
-        state.state = "awaiting_credentials" if newly_assigned and needs_password and password is None else "pending"
-        state.detail = ""
+        if require_password_change:
+            state.state = "pending_chpw_disable" if not newly_assigned and previous_state == "ok" else "chpw"
+            state.detail = "password change required before propagation"
+        else:
+            state.state = "awaiting_credentials" if newly_assigned and needs_password and password is None else "pending"
+            state.detail = ""
         state.attempt_count = 0
         state.next_retry_at = None
 
@@ -104,6 +112,8 @@ async def create_user(
     display_name: str = Form(""),
     email: str = Form(""),
     password: str = Form(...),
+    confirm_password: str | None = Form(None),
+    password_generated: str = Form("false"),
     role: str = Form("user"),
     target_ids: list[str] = Form(default=[]),
 ):
@@ -111,6 +121,13 @@ async def create_user(
     if isinstance(admin, Response):
         return admin
     username = username.strip().lower()
+    if confirm_password is not None and password_generated != "true" and password != confirm_password:
+        return _render(request, "user_form.html", {
+            "user": None, "admin": admin, "suggested": "",
+            "error": "Password confirmation does not match.",
+            "targets": _targets_context(),
+            "password_policy": get_settings().file.password_policy,
+        }, status_code=422)
     if not USERNAME_RE.fullmatch(username):
         return _render(
             request,
@@ -138,7 +155,7 @@ async def create_user(
         user = ManagedUser(
             username=username, display_name=display_name.strip(), email=email.strip(),
             password_hash=hash_password(password), role="admin" if role == "admin" else "user",
-            password_decision_required=True, password_changed_at=utcnow(),
+            password_decision_required=True, password_decision_kind="initial", password_changed_at=utcnow(),
         )
         identity = validate_for_targets(user, [connectors[item] for item in target_ids])
         if not identity.ok:
@@ -147,7 +164,8 @@ async def create_user(
                 "password_policy": get_settings().file.password_policy}, status_code=422)
         user.desired_action = "ensure"
         db.add(user)
-        _set_pending(db, user, password, None if not get_settings().config_file and not target_ids else set(target_ids))
+        _set_pending(db, user, password, None if not get_settings().config_file and not target_ids else set(target_ids),
+                     require_password_change=True)
         record_audit(db, admin, "user.create", username)
         db.commit()
         user_id = user.id
@@ -181,6 +199,8 @@ async def update_user(
     display_name: str = Form(""),
     email: str = Form(""),
     password: str = Form(""),
+    confirm_password: str | None = Form(None),
+    password_generated: str = Form("false"),
     status: str = Form("active"),
     role: str = Form("user"),
     target_ids: list[str] = Form(default=[]),
@@ -206,6 +226,13 @@ async def update_user(
         user.status = "disabled" if status == "disabled" else "active"
         user.role = "admin" if role == "admin" else "user"
         if password.strip():
+            if confirm_password is not None and password_generated != "true" and password.strip() != confirm_password:
+                return _render(request, "user_form.html", {
+                    "user": user, "admin": admin, "suggested": "",
+                    "error": "Password confirmation does not match.",
+                    "targets": list(connectors.values()),
+                    "password_policy": get_settings().file.password_policy,
+                }, status_code=422)
             history = tuple(row.password_hash for row in db.query(PasswordHistory).filter_by(user_id=user.id).order_by(PasswordHistory.created_at.desc()).limit(get_settings().file.password_policy.history_size).all())
             validation = validate_password(password.strip(), username=user.username, email=user.email,
                                            display_name=user.display_name, history_hashes=history)
@@ -217,9 +244,11 @@ async def update_user(
             user.password_hash = hash_password(password.strip())
             user.password_changed_at = utcnow()
             user.password_decision_required = True
+            user.password_decision_kind = "reset"
             user.session_version += 1
         user.desired_action = "ensure"
-        _set_pending(db, user, password.strip() or None, None if not get_settings().config_file and not target_ids else set(target_ids))
+        _set_pending(db, user, password.strip() or None, None if not get_settings().config_file and not target_ids else set(target_ids),
+                     require_password_change=bool(password.strip()))
         record_audit(db, admin, "user.update", user.username)
         db.commit()
     background_tasks.add_task(sync_user, user_id)
@@ -289,8 +318,9 @@ async def restore_user(request: Request, user_id: int, background_tasks: Backgro
         user.password_hash = hash_password(password.strip())
         user.password_changed_at = utcnow()
         user.password_decision_required = True
+        user.password_decision_kind = "reset"
         user.session_version += 1
-        _set_pending(db, user, password.strip())
+        _set_pending(db, user, password.strip(), require_password_change=True)
         record_audit(db, admin, "user.restore", user.username)
         db.commit()
     background_tasks.add_task(sync_user, user_id)

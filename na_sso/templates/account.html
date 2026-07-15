@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Account{% endblock %}
+{% block nav %}
+<!-- the page's ONE amber element -->
+<li><a href="/account" class="nav-link active">Account</a></li>
+{% endblock %}
+{% block content %}
+<section class="section container-narrow">
+  <div class="section-head">
+    <div class="section-kicker">// Personal security</div>
+    <h1 class="section-title">Account</h1>
+  </div>
+
+  <div class="data-list">
+    <div class="data-row">
+      <div class="data-key">Display name</div>
+      <div class="data-value">{{ account.display_name or '—' }}</div>
+    </div>
+    <div class="data-row">
+      <div class="data-key">Email</div>
+      <div class="data-value">{{ account.email or '—' }}</div>
+    </div>
+    <div class="data-row">
+      <div class="data-key">Username</div>
+      <div class="data-value">{{ account.username }}</div>
+    </div>
+    <div class="data-row">
+      <div class="data-key">Role</div>
+      <div class="data-value">{{ account.role }}</div>
+    </div>
+    <div class="data-row">
+      <div class="data-key">Status</div>
+      <div class="data-value">{{ account.status }}</div>
+    </div>
+    <div class="data-row">
+      <div class="data-key">Password expires</div>
+      <div class="data-value">{{ account.password_expires_at.strftime('%Y-%m-%d') if account.password_expires_at else ('after password change' if account.password_decision_kind in ['initial', 'reset'] else 'never') }}</div>
+    </div>
+    {% if account.role != 'root' %}
+    <div class="data-row">
+      <div class="data-key">SSH key</div>
+      <div class="data-value">{{ 'enrolled' if account.has_ssh_key else 'not enrolled' }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="stack-4">
+    <section class="card">
+      <div class="card-meta">Password</div>
+      <h2 class="card-title">Account password</h2>
+      <p class="card-desc">Replace your current password under the configured security policy.</p>
+      <a href="/account/password" class="btn btn-primary">Change password</a>
+    </section>
+
+    {% if account.role != 'root' %}
+    <section class="card">
+      <div class="card-meta">SSH access</div>
+      <h2 class="card-title">SSH key</h2>
+      <p class="card-desc">Generate an Ed25519 key in this browser. The private key is downloaded directly and is never sent to NA-SSO.</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary" id="generate-key" type="button">Generate in browser</button>
+        {% if fallback_enabled %}
+        <form method="post" action="/account/ssh-key/generate">
+          <button class="btn btn-secondary" type="submit">Compatibility fallback</button>
+        </form>
+        {% endif %}
+      </div>
+      {% if fallback_enabled %}
+      <p class="field-hint">The compatibility fallback handles the key server-side and shows the private key once without persisting it.</p>
+      {% endif %}
+      <form id="key-form" method="post" action="/account/ssh-key">
+        <input type="hidden" name="public_key" id="public-key">
+      </form>
+    </section>
+    {% endif %}
+  </div>
+</section>
+{% if account.role != 'root' %}
+<script>
+const uint32=value=>new Uint8Array([(value>>>24)&255,(value>>>16)&255,(value>>>8)&255,value&255]);
+const joinBytes=(...arrays)=>{
+  const output=new Uint8Array(arrays.reduce((length,array)=>length+array.length,0));
+  let position=0;
+  for(const array of arrays){output.set(array,position);position+=array.length;}
+  return output;
+};
+const base64=bytes=>btoa(String.fromCharCode(...bytes));
+document.getElementById('generate-key').addEventListener('click',async()=>{
+  try{
+    const keys=await crypto.subtle.generateKey({name:'Ed25519'},true,['sign','verify']);
+    const raw=new Uint8Array(await crypto.subtle.exportKey('raw',keys.publicKey));
+    const label=new TextEncoder().encode('ssh-ed25519');
+    const blob=joinBytes(uint32(label.length),label,uint32(raw.length),raw);
+    document.getElementById('public-key').value='ssh-ed25519 '+base64(blob);
+    const pkcs8=new Uint8Array(await crypto.subtle.exportKey('pkcs8',keys.privateKey));
+    const pem='-----BEGIN PRIVATE KEY-----\n'+base64(pkcs8).match(/.{1,64}/g).join('\n')+'\n-----END PRIVATE KEY-----\n';
+    const link=document.createElement('a');
+    link.href=URL.createObjectURL(new Blob([pem],{type:'application/x-pem-file'}));
+    link.download='na-sso_ed25519';
+    link.click();
+    URL.revokeObjectURL(link.href);
+    document.getElementById('key-form').submit();
+  }catch(error){
+    alert('Browser key generation is unavailable; use the compatibility fallback if enabled.');
+  }
+});
+</script>
+{% endif %}
+{% endblock %}

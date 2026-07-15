@@ -15,7 +15,7 @@
 
 <header class="nav-wrap">
   <nav class="nav container" aria-label="Main navigation">
-    <a href="/users" class="brand" aria-label="NA-SSO — home">
+    <a href="{{ home_url | default('/users', true) }}" class="brand" aria-label="NA-SSO — home">
       <img src="/design/assets/logo-mark.svg" alt="">
       <span class="brand-name">NA-SSO</span>
     </a>
@@ -77,6 +77,8 @@
         form.append(button);
         cell.append(form);
       }
+    } else if (state.state === 'chpw') {
+      cell.append(badge('CHPW', 'badge-planned'));
     } else {
       cell.append(badge('pending', 'badge-planned'));
     }

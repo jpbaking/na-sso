@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -30,6 +30,7 @@ class ManagedUser(Base):
     password_hash: Mapped[str | None] = mapped_column(String(128), default=None)
     role: Mapped[str] = mapped_column(String(16), default="user")  # user|admin|root
     password_decision_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    password_decision_kind: Mapped[str] = mapped_column(String(16), default="")  # initial|reset|expired
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     session_version: Mapped[int] = mapped_column(Integer, default=1)
     ssh_public_key: Mapped[str | None] = mapped_column(Text, default=None)
@@ -51,6 +52,14 @@ class ManagedUser(Base):
     @property
     def is_root(self) -> bool:
         return self.role == "root"
+
+    @property
+    def password_expires_at(self) -> datetime | None:
+        if self.is_root or self.password_decision_kind in {"initial", "reset"} or self.password_changed_at is None:
+            return None
+        from na_sso.config import get_settings
+        days = get_settings().file.password_policy.expires_after_days
+        return self.password_changed_at + timedelta(days=days) if days is not None else None
 
 
 class PasswordHistory(Base):
@@ -125,5 +134,7 @@ def enforce_root_invariants(session: Session, _flush_context, _instances) -> Non
             item.deletion_requested_at = None
             item.deleted_at = None
             item.pending_secret = None
+            item.password_decision_required = False
+            item.password_decision_kind = ""
             if item.sync_states:
                 raise ValueError("root account cannot have target synchronization state")

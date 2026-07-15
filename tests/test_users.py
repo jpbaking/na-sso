@@ -21,6 +21,12 @@ def test_shared_page_shell_pins_footer_to_viewport(client, admin_client):
         assert response.text.index("<main>") < response.text.index('<footer class="footer">')
 
 
+def test_shared_page_container_can_expand_to_viewport(client):
+    stylesheet = client.get("/design/components.css")
+    assert stylesheet.status_code == 200
+    assert ".container {\n  width: 100%;\n  max-width: none;" in stylesheet.text
+
+
 def test_new_user_form_advertises_username_contract(admin_client):
     page = admin_client.get("/users/new")
     assert "Lowercase letters, digits, underscores, dots and hyphens." in page.text
@@ -28,10 +34,27 @@ def test_new_user_form_advertises_username_contract(admin_client):
     assert 'maxlength="64"' in page.text
     assert '<dialog id="generated-password-modal" class="modal"' in page.text
     assert 'id="copy-generated-password"' in page.text
+    assert 'id="confirm-password-field" hidden' in page.text
+    assert 'name="confirm_password"' in page.text
+    assert "confirmPasswordField.hidden=password.value.length===0" in page.text
+    assert "passwordGenerated.value='true'" in page.text
+    assert '<div class="result-row">' in page.text
+    assert '<div class="result-block">' not in page.text
+    assert '<div class="alert alert-info">\n      <div class="stack-1">' in page.text
     assert "The full password will not be shown again after this window is closed." in page.text
     assert "generatedPassword.slice(0,8)" in page.text
     assert "navigator.clipboard.writeText(generatedPassword)" in page.text
     assert "generatedPassword=''" in page.text
+
+
+def test_admin_manual_password_requires_matching_confirmation(admin_client):
+    response = admin_client.post("/users/new", data={
+        "username": "mismatch", "display_name": "Mismatch User",
+        "email": "mismatch@example.test", "password": "V4lid!Meteor-Cloud-2026",
+        "confirm_password": "different", "password_generated": "false",
+    })
+    assert response.status_code == 422
+    assert "Password confirmation does not match." in response.text
 
 
 def test_user_crud_roundtrip(admin_client):
@@ -45,7 +68,8 @@ def test_user_crud_roundtrip(admin_client):
     assert r.status_code == 303
 
     r = c.get("/users")
-    assert "jdoe" in r.text and "pending" in r.text
+    assert "jdoe" in r.text and "CHPW" in r.text
+    assert "Password expires" in r.text and "after CHPW" in r.text
 
     r = c.post(
         "/users/1",
@@ -73,11 +97,11 @@ def test_soft_deleted_user_can_restore_with_new_password(admin_client):
     assert response.status_code == 303
     from na_sso.db import get_session
     from na_sso.models import ManagedUser
-    from na_sso.security import decrypt_secret
     with get_session() as db:
         user = db.get(ManagedUser, 1)
         assert user.desired_action == "ensure" and user.deleted_at is None
-        assert decrypt_secret(user.pending_secret) == "V4lid!New-Secret-2026"
+        assert user.pending_secret is None
+        assert user.password_decision_kind == "reset"
 
 
 def test_duplicate_username_rejected(admin_client):
@@ -129,8 +153,8 @@ def test_password_never_plaintext_in_db(admin_client, tmp_path):
 
     from na_sso.db import get_session
     from na_sso.models import ManagedUser
-    from na_sso.security import decrypt_secret
 
     with get_session() as db:
         u = db.query(ManagedUser).filter(ManagedUser.username == "sec").one()
-        assert decrypt_secret(u.pending_secret) == "V4lid!Orbit-Cloud"
+        assert u.pending_secret is None
+        assert u.password_decision_kind == "initial"

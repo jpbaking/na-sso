@@ -49,6 +49,8 @@ def test_api_credentials_are_encrypted_and_probe_gated(admin_client, tmp_path, m
     assert ">reachable<" not in configured_page.text
     assert '<details class="disclosure-row" name="target-credentials">' in configured_page.text
     assert '<summary class="disclosure-summary">' in configured_page.text
+    assert '<div class="disclosure-list">' in configured_page.text
+    assert '<div class="data-list disclosure-list">' not in configured_page.text
     assert "Change credentials" not in configured_page.text
     respx.post("https://fw.test/api/auth/user/search").mock(return_value=Response(401))
     admin_client.post("/targets/firewall/credentials", data={"api_key": "new-key", "api_secret": "new-secret"})
