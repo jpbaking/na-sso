@@ -2,10 +2,6 @@
 {% block title %}Account{% endblock %}
 {% block nav %}
 {% with active_nav='' %}{% include "_admin_nav.html" %}{% endwith %}
-<!-- the page's ONE amber element -->
-<li><a href="/account" class="nav-link active">My account</a></li>
-<li><a href="/account/password" class="nav-link">Change password</a></li>
-{% if permissions.users or permissions.targets or permissions.audit %}<li><a href="/account/mfa" class="nav-link">MFA</a></li>{% endif %}
 {% endblock %}
 {% block content %}
 <section class="section container-narrow">
@@ -76,6 +72,15 @@
       <p class="card-desc">Replace your current password under the configured security policy.</p>
       <a href="/account/password" class="btn btn-primary">Change password</a>
     </section>
+
+    {% if permissions.users or permissions.targets or permissions.audit %}
+    <section class="card">
+      <div class="card-meta">Administrative security</div>
+      <h2 class="card-title">Multi-factor authentication</h2>
+      <p class="card-desc">Manage passkeys, an authenticator app, and one-time recovery codes for NA-SSO administration.</p>
+      <a href="/account/mfa" class="btn btn-secondary">Manage MFA</a>
+    </section>
+    {% endif %}
 
     {% if account.role != 'root' %}
     <section class="card">

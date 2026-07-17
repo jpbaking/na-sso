@@ -53,11 +53,11 @@ def test_scoped_roles_enforce_routes_and_navigation(
     assert page.status_code == 200
     assert visible in page.text
     if role == "user_operator":
-        assert ">Reconciliation</a>" in page.text
-        assert ">Assignment profiles</a>" in page.text
-        assert ">Access reviews</a>" in page.text
+        assert 'class="sidebar-link-label">Reconciliation</span>' in page.text
+        assert 'class="sidebar-link-label">Assignment profiles</span>' in page.text
+        assert 'class="sidebar-link-label">Access reviews</span>' in page.text
     for label in hidden:
-        assert f'>{label}</a>' not in page.text
+        assert f'class="sidebar-link-label">{label}</span>' not in page.text
     for path in denied:
         assert admin_client.get(path, follow_redirects=False).status_code == 403
 

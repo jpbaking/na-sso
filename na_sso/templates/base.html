@@ -15,48 +15,95 @@
 <body class="site-page">
 
 {% set page_navigation %}{% block nav %}{% endblock %}{% endset %}
-{% set account_navigation %}
-  {% if admin_area %}
-  <li><a href="/account" class="nav-link">My account</a></li>
-  <li><a href="/account/password" class="nav-link">Change password</a></li>
-  <li><a href="/account/mfa" class="nav-link">MFA</a></li>
-  {% endif %}
-  {% if admin %}
-  <li><form method="post" action="/logout"><button type="submit" class="btn btn-quiet btn-sm">Sign out</button></form></li>
-  {% endif %}
-{% endset %}
+{% set current_path = request.url.path %}
+{% set has_sidebar = page_navigation | trim %}
 
-<header class="nav-wrap">
-  <nav class="nav container" aria-label="Main navigation">
-    <a href="{{ home_url | default('/users', true) }}" class="brand" aria-label="NA-SSO — home">
-      <img src="/design/assets/logo-mark.svg" alt="">
-      <span class="brand-name">NA-SSO</span>
-    </a>
-    <ul class="nav-links desktop-nav" role="list">
-      {{ page_navigation | safe }}{{ account_navigation | safe }}
-    </ul>
-    {% if page_navigation | trim or admin %}
-    <details class="mobile-nav">
-      <summary class="btn btn-secondary btn-sm">Menu</summary>
-      <ul class="nav-links mobile-nav-links" role="list" aria-label="Mobile navigation">
-        {{ page_navigation | safe }}{{ account_navigation | safe }}
+<div class="app-shell{% if not has_sidebar %} app-shell-plain{% endif %}" data-app-shell>
+  {% if has_sidebar %}
+  <aside class="app-sidebar" id="app-sidebar" data-sidebar aria-label="Primary navigation">
+    <div class="sidebar-header">
+      <a href="{{ home_url | default('/users', true) }}" class="brand sidebar-brand" aria-label="NA-SSO — home">
+        <img src="/na-sso-logo.png" alt="">
+        <span class="brand-name">NA-SSO</span>
+      </a>
+      <button class="btn btn-quiet btn-sm sidebar-toggle" type="button" data-sidebar-toggle aria-expanded="true" aria-controls="sidebar-navigation" aria-label="Collapse navigation">
+        <span class="sidebar-control-icon sidebar-collapse-idle" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+            <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+            <path d="M9 3v18"></path>
+          </svg>
+        </span>
+        <span class="sidebar-control-icon sidebar-collapse-hover" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+            <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+            <path d="M9 3v18"></path>
+            <path d="m16 15-3-3 3-3"></path>
+          </svg>
+        </span>
+        <span class="sidebar-control-icon sidebar-mobile-close" aria-hidden="true">×</span>
+      </button>
+      <button class="brand sidebar-expand-brand" type="button" data-sidebar-expand aria-expanded="false" aria-controls="sidebar-navigation" aria-label="Expand navigation">
+        <img class="sidebar-expand-logo" src="/na-sso-logo.png" alt="">
+        <span class="sidebar-control-icon sidebar-expand-hover" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false">
+            <rect width="18" height="18" x="3" y="3" rx="2"></rect>
+            <path d="M9 3v18"></path>
+            <path d="m14 9 3 3-3 3"></path>
+          </svg>
+        </span>
+      </button>
+    </div>
+    <nav id="sidebar-navigation">
+      <ul class="nav-links sidebar-links" role="list">
+        {{ page_navigation | safe }}
       </ul>
-    </details>
-    {% endif %}
-  </nav>
-</header>
+    </nav>
+  </aside>
+  <button class="sidebar-scrim" type="button" data-sidebar-scrim aria-label="Close navigation" hidden></button>
+  {% endif %}
 
-<main>
-{% include "_feedback.html" %}
-{% block content %}{% endblock %}
-</main>
+  <div class="app-column">
+    <header class="nav-wrap">
+      <nav class="nav container" aria-label="Account navigation">
+        {% if has_sidebar %}
+        <button class="brand mobile-sidebar-toggle" type="button" data-mobile-sidebar-toggle aria-expanded="false" aria-controls="app-sidebar" aria-label="Open navigation">
+          <img src="/na-sso-logo.png" alt="">
+          <span class="brand-name">NA-SSO</span>
+        </button>
+        {% else %}
+        <a href="{{ home_url | default('/users', true) }}" class="brand" aria-label="NA-SSO — home">
+          <img src="/na-sso-logo.png" alt="">
+          <span class="brand-name">NA-SSO</span>
+        </a>
+        {% endif %}
+        {% if admin %}
+        <details class="account-menu" data-account-menu>
+          <summary class="btn btn-secondary btn-sm account-menu-toggle" aria-label="Account menu">
+            <span aria-hidden="true">☰</span>
+            <span>Account</span>
+          </summary>
+          <ul class="nav-links account-menu-links" role="list" aria-label="My account options">
+            <li class="account-menu-identity">Signed in as <strong>{{ admin }}</strong></li>
+            <li><a href="/account" class="nav-link{% if current_path.startswith('/account') %} active{% endif %}"{% if current_path.startswith('/account') %} aria-current="page"{% endif %}>My account</a></li>
+            <li><form method="post" action="/logout"><button type="submit" class="btn btn-quiet btn-sm">Sign out</button></form></li>
+          </ul>
+        </details>
+        {% endif %}
+      </nav>
+    </header>
+    <main>
+    {% include "_feedback.html" %}
+    {% block content %}{% endblock %}
+    </main>
 
-<footer class="footer">
-  <div class="footer-inner container">
-    <div class="foot-brand">NA-SSO · Not Another SSO</div>
-    <div class="foot-copy">Accounts are provisioned to each target over its API.</div>
+    <footer class="footer">
+      <div class="footer-inner container">
+        <div class="foot-brand">NA-SSO · Not Another SSO</div>
+        <div class="foot-copy">Created by <a class="foot-link" href="https://github.com/jpbaking" rel="me">jpbaking</a></div>
+      </div>
+    </footer>
   </div>
-</footer>
+</div>
 
 <script>
 (() => {
@@ -125,6 +172,88 @@
   });
 })();
 </script>
+
+{% if has_sidebar %}
+<script>
+(() => {
+  const shell = document.querySelector('[data-app-shell]');
+  const sidebar = document.querySelector('[data-sidebar]');
+  const sidebarToggle = document.querySelector('[data-sidebar-toggle]');
+  const sidebarExpand = document.querySelector('[data-sidebar-expand]');
+  const mobileToggle = document.querySelector('[data-mobile-sidebar-toggle]');
+  const scrim = document.querySelector('[data-sidebar-scrim]');
+  const desktop = window.matchMedia('(min-width: 48.0625rem)');
+  if (!shell || !sidebar || !sidebarToggle || !sidebarExpand || !mobileToggle || !scrim) return;
+
+  let storedCollapsed = localStorage.getItem('na-sso-sidebar-collapsed') === 'true';
+
+  const setDesktopState = collapsed => {
+    shell.classList.toggle('sidebar-collapsed', collapsed);
+    shell.classList.remove('sidebar-open');
+    document.body.classList.remove('sidebar-open');
+    sidebar.removeAttribute('aria-hidden');
+    sidebarToggle.classList.remove('mobile-sidebar-mode');
+    sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+    sidebarToggle.setAttribute('aria-label', 'Collapse navigation');
+    sidebarExpand.setAttribute('aria-expanded', String(!collapsed));
+    mobileToggle.setAttribute('aria-expanded', 'false');
+    scrim.hidden = true;
+  };
+
+  const setMobileState = open => {
+    shell.classList.remove('sidebar-collapsed');
+    shell.classList.toggle('sidebar-open', open);
+    document.body.classList.toggle('sidebar-open', open);
+    sidebar.setAttribute('aria-hidden', String(!open));
+    sidebarToggle.classList.add('mobile-sidebar-mode');
+    sidebarToggle.setAttribute('aria-expanded', String(open));
+    sidebarToggle.setAttribute('aria-label', 'Close navigation');
+    sidebarExpand.setAttribute('aria-expanded', 'false');
+    mobileToggle.setAttribute('aria-expanded', String(open));
+    scrim.hidden = !open;
+  };
+
+  const syncViewport = () => {
+    if (desktop.matches) setDesktopState(storedCollapsed);
+    else setMobileState(false);
+  };
+
+  sidebarToggle.addEventListener('click', () => {
+    if (desktop.matches) {
+      storedCollapsed = true;
+      localStorage.setItem('na-sso-sidebar-collapsed', 'true');
+      setDesktopState(true);
+      sidebarExpand.focus();
+    } else {
+      setMobileState(false);
+      mobileToggle.focus();
+    }
+  });
+  sidebarExpand.addEventListener('click', () => {
+    storedCollapsed = false;
+    localStorage.setItem('na-sso-sidebar-collapsed', 'false');
+    setDesktopState(false);
+    sidebarToggle.focus();
+  });
+  mobileToggle.addEventListener('click', () => {
+    setMobileState(true);
+    sidebarToggle.focus();
+  });
+  scrim.addEventListener('click', () => {
+    setMobileState(false);
+    mobileToggle.focus();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && shell.classList.contains('sidebar-open')) {
+      setMobileState(false);
+      mobileToggle.focus();
+    }
+  });
+  desktop.addEventListener('change', syncViewport);
+  syncViewport();
+})();
+</script>
+{% endif %}
 
 </body>
 </html>

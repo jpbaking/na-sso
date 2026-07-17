@@ -1,9 +1,54 @@
-{% if permissions.users %}<li><a href="/users" class="nav-link{% if active_nav == 'users' %} active{% endif %}">Users</a></li>{% endif %}
-{% if permissions.users %}<li><a href="/unmanaged-accounts" class="nav-link{% if active_nav == 'unmanaged' %} active{% endif %}">Unmanaged accounts</a></li>{% endif %}
-{% if permissions.users %}<li><a href="/reconciliation" class="nav-link{% if active_nav == 'reconciliation' %} active{% endif %}">Reconciliation</a></li>{% endif %}
-{% if permissions.users %}<li><a href="/assignment-profiles" class="nav-link{% if active_nav == 'profiles' %} active{% endif %}">Assignment profiles</a></li>{% endif %}
-{% if permissions.users %}<li><a href="/access-reviews" class="nav-link{% if active_nav == 'reviews' %} active{% endif %}">Access reviews</a></li>{% endif %}
-{% if permissions.targets %}<li><a href="/status" class="nav-link{% if active_nav == 'targets' %} active{% endif %}">Targets</a></li>{% endif %}
-{% if permissions.audit %}<li><a href="/audit" class="nav-link{% if active_nav == 'audit' %} active{% endif %}">Audit</a></li>{% endif %}
-{% if permissions.roles %}<li><a href="/notifications" class="nav-link{% if active_nav == 'notifications' %} active{% endif %}">Notifications</a></li>{% endif %}
-{% if permissions.roles %}<li><a href="/service-accounts" class="nav-link{% if active_nav == 'service_accounts' %} active{% endif %}">Service accounts</a></li>{% endif %}
+{% if permissions.users %}
+<li><a href="/users" class="nav-link{% if active_nav == 'users' %} active{% endif %}" aria-label="Users" title="Users"{% if active_nav == 'users' %} aria-current="page"{% endif %}>
+  <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>
+  <span class="sidebar-link-label">Users</span>
+</a></li>
+{% endif %}
+{% if permissions.users %}
+<li><a href="/assignment-profiles" class="nav-link{% if active_nav == 'profiles' %} active{% endif %}" aria-label="Assignment profiles" title="Assignment profiles"{% if active_nav == 'profiles' %} aria-current="page"{% endif %}>
+  <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="m12 2 9 5-9 5-9-5 9-5Z"></path><path d="m3 12 9 5 9-5M3 17l9 5 9-5"></path></svg></span>
+  <span class="sidebar-link-label">Assignment profiles</span>
+</a></li>
+{% endif %}
+{% if permissions.users %}
+<li><a href="/access-reviews" class="nav-link{% if active_nav == 'reviews' %} active{% endif %}" aria-label="Access reviews" title="Access reviews"{% if active_nav == 'reviews' %} aria-current="page"{% endif %}>
+  <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect width="14" height="18" x="5" y="3" rx="2"></rect><path d="M9 3V1h6v2M9 12l2 2 4-4M9 18h6"></path></svg></span>
+  <span class="sidebar-link-label">Access reviews</span>
+</a></li>
+{% endif %}
+{% if permissions.users %}
+<li><a href="/unmanaged-accounts" class="nav-link{% if active_nav == 'unmanaged' %} active{% endif %}" aria-label="Unmanaged accounts" title="Unmanaged accounts"{% if active_nav == 'unmanaged' %} aria-current="page"{% endif %}>
+  <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><circle cx="9" cy="7" r="4"></circle><path d="M2 21v-2a4 4 0 0 1 4-4h5"></path><path d="M18 14v4M18 22h.01M14.5 22h7a1 1 0 0 0 .87-1.5l-3.5-6a1 1 0 0 0-1.74 0l-3.5 6a1 1 0 0 0 .87 1.5Z"></path></svg></span>
+  <span class="sidebar-link-label">Unmanaged accounts</span>
+</a></li>
+{% endif %}
+{% if permissions.targets %}
+<li><a href="/status" class="nav-link{% if active_nav == 'targets' %} active{% endif %}" aria-label="Targets" title="Targets"{% if active_nav == 'targets' %} aria-current="page"{% endif %}>
+  <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect width="18" height="8" x="3" y="3" rx="2"></rect><rect width="18" height="8" x="3" y="13" rx="2"></rect><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"></path></svg></span>
+  <span class="sidebar-link-label">Targets</span>
+</a></li>
+{% endif %}
+{% if permissions.users %}
+<li><a href="/reconciliation" class="nav-link{% if active_nav == 'reconciliation' %} active{% endif %}" aria-label="Reconciliation" title="Reconciliation"{% if active_nav == 'reconciliation' %} aria-current="page"{% endif %}>
+  <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M20 7h-5V2"></path><path d="M20 7a9 9 0 0 0-15.5-3M4 17h5v5"></path><path d="M4 17a9 9 0 0 0 15.5 3"></path></svg></span>
+  <span class="sidebar-link-label">Reconciliation</span>
+</a></li>
+{% endif %}
+{% if permissions.roles %}
+<li><a href="/service-accounts" class="nav-link{% if active_nav == 'service_accounts' %} active{% endif %}" aria-label="Service accounts" title="Service accounts"{% if active_nav == 'service_accounts' %} aria-current="page"{% endif %}>
+  <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M9 12h.01M15 12h.01M9 16h6M12 8V4M9 4h6"></path></svg></span>
+  <span class="sidebar-link-label">Service accounts</span>
+</a></li>
+{% endif %}
+{% if permissions.roles %}
+<li><a href="/notifications" class="nav-link{% if active_nav == 'notifications' %} active{% endif %}" aria-label="Notifications" title="Notifications"{% if active_nav == 'notifications' %} aria-current="page"{% endif %}>
+  <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg></span>
+  <span class="sidebar-link-label">Notifications</span>
+</a></li>
+{% endif %}
+{% if permissions.audit %}
+<li><a href="/audit" class="nav-link{% if active_nav == 'audit' %} active{% endif %}" aria-label="Audit" title="Audit"{% if active_nav == 'audit' %} aria-current="page"{% endif %}>
+  <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h7"></path><path d="M14 2v6h6M8 13h4M8 17h3"></path><circle cx="17" cy="17" r="3"></circle><path d="m19.2 19.2 2.3 2.3"></path></svg></span>
+  <span class="sidebar-link-label">Audit</span>
+</a></li>
+{% endif %}

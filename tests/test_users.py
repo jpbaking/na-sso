@@ -19,13 +19,58 @@ def test_shared_page_shell_pins_footer_to_viewport(client, admin_client):
     for response in (login, users):
         assert '<body class="site-page">' in response.text
         assert '<link rel="stylesheet" href="/app.css">' in response.text
+        assert '<img src="/na-sso-logo.png" alt="">' in response.text
         assert response.text.index("<main>") < response.text.index('<footer class="footer">')
+
+    for path in (
+        "/na-sso-logo.png", "/favicon.svg", "/favicon.ico", "/apple-touch-icon.png",
+        "/icon-192.png", "/icon-512.png",
+    ):
+        asset = client.get(path)
+        assert asset.status_code == 200
+        assert asset.content
 
     adaptation = client.get("/app.css")
     assert adaptation.status_code == 200
-    assert ".mobile-nav" in adaptation.text and "flex-wrap: nowrap" in adaptation.text
-    assert 'aria-label="Mobile navigation"' in users.text
-    assert '<summary class="btn btn-secondary btn-sm">Menu</summary>' in users.text
+    assert ".app-sidebar" in adaptation.text and "flex-wrap: nowrap" in adaptation.text
+    assert 'aria-label="Primary navigation"' in users.text
+    assert 'data-mobile-sidebar-toggle aria-expanded="false"' in users.text
+    assert 'aria-label="My account options"' in users.text
+    header = users.text.split('<header class="nav-wrap">', 1)[1].split("</header>", 1)[0]
+    assert 'href="/users" class="nav-link' not in header
+    assert 'href="/account" class="nav-link' in header
+    assert 'href="/account/password"' not in header
+    assert 'href="/account/mfa"' not in header
+    assert 'class="brand sidebar-brand"' in users.text
+    assert 'data-sidebar-expand' in users.text
+    assert 'class="sidebar-control-icon sidebar-collapse-idle"' in users.text
+    assert 'class="sidebar-control-icon sidebar-collapse-hover"' in users.text
+    assert 'class="sidebar-control-icon sidebar-expand-hover"' in users.text
+    assert 'class="sidebar-expand-logo"' in users.text
+    assert 'class="sidebar-expand-logo" src="/na-sso-logo.png"' in users.text
+    assert 'm16 15-3-3 3-3' in users.text
+    assert 'm14 9 3 3-3 3' in users.text
+    assert 'href="https://github.com/jpbaking" rel="me"' in users.text
+
+    navigation = users.text.split('<ul class="nav-links sidebar-links"', 1)[1].split("</ul>", 1)[0]
+    expected_order = (
+        "Users", "Assignment profiles", "Access reviews", "Unmanaged accounts",
+        "Targets", "Reconciliation", "Service accounts", "Notifications", "Audit",
+    )
+    assert [navigation.index(f'class="sidebar-link-label">{label}</span>') for label in expected_order] == sorted(
+        navigation.index(f'class="sidebar-link-label">{label}</span>') for label in expected_order
+    )
+    assert navigation.count('class="sidebar-link-icon"') == len(expected_order)
+    for label in expected_order:
+        assert f'aria-label="{label}" title="{label}"' in navigation
+
+    assert ".sidebar-link-icon" in adaptation.text
+    assert ".sidebar-collapsed .sidebar-link-label" in adaptation.text
+    collapsed_rules = adaptation.text.split(".sidebar-collapsed .sidebar-brand", 1)[1].split(
+        ".mobile-sidebar-toggle", 1
+    )[0]
+    assert ".sidebar-collapsed .sidebar-links .nav-link" in collapsed_rules
+    assert ".sidebar-collapsed .sidebar-links {\n  display: none;" not in adaptation.text
 
 
 def test_shared_page_container_can_expand_to_viewport(client):
