@@ -112,7 +112,8 @@ async def api_http_error(request: Request, error: HTTPException):
 app.mount("/design", StaticFiles(directory=_PKG_DIR / "static" / "design"), name="design")
 
 for _icon in (
-    "favicon.svg", "favicon.ico", "apple-touch-icon.png", "site.webmanifest", "app.css"
+    "na-sso-logo.png", "favicon.svg", "favicon.ico", "apple-touch-icon.png",
+    "icon-192.png", "icon-512.png", "site.webmanifest", "app.css",
 ):
     app.add_api_route(
         f"/{_icon}",
