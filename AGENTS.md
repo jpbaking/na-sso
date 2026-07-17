@@ -205,6 +205,8 @@ When the owning doc lies inside a nested root, make the update there — but say
 
 When the user requests a durable behavior change, record it here or in the relevant child AGENTS.md.
 
+- Use Playwright whenever inspecting, testing, debugging, or exploring the web UI.
+
 ## Feature Map
 
 - **Containerized application and isolated demo** — Runs the normal service from `docker-compose.yaml` with `.config/`, and a separate `<project>-demo` stack from `docker-compose-demo.yaml` with public `.config-demo/` settings, browser-uploadable demo management credentials, and runtime-generated SSH/YAML state. Start: `docker-compose.yaml`. Files: `docker-compose-demo.yaml`, `Dockerfile`, `Dockerfile.demo-ssh`, `demo-ssh.sh`, `compose-helper.sh`, `compose-helper.env`, `.config/.env.example`, `.config/na-sso.yaml.example`, `.config-demo/.env`. Detail in `./na_sso/mock_targets`.
