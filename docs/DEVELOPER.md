@@ -316,8 +316,11 @@ connector detail, management addresses, and target credentials.
 
 `permissions.py` is the single role-to-capability map. Route modules call the
 shared permission guard before loading or mutating protected resources; Jinja
-receives the derived permission context only to render matching navigation and
-controls. User operators can mutate ordinary `user` accounts only. Target
+receives the derived permission context only to render matching controls and
+the workflow-ordered sidebar. The shared shell keeps administrative destinations
+in that icon-bearing collapsible/off-canvas sidebar and reserves the account
+menu for **My account** and **Sign out**; password and MFA controls live on the
+account page. User operators can mutate ordinary `user` accounts only. Target
 operators own target configuration and probes. Auditors own investigation and
 export. Root owns all capabilities plus role assignment, while model invariants
 keep ID 0 active, local-only, and `root`. Any new administrative route must add

@@ -144,7 +144,8 @@ target's managed-user key propagation:
 1. Create a non-root user, give it a password, and assign **Debian SSH key and
    password**.
 2. Sign out as the administrator and sign in as that managed user.
-3. Complete the first-login password decision, then open **Account**.
+3. Complete the first-login password decision, then open **My account** from the
+   account menu.
 4. Select **Generate in browser**, inspect the new fingerprint, then save the
    `na-sso_ed25519` file or copy the full private-key value.
 5. Confirm that the private key is safe, then select **Enrol public key**. Only

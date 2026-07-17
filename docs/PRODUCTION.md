@@ -165,7 +165,10 @@ replacement require the current password again after
 `reauthentication_minutes`. Recovery codes are displayed once, stored only as
 keyed hashes, and consumed once. TOTP secrets are encrypted with
 `NA_SSO_SECRET_KEY`; WebAuthn stores public credential material and sign counts.
-The final factor cannot be revoked while policy requires MFA.
+The final factor cannot be revoked while policy requires MFA. Signed-in
+operators manage password and MFA controls from **My account**, reached through
+the account menu; those personal security controls are intentionally separate
+from the capability-aware administrative sidebar.
 
 For root only, `NA_SSO_ROOT_RECOVERY_CODE` provides a separately stored
 emergency second factor after the correct root password. Each configured value
