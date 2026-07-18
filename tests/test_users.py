@@ -92,9 +92,9 @@ def test_shared_modal_behavior_traps_keyboard_focus(client):
 
 def test_new_user_form_advertises_username_contract(admin_client):
     page = admin_client.get("/users/new")
-    assert "Lowercase letters, digits, underscores, dots and hyphens." in page.text
-    assert 'pattern="[a-z0-9](?:[a-z0-9_.\\-]*[a-z0-9])?"' in page.text
-    assert 'maxlength="64"' in page.text
+    assert "Portable Unix name, valid on every supported target" in page.text
+    assert 'pattern="[a-z](?:[a-z0-9_\\-]{0,30}[a-z0-9])?"' in page.text
+    assert 'maxlength="32"' in page.text
     assert '<dialog id="generated-password-modal" class="modal"' in page.text
     assert 'id="copy-generated-password"' in page.text
     assert 'id="generated-password-value" type="password" readonly' in page.text
@@ -119,7 +119,7 @@ def test_generated_user_password_requires_confirmed_handoff(admin_client):
     data = {
         "username": "generated-gate",
         "display_name": "Handoff Gate",
-        "email": "",
+        "email": "mp@example.invalid",
         "password": "V4lid!Copper-Zebra-2026",
         "password_generated": "true",
     }
@@ -178,7 +178,7 @@ def test_user_create_feedback_is_explicit_and_one_time(admin_client):
     response = admin_client.post("/users/new", data={
         "username": "noticed",
         "display_name": "Noticed User",
-        "email": "",
+        "email": "mp@example.invalid",
         "password": "V4lid!Copper-Zebra-2026",
     }, follow_redirects=False)
     assert response.status_code == 303
@@ -274,7 +274,7 @@ def test_user_crud_roundtrip(admin_client):
 
 
 def test_soft_deleted_user_can_restore_with_new_password(admin_client):
-    admin_client.post("/users/new", data={"username": "restoreme", "display_name": "", "email": "", "password": "V4lid!First-Secret-2026"})
+    admin_client.post("/users/new", data={"username": "restoreme", "display_name": "Managed Person", "email": "mp@example.invalid", "password": "V4lid!First-Secret-2026"})
     admin_client.post("/users/1/delete")
     restore = admin_client.get("/users/1/restore")
     assert restore.status_code == 200
@@ -333,7 +333,7 @@ def test_failed_delete_shows_correlated_progress_and_blocking_target(
     admin_client.post("/users/new", data={
         "username": "delete-progress",
         "display_name": "Delete Progress",
-        "email": "",
+        "email": "mp@example.invalid",
         "password": "V4lid!Copper-Zebra-2026",
         "target_ids": "nextcloud",
     })
@@ -356,20 +356,50 @@ def test_failed_delete_shows_correlated_progress_and_blocking_target(
 
 def test_duplicate_username_rejected(admin_client):
     c = admin_client
-    data = {"username": "dup", "display_name": "", "email": "", "password": "V4lid!Orbit-Cloud-2026"}
+    data = {"username": "dup", "display_name": "Managed Person", "email": "mp@example.invalid", "password": "V4lid!Orbit-Cloud-2026"}
     assert c.post("/users/new", data=data, follow_redirects=False).status_code == 303
     assert c.post("/users/new", data=data).status_code == 422
 
 
 @pytest.mark.parametrize("username", [
-    "john.doe", "john-doe", "john_doe", "service_account", "a.b-c_d",
+    "john-doe", "john_doe", "service-account", "a-b_c-d",
 ])
-def test_username_accepts_supported_separators(admin_client, username):
+def test_username_accepts_portable_separators(admin_client, username):
     response = admin_client.post("/users/new", data={
-        "username": username, "display_name": "", "email": "",
+        "username": username, "display_name": "Managed Person", "email": "mp@example.invalid",
         "password": "V4lid!Username-Policy-2026",
     }, follow_redirects=False)
     assert response.status_code == 303
+
+
+@pytest.mark.parametrize("username", [
+    "john.doe", "a.b-c_d", "0day", "9john",
+])
+def test_username_rejects_non_portable_names(admin_client, username):
+    response = admin_client.post("/users/new", data={
+        "username": username, "display_name": "Managed Person", "email": "mp@example.invalid",
+        "password": "V4lid!Username-Policy-2026",
+    })
+    assert response.status_code == 422
+    assert "portable Unix name" in response.text
+
+
+def test_email_required_universally(admin_client):
+    response = admin_client.post("/users/new", data={
+        "username": "no-email", "display_name": "Managed Person", "email": "",
+        "password": "V4lid!Username-Policy-2026",
+    })
+    assert response.status_code == 422
+    assert "Email is required" in response.text
+
+
+def test_display_name_required_universally(admin_client):
+    response = admin_client.post("/users/new", data={
+        "username": "no-display", "display_name": "", "email": "mp@example.invalid",
+        "password": "V4lid!Username-Policy-2026",
+    })
+    assert response.status_code == 422
+    assert "Display name is required" in response.text
 
 
 @pytest.mark.parametrize("username", [
@@ -377,16 +407,16 @@ def test_username_accepts_supported_separators(admin_client, username):
 ])
 def test_username_rejects_unsupported_or_edge_separators(admin_client, username):
     response = admin_client.post("/users/new", data={
-        "username": username, "display_name": "", "email": "",
+        "username": username, "display_name": "Managed Person", "email": "mp@example.invalid",
         "password": "V4lid!Username-Policy-2026",
     })
     assert response.status_code == 422
     assert "separators cannot be first or last" in response.text
 
 
-def test_username_rejects_more_than_64_characters(admin_client):
+def test_username_rejects_more_than_32_characters(admin_client):
     response = admin_client.post("/users/new", data={
-        "username": "a" * 65, "display_name": "", "email": "",
+        "username": "a" * 33, "display_name": "Managed Person", "email": "mp@example.invalid",
         "password": "V4lid!Username-Policy-2026",
     })
     assert response.status_code == 422
@@ -395,7 +425,7 @@ def test_username_rejects_more_than_64_characters(admin_client):
 def test_password_never_plaintext_in_db(admin_client, tmp_path):
     admin_client.post(
         "/users/new",
-        data={"username": "sec", "display_name": "", "email": "",
+        data={"username": "sec", "display_name": "Managed Person", "email": "mp@example.invalid",
               "password": "V4lid!Orbit-Cloud"},
     )
     blob = (tmp_path / "test.db").read_bytes()

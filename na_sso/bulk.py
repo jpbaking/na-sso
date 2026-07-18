@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from na_sso.auth import permission_guard
 from na_sso.api_contract import api_error, api_guard, api_response
 from na_sso.audit import record_audit
-from na_sso.connectors import get_connectors, validate_for_targets
+from na_sso.connectors import get_connectors, validate_universal_identity
 from na_sso.db import get_session
 from na_sso.feedback import redirect_with_feedback, template_response
 from na_sso.lifecycle import LifecycleCommand, OperationStatus
@@ -130,9 +130,7 @@ def preview_bulk_workflow(
                     display_name=display_name or (existing.display_name if existing else ""),
                     email=email or (existing.email if existing else ""),
                 )
-                validation = validate_for_targets(
-                    proposed, [connectors[target] for target in target_ids]
-                )
+                validation = validate_universal_identity(proposed)
                 if not validation.ok:
                     errors.append(validation.detail)
                 display_name, email = proposed.display_name, proposed.email

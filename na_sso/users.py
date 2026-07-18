@@ -31,7 +31,7 @@ from na_sso.permissions import (
 from na_sso.notifications import enqueue_notification
 from na_sso.security import encrypt_secret, hash_password, validate_password
 from na_sso.sync import sync_user
-from na_sso.connectors import get_connectors, validate_for_targets
+from na_sso.connectors import get_connectors, validate_universal_identity
 
 router = APIRouter()
 USERNAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_.-]{0,62}[a-z0-9])?$")
@@ -297,7 +297,7 @@ async def create_user(
             password_hash=hash_password(password), role=assigned_role,
             password_decision_required=True, password_decision_kind="initial", password_changed_at=utcnow(),
         )
-        identity = validate_for_targets(user, [connectors[item] for item in target_ids])
+        identity = validate_universal_identity(user)
         if not identity.ok:
             return _render(request, "user_form.html", {"user": None, "admin": admin,
                 "suggested": "", "form_values": form_values,
@@ -623,7 +623,7 @@ async def update_user(
         if any(item not in connectors for item in target_ids):
             return RedirectResponse(f"/users/{user_id}", status_code=303)
         proposed = ManagedUser(username=user.username, display_name=display_name.strip(), email=email.strip())
-        identity = validate_for_targets(proposed, [connectors[item] for item in target_ids])
+        identity = validate_universal_identity(proposed)
         if not identity.ok:
             return _render(request, "user_form.html", {"user": user, "admin": admin,
                 "suggested": "", "form_values": form_values,

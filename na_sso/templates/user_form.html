@@ -11,21 +11,21 @@
     {% if not user %}
     <div class="field">
       <label class="label" for="username">Username</label>
-      <input class="input" id="username" name="username" required maxlength="64"
-             pattern="[a-z0-9](?:[a-z0-9_.\-]*[a-z0-9])?"
+      <input class="input" id="username" name="username" required maxlength="32"
+             pattern="[a-z](?:[a-z0-9_\-]{0,30}[a-z0-9])?"
              value="{{ form_values.get('username', '') }}"
              autocapitalize="none" spellcheck="false">
-      <div class="field-hint">Lowercase letters, digits, underscores, dots and hyphens. Separators cannot be first or last. Used on every target.</div>
+      <div class="field-hint">Portable Unix name, valid on every supported target: starts with a letter; lowercase letters, digits, underscores and hyphens; ends with a letter or digit; at most 32 characters.</div>
     </div>
     {% endif %}
     <div class="field">
       <label class="label" for="display_name">Display name</label>
-      <input class="input" id="display_name" name="display_name"
+      <input class="input" id="display_name" name="display_name" required
              value="{{ form_values.get('display_name', user.display_name if user else '') }}">
     </div>
     <div class="field">
       <label class="label" for="email">Email</label>
-      <input class="input" id="email" name="email" type="email"
+      <input class="input" id="email" name="email" type="email" required
              value="{{ form_values.get('email', user.email if user else '') }}">
     </div>
     <div class="field">

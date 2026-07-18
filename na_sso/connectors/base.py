@@ -331,3 +331,46 @@ def validate_for_targets(user: ManagedUser, connectors: list[Connector]) -> Iden
         if not result.ok:
             return result
     return IdentityValidation(True)
+
+
+# The strictest username any supported target accepts: a portable Unix name
+# (SSH without relaxed usernames). Start with a letter, lowercase letters,
+# digits, underscores or hyphens, end with a letter or digit, max 32 chars.
+UNIVERSAL_USERNAME_RE = re.compile(r"[a-z](?:[a-z0-9_-]{0,30}[a-z0-9])?")
+
+
+def _universal_requirements() -> tuple[bool, bool]:
+    from na_sso.connectors.gitea import GiteaConnector
+    from na_sso.connectors.gitlab import GitlabConnector
+    from na_sso.connectors.immich import ImmichConnector
+    from na_sso.connectors.jenkins import JenkinsConnector
+    from na_sso.connectors.nextcloud import NextcloudConnector
+    from na_sso.connectors.nexus import NexusConnector
+    from na_sso.connectors.opnsense import OPNsenseConnector
+    from na_sso.connectors.ssh import SSHConnector
+    classes = (OPNsenseConnector, NexusConnector, NextcloudConnector, SSHConnector,
+               GitlabConnector, GiteaConnector, ImmichConnector, JenkinsConnector)
+    return (any(cls.capabilities.email_required for cls in classes),
+            any(cls.capabilities.display_name_required for cls in classes))
+
+
+def validate_universal_identity(user: ManagedUser) -> IdentityValidation:
+    """Apply the union of every supported target type's identity requirements,
+    regardless of which targets are configured or assigned, so an account
+    created today can be assigned to any target later without rework."""
+    if not UNIVERSAL_USERNAME_RE.fullmatch(user.username or ""):
+        return IdentityValidation(
+            False,
+            "Username must be a portable Unix name usable on every supported "
+            "target: start with a letter; lowercase letters, digits, "
+            "underscores or hyphens; end with a letter or digit; at most 32 "
+            "characters",
+        )
+    email_required, display_name_required = _universal_requirements()
+    if email_required and not (user.email or "").strip():
+        return IdentityValidation(
+            False, "Email is required because supported target types require it")
+    if display_name_required and not (user.display_name or "").strip():
+        return IdentityValidation(
+            False, "Display name is required because supported target types require it")
+    return IdentityValidation(True)

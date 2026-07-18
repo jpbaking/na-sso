@@ -178,7 +178,7 @@ def test_restore_is_rejected_until_delete_is_terminal(admin_client):
     admin_client.post("/users/new", data={
         "username": "restore-race",
         "display_name": "Restore Race",
-        "email": "",
+        "email": "mp@example.invalid",
         "password": "V4lid!Copper-Zebra-2026",
     })
     with get_session() as db:
@@ -224,7 +224,7 @@ def test_completed_delete_restores_to_chpw_without_recreating_remote_account(
     response = admin_client.post("/users/new", data={
         "username": "restore-terminal",
         "display_name": "Terminal Restore",
-        "email": "",
+        "email": "mp@example.invalid",
         "password": "V4lid!Copper-Zebra-2026",
         "target_ids": "nextcloud",
     })
@@ -266,7 +266,7 @@ def test_update_is_rejected_while_operation_is_running(admin_client):
     admin_client.post("/users/new", data={
         "username": "busy-user",
         "display_name": "Before",
-        "email": "",
+        "email": "mp@example.invalid",
         "password": "V4lid!Copper-Zebra-2026",
     })
     with get_session() as db:
@@ -278,7 +278,7 @@ def test_update_is_rejected_while_operation_is_running(admin_client):
 
     response = admin_client.post(
         f"/users/{user_id}",
-        data={"display_name": "After", "email": "", "password": "", "status": "active"},
+        data={"display_name": "After", "email": "mp@example.invalid", "password": "", "status": "active"},
     )
 
     assert response.status_code == 409
