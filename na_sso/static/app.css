@@ -447,3 +447,84 @@
   border-bottom: 1px solid var(--line);
   background: var(--surface);
 }
+
+/* Collapsible card: a .card whose body toggles via native <details>. Header
+   is always visible; the body reveals on click. One open at a time is not
+   enforced (independent cards). Used for the users page bulk-actions and
+   advanced-filters cards. */
+details.collapse-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+details.collapse-card > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  list-style: none;
+  padding: var(--space-4);
+}
+
+details.collapse-card > summary::-webkit-details-marker { display: none; }
+
+details.collapse-card > summary::after {
+  color: var(--muted);
+  content: "\25B8";
+}
+
+details.collapse-card[open] > summary::after { content: "\25BE"; }
+
+details.collapse-card[open] > summary {
+  border-bottom: var(--border-hair) solid var(--line);
+}
+
+.collapse-card-hint {
+  color: var(--muted);
+  font-weight: var(--fw-regular, 400);
+}
+
+.collapse-card-body { padding: var(--space-4); }
+
+/* Users page search: text search + button always visible; advanced filters
+   live behind a "More filters" disclosure that auto-opens when a filter is
+   active (see users.html). */
+.filters-search-row {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.filters-search-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.filters-more > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-2);
+  list-style: none;
+}
+
+.filters-more > summary::-webkit-details-marker { display: none; }
+
+.filters-more > summary::before {
+  color: var(--muted);
+  content: "\25B8";
+}
+
+.filters-more[open] > summary::before { content: "\25BE"; }
+
+.filters-more-label {
+  color: var(--brand-blue);
+  font-family: var(--font-mono);
+  font-size: var(--ui-kicker);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+}
+
+.filters-more-body { margin-top: var(--space-3); }

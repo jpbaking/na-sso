@@ -9,57 +9,66 @@
     <a class="section-all" href="/users/new">Add user</a>
   </div>
 
+  {% set filters_active = inventory.params.lifecycle != 'all' or inventory.params.target or inventory.params.issues != 'all' or inventory.params.sort != 'username' or inventory.params.direction != 'asc' %}
   <form method="get" action="/users" class="card stack-2" aria-label="Filter users">
-    <div class="grid-3">
-      <div class="field">
-        <label class="label" for="user-search">Search</label>
+    <div class="field">
+      <label class="label" for="user-search">Search</label>
+      <div class="filters-search-row">
         <input class="input" id="user-search" name="q" type="search" value="{{ inventory.params.search }}" placeholder="Username, name or email">
-      </div>
-      <div class="field">
-        <label class="label" for="lifecycle-filter">Lifecycle</label>
-        <select class="select" id="lifecycle-filter" name="lifecycle">
-          {% for value, label in [('all','All'),('active','Active'),('chpw','Password change required'),('expired','Password expired'),('disabled','Disabled'),('deleting','Deleting'),('deleted','Deleted'),('protected','Protected')] %}
-          <option value="{{ value }}"{% if inventory.params.lifecycle == value %} selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label class="label" for="target-filter">Assigned target</label>
-        <select class="select" id="target-filter" name="target">
-          <option value="">Any target</option>
-          {% for target in targets %}<option value="{{ target.target_id }}"{% if inventory.params.target == target.target_id %} selected{% endif %}>{{ target.display_name }}</option>{% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label class="label" for="issues-filter">Issues</label>
-        <select class="select" id="issues-filter" name="issues">
-          {% for value, label in [('all','Any'),('attention','Needs attention'),('retrying','Retry scheduled'),('none','No issues')] %}
-          <option value="{{ value }}"{% if inventory.params.issues == value %} selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label class="label" for="sort-users">Sort</label>
-        <select class="select" id="sort-users" name="sort">
-          {% for value, label in [('username','Username'),('name','Name'),('lifecycle','Lifecycle'),('coverage','Coverage'),('issues','Issues'),('password','Password')] %}
-          <option value="{{ value }}"{% if inventory.params.sort == value %} selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field">
-        <label class="label" for="sort-direction">Direction</label>
-        <select class="select" id="sort-direction" name="direction">
-          <option value="asc"{% if inventory.params.direction == 'asc' %} selected{% endif %}>Ascending</option>
-          <option value="desc"{% if inventory.params.direction == 'desc' %} selected{% endif %}>Descending</option>
-        </select>
+        <button class="btn btn-primary btn-sm" type="submit">Search</button>
       </div>
     </div>
+    <details class="filters-more"{% if filters_active %} open{% endif %}>
+      <summary><span class="filters-more-label">More filters</span>{% if filters_active %}<span class="badge badge-shipped">Active</span>{% endif %}</summary>
+      <div class="filters-more-body stack-2">
+        <div class="grid-3">
+          <div class="field">
+            <label class="label" for="lifecycle-filter">Lifecycle</label>
+            <select class="select" id="lifecycle-filter" name="lifecycle">
+              {% for value, label in [('all','All'),('active','Active'),('chpw','Password change required'),('expired','Password expired'),('disabled','Disabled'),('deleting','Deleting'),('deleted','Deleted'),('protected','Protected')] %}
+              <option value="{{ value }}"{% if inventory.params.lifecycle == value %} selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="target-filter">Assigned target</label>
+            <select class="select" id="target-filter" name="target">
+              <option value="">Any target</option>
+              {% for target in targets %}<option value="{{ target.target_id }}"{% if inventory.params.target == target.target_id %} selected{% endif %}>{{ target.display_name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="issues-filter">Issues</label>
+            <select class="select" id="issues-filter" name="issues">
+              {% for value, label in [('all','Any'),('attention','Needs attention'),('retrying','Retry scheduled'),('none','No issues')] %}
+              <option value="{{ value }}"{% if inventory.params.issues == value %} selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="sort-users">Sort</label>
+            <select class="select" id="sort-users" name="sort">
+              {% for value, label in [('username','Username'),('name','Name'),('lifecycle','Lifecycle'),('coverage','Coverage'),('issues','Issues'),('password','Password')] %}
+              <option value="{{ value }}"{% if inventory.params.sort == value %} selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <label class="label" for="sort-direction">Direction</label>
+            <select class="select" id="sort-direction" name="direction">
+              <option value="asc"{% if inventory.params.direction == 'asc' %} selected{% endif %}>Ascending</option>
+              <option value="desc"{% if inventory.params.direction == 'desc' %} selected{% endif %}>Descending</option>
+            </select>
+          </div>
+        </div>
+        <div class="hero-actions">
+          <button class="btn btn-primary btn-sm" type="submit">Apply filters</button>
+          <a class="btn btn-secondary btn-sm" href="/users">Clear</a>
+        </div>
+      </div>
+    </details>
     <input type="hidden" name="page" value="1">
     <input type="hidden" name="per_page" value="{{ inventory.params.per_page }}">
-    <div class="hero-actions">
-      <button class="btn btn-primary btn-sm" type="submit">Apply filters</button>
-      <a class="btn btn-secondary btn-sm" href="/users">Clear</a>
-    </div>
   </form>
 
   <div class="data-list" aria-live="polite">
@@ -67,14 +76,19 @@
   </div>
 
   {% if inventory.items %}
-  <form id="bulk-form" method="post" action="/users/bulk/preview" class="card stack-2">
-    <div class="grid-3">
-      <div class="field"><label class="label" for="bulk-action">Bulk action</label><select class="select" id="bulk-action" name="action" required><option value="">Choose action</option><option value="assign">Assign target (onboard)</option><option value="unassign">Unassign and disable target (offboard)</option><option value="disable">Disable accounts</option><option value="retry">Retry failed targets</option></select></div>
-      <div class="field"><label class="label" for="bulk-target">Target when required</label><select class="select" id="bulk-target" name="target_id"><option value="">All failed targets</option>{% for target in targets %}<option value="{{ target.target_id }}">{{ target.display_name }}</option>{% endfor %}</select></div>
-      <div class="field"><div class="label">Review first</div><button class="btn btn-primary btn-sm" type="submit">Preview bulk action</button><div class="field-hint">Up to 100 selected accounts. No change occurs on preview.</div></div>
+  <details class="card collapse-card">
+    <summary><span class="data-key">Bulk actions</span><span class="collapse-card-hint">Select accounts below, then choose an action</span></summary>
+    <div class="collapse-card-body">
+      <form id="bulk-form" method="post" action="/users/bulk/preview" class="stack-2">
+        <div class="grid-3">
+          <div class="field"><label class="label" for="bulk-action">Bulk action</label><select class="select" id="bulk-action" name="action" required><option value="">Choose action</option><option value="assign">Assign target (onboard)</option><option value="unassign">Unassign and disable target (offboard)</option><option value="disable">Disable accounts</option><option value="retry">Retry failed targets</option></select></div>
+          <div class="field"><label class="label" for="bulk-target">Target when required</label><select class="select" id="bulk-target" name="target_id"><option value="">All failed targets</option>{% for target in targets %}<option value="{{ target.target_id }}">{{ target.display_name }}</option>{% endfor %}</select></div>
+          <div class="field"><div class="label">Review first</div><button class="btn btn-primary btn-sm" type="submit">Preview bulk action</button><div class="field-hint">Up to 100 selected accounts. No change occurs on preview.</div></div>
+        </div>
+        <div><a href="/users/bulk/import">Use CSV or API bulk onboarding and offboarding</a></div>
+      </form>
     </div>
-    <div><a href="/users/bulk/import">Use CSV or API bulk onboarding and offboarding</a></div>
-  </form>
+  </details>
   <div class="table-wrap inventory-desktop">
     <table class="table">
       <thead><tr><th><span class="sr-only">Select</span></th><th>User</th><th>Lifecycle</th><th>Target coverage</th><th>Issues</th><th>Password expires</th><th>Actions</th></tr></thead>
