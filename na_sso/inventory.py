@@ -16,7 +16,8 @@ ISSUE_FILTERS = frozenset({"all", "attention", "retrying", "none"})
 SORT_FIELDS = frozenset({"username", "name", "lifecycle", "coverage", "issues", "password"})
 PAGE_SIZES = frozenset({25, 50, 100})
 ISSUE_STATES = frozenset({
-    "failed", "awaiting_credentials", "pending_expiry_disable", "expired_disabled", "retired"
+    "failed", "unsupported", "awaiting_credentials", "pending_expiry_disable",
+    "expired_disabled", "retired"
 })
 
 
@@ -119,6 +120,9 @@ def summarise_user(user: ManagedUser) -> InventorySummary:
     assigned = [state for state in user.sync_states if state.assigned and not state.retired]
     issue_count = sum(
         state.retired or (state.assigned and state.state in ISSUE_STATES)
+        # A failed or unsupported offboarding disable still needs attention
+        # after the target is unassigned.
+        or state.state in {"failed", "unsupported"}
         for state in user.sync_states
     )
     return InventorySummary(
@@ -148,6 +152,9 @@ def query_inventory(db, params: InventoryParams) -> InventoryPage:
     issue_condition = or_(
         SyncState.retired.is_(True),
         and_(SyncState.assigned.is_(True), SyncState.state.in_(ISSUE_STATES)),
+        # A failed or unsupported offboarding disable still needs attention
+        # after the target is unassigned.
+        SyncState.state.in_(("failed", "unsupported")),
     )
     issue_count = select(func.count(SyncState.id)).where(
         SyncState.user_id == ManagedUser.id,
@@ -156,7 +163,6 @@ def query_inventory(db, params: InventoryParams) -> InventoryPage:
     has_issue = exists().where(SyncState.user_id == ManagedUser.id, issue_condition)
     has_retry = exists().where(
         SyncState.user_id == ManagedUser.id,
-        SyncState.assigned.is_(True),
         SyncState.state == "failed",
         SyncState.next_retry_at.is_not(None),
     )

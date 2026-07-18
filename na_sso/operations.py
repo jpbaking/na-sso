@@ -56,7 +56,9 @@ def operation_payload(
     for state in states or []:
         if state.operation_id != operation.id:
             continue
-        if state.state == SyncStateValue.FAILED.value or not sync_state_is_terminal(
+        if state.state in {
+            SyncStateValue.FAILED.value, SyncStateValue.UNSUPPORTED.value,
+        } or not sync_state_is_terminal(
             state.state,
             operation=desired,
             assigned=state.assigned,

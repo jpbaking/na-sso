@@ -350,6 +350,64 @@ async def test_failed_delete_schedules_and_retries_delete(client, monkeypatch):
         assert db.get(ManagedUser, user_id).deleted_at is not None
 
 
+async def test_validation_failure_is_terminal_unsupported_without_retry(client, monkeypatch):
+    class UnsupportedDisableConnector(StubConnector):
+        async def disable_user(self, user):
+            self.calls.append(("disable", user.username))
+            return SyncResult(False, "Jenkins core cannot safely disable a local account")
+
+    connector = UnsupportedDisableConnector("jenkins")
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [connector])
+    user_id = _stored_user()
+    from na_sso.db import get_session
+    from na_sso.sync import retry_due, sync_user
+    with get_session() as db:
+        db.get(ManagedUser, user_id).status = "disabled"
+        db.commit()
+
+    await sync_user(user_id)
+
+    from na_sso.models import LifecycleOperation
+    with get_session() as db:
+        state = db.get(ManagedUser, user_id).sync_states[0]
+        assert state.state == "unsupported"
+        assert state.next_retry_at is None and state.attempt_count == 1
+        operation = db.get(LifecycleOperation, state.operation_id)
+        assert operation.status == "failed" and operation.failed_targets == 1
+    assert await retry_due() == 0
+    assert connector.calls.count(("disable", "syncme")) == 1
+
+
+async def test_unassigned_disable_failure_retries_until_disabled(client, monkeypatch):
+    connector = StubConnector("nextcloud")
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [connector])
+    user_id = _stored_user()
+    from na_sso.db import get_session
+    from na_sso.sync import retry_due, sync_user
+
+    await sync_user(user_id)
+    with get_session() as db:
+        state = db.get(ManagedUser, user_id).sync_states[0]
+        state.assigned = False
+        state.state = "pending_disable"
+        db.commit()
+    connector.ok = False
+    await sync_user(user_id)
+    with get_session() as db:
+        state = db.get(ManagedUser, user_id).sync_states[0]
+        assert state.state == "failed" and not state.assigned and state.next_retry_at
+        state.next_retry_at = state.next_retry_at.replace(year=2000)
+        db.commit()
+
+    connector.ok = True
+    assert await retry_due() == 1
+
+    assert connector.calls[-1] == ("disable", "syncme")
+    with get_session() as db:
+        state = db.get(ManagedUser, user_id).sync_states[0]
+        assert state.state == "unassigned" and state.next_retry_at is None
+
+
 def test_retry_endpoint_runs_only_selected_target(admin_client, monkeypatch):
     first = StubConnector("opnsense")
     second = StubConnector("nexus")

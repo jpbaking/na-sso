@@ -31,6 +31,7 @@ class SyncStateValue(StrEnum):
     PENDING = "pending"
     OK = "ok"
     FAILED = "failed"
+    UNSUPPORTED = "unsupported"
     CHPW = "chpw"
     AWAITING_CREDENTIALS = "awaiting_credentials"
     PENDING_DISABLE = "pending_disable"
@@ -171,6 +172,12 @@ _PRESENTATIONS: dict[SyncStateValue, SyncPresentation] = {
     SyncStateValue.FAILED: SyncPresentation(
         "Failed", "badge-danger", "The latest target operation failed.", retryable=True, terminal=True
     ),
+    SyncStateValue.UNSUPPORTED: SyncPresentation(
+        "Unsupported on target",
+        "badge-danger",
+        "The target cannot perform the requested operation; automatic retry would not help.",
+        terminal=True,
+    ),
     SyncStateValue.CHPW: SyncPresentation(
         "Password change required",
         "badge-planned",
@@ -232,6 +239,10 @@ def normalise_sync_state(
         SyncStateValue.NOT_ASSIGNED,
         SyncStateValue.PENDING_DISABLE,
         SyncStateValue.RETIRED,
+        # A failure is never masked as a completed disable: the unassigned
+        # account did not reach the disabled state the label would claim.
+        SyncStateValue.FAILED,
+        SyncStateValue.UNSUPPORTED,
     }:
         return SyncStateValue.UNASSIGNED
     return value

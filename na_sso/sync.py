@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from na_sso.audit import record_audit
 from na_sso.config import get_settings
 from na_sso.connectors import get_connectors
+from na_sso.connectors.base import ConnectorErrorKind
 from na_sso.db import get_session
 from na_sso.lifecycle import (
     DesiredAction,
@@ -140,7 +141,11 @@ async def _sync_user(
             scope_states = [
                 state
                 for state in user.sync_states
-                if (state.assigned or state.state == SyncStateValue.PENDING_DISABLE.value)
+                # An unassigned target stays in scope while its offboarding
+                # disable is pending or failed, so retries can reach it.
+                if (state.assigned or state.state in {
+                    SyncStateValue.PENDING_DISABLE.value, SyncStateValue.FAILED.value,
+                })
                 and not state.retired
                 and state.target in available
                 and state.state != SyncStateValue.CHPW.value
@@ -205,9 +210,17 @@ async def _sync_user(
             else:
                 state.attempt_count += 1
                 settings = get_settings()
-                delay = min(settings.retry_base_seconds * (2 ** (state.attempt_count - 1)), settings.retry_max_seconds)
-                state.next_retry_at = _now() + timedelta(seconds=delay)
-                if state.attempt_count == settings.file.notification_policy.persistent_failure_attempts:
+                if result.error_kind is ConnectorErrorKind.VALIDATION:
+                    # The connector declared the request unsatisfiable; retrying
+                    # with the same inputs cannot succeed, so the failure is
+                    # persistent immediately and no retry is scheduled.
+                    state.state = SyncStateValue.UNSUPPORTED.value
+                    persistent = True
+                else:
+                    delay = min(settings.retry_base_seconds * (2 ** (state.attempt_count - 1)), settings.retry_max_seconds)
+                    state.next_retry_at = _now() + timedelta(seconds=delay)
+                    persistent = state.attempt_count == settings.file.notification_policy.persistent_failure_attempts
+                if persistent:
                     enqueue_notification(
                         db, "sync.persistent_failure", actor=actor,
                         subject=user.username,
@@ -235,7 +248,10 @@ async def _sync_user(
         operation_states = [
             state for state in user.sync_states if state.operation_id == operation.id
         ]
-        failures = [state for state in operation_states if state.state == SyncStateValue.FAILED.value]
+        failures = [
+            state for state in operation_states
+            if state.state in {SyncStateValue.FAILED.value, SyncStateValue.UNSUPPORTED.value}
+        ]
         terminal = [
             state
             for state in operation_states
@@ -299,8 +315,9 @@ async def retry_due() -> int:
         with get_session() as db:
             due = [
                 (s.user_id, s.target, s.operation_id)
+                # Unassigned states are included: a failed offboarding disable
+                # retries until the target account is actually disabled.
                 for s in db.query(SyncState).filter(
-                    SyncState.assigned.is_(True),
                     SyncState.retired.is_(False),
                     SyncState.state == SyncStateValue.FAILED.value,
                     SyncState.next_retry_at <= now,

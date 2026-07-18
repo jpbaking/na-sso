@@ -446,7 +446,7 @@ async def bulk_execute(
             if action == "retry":
                 retry_states = [
                     state for state in user.sync_states
-                    if state.assigned and not state.retired and state.state == "failed"
+                    if not state.retired and state.state == "failed"
                     and (not target_id or state.target == target_id)
                 ]
                 if not retry_states:

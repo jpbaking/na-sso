@@ -285,7 +285,7 @@ async def account_page(request: Request):
             "view": view,
             "next_retry_at": state.next_retry_at,
             "needs_support": view["state"] in {
-                "failed", "retired", "expired_disabled", "pending_expiry_disable"
+                "failed", "unsupported", "retired", "expired_disabled", "pending_expiry_disable"
             },
         })
     return template_response(templates, request, "account.html", {

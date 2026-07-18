@@ -65,6 +65,17 @@ def test_state_normalisation_preserves_absent_unassigned_and_retired_meanings():
     assert normalise_sync_state("pending_disable", assigned=False) is SyncStateValue.PENDING_DISABLE
 
 
+def test_unassigned_failures_are_never_masked_as_completed_disable():
+    assert normalise_sync_state("failed", assigned=False) is SyncStateValue.FAILED
+    assert normalise_sync_state("unsupported", assigned=False) is SyncStateValue.UNSUPPORTED
+
+
+def test_unsupported_presents_as_terminal_without_retry():
+    presentation = present_sync_state("unsupported")
+    assert presentation.label == "Unsupported on target"
+    assert presentation.terminal and not presentation.retryable
+
+
 def test_presentations_cover_retry_and_delete_context():
     deleted = present_sync_state("ok", desired_action="delete")
     assert deleted.label == "Deleted" and deleted.terminal

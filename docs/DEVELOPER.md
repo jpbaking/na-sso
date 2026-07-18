@@ -148,8 +148,10 @@ stateDiagram-v2
     AwaitingCredentials --> Pending: verified login or user password change
     Pending --> OK: connector succeeds
     Pending --> Failed: connector fails
+    Pending --> Unsupported: connector declares the request unsatisfiable
     Failed --> Pending: operation-owned manual retry
     Failed --> Pending: operation-owned scheduled retry becomes due
+    Unsupported --> Pending: later account change or delete re-attempts
     OK --> Pending: account or credential changes
     OK --> Unassigned: target unassigned and remote account disabled
     Failed --> Retired: target ID removed or migration is ambiguous
@@ -171,6 +173,16 @@ replacement, that credential is staged and synchronization moves to `pending`.
 verified login or a user password action supplies a new short-lived credential.
 An administrator reset moves the account to `chpw`; it does not supply a target
 credential.
+
+`unsupported` records a connector validation failure — the target declared the
+requested operation unsatisfiable (for example, Jenkins core cannot disable a
+local-realm account). It is terminal, counts as a failed target and an inventory
+issue, notifies immediately as a persistent failure, and is never scheduled for
+automatic retry; a later account change, delete, or reassignment re-attempts it.
+Ordinary failures — including a failed offboarding disable on an already
+unassigned target — keep scheduled retries until the target reaches the
+requested state, and are presented as failures rather than masked by the
+unassigned label.
 
 `lifecycle.py` owns every persisted command/status/state value and its UI
 presentation. The Users page and authenticated SSE therefore render the same
