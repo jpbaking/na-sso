@@ -149,6 +149,44 @@ targets:
     # admin_user: ${NEXTCLOUD_PRIMARY_ADMIN_USER}
     # admin_password: ${NEXTCLOUD_PRIMARY_ADMIN_PASSWORD}
 
+  # GitLab Self-Managed administrator Users API target.
+  - id: gitlab_primary
+    type: gitlab
+    display_name: GitLab
+    enabled: true
+    base_url: https://gitlab.example.lan
+    verify_tls: true
+    # api_token: ${GITLAB_PRIMARY_API_TOKEN}
+
+  # Gitea administrator Users API target.
+  - id: gitea_primary
+    type: gitea
+    display_name: Gitea
+    enabled: true
+    base_url: https://gitea.example.lan
+    verify_tls: true
+    # api_token: ${GITEA_PRIMARY_API_TOKEN}
+
+  # Immich administrator Users API target.
+  - id: immich_primary
+    type: immich
+    display_name: Immich
+    enabled: true
+    base_url: https://immich.example.lan
+    verify_tls: true
+    # api_token: ${IMMICH_PRIMARY_API_TOKEN}
+
+  # Jenkins built-in local security realm. Core Jenkins cannot disable users;
+  # unassignment is reported as unsupported instead of deleting the account.
+  - id: jenkins_primary
+    type: jenkins
+    display_name: Jenkins
+    enabled: true
+    base_url: https://jenkins.example.lan
+    verify_tls: true
+    # admin_user: ${JENKINS_PRIMARY_ADMIN_USER}
+    # api_token: ${JENKINS_PRIMARY_API_TOKEN}
+
   # SSH-managed Unix target. Duplicate this entry for each host.
   - id: ssh_debian
     type: ssh

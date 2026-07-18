@@ -226,13 +226,20 @@ def get_connectors() -> list[Connector]:
 
     s = get_settings()
     if s.config_file:
-        factories = {}
+        from na_sso.connectors.gitea import GiteaConnector
+        from na_sso.connectors.gitlab import GitlabConnector
+        from na_sso.connectors.immich import ImmichConnector
+        from na_sso.connectors.jenkins import JenkinsConnector
         from na_sso.connectors.nextcloud import NextcloudConnector
         from na_sso.connectors.nexus import NexusConnector
         from na_sso.connectors.opnsense import OPNsenseConnector
         from na_sso.connectors.ssh import SSHConnector
-        factories.update(opnsense=OPNsenseConnector, nexus=NexusConnector,
-                         nextcloud=NextcloudConnector, ssh=SSHConnector)
+        factories = {
+            "opnsense": OPNsenseConnector, "nexus": NexusConnector,
+            "nextcloud": NextcloudConnector, "ssh": SSHConnector,
+            "gitlab": GitlabConnector, "gitea": GiteaConnector,
+            "immich": ImmichConnector, "jenkins": JenkinsConnector,
+        }
         from na_sso.target_credentials import credential_payload
         connectors = []
         for target in s.file.targets:
@@ -246,6 +253,10 @@ def get_connectors() -> list[Connector]:
                 updates = {"api_key": payload.get("api_key"), "api_secret": payload.get("api_secret")}
             elif target.type in {"nexus", "nextcloud"}:
                 updates = {"admin_user": payload.get("admin_user"), "admin_password": payload.get("admin_password")}
+            elif target.type in {"gitlab", "gitea", "immich"}:
+                updates = {"api_token": payload.get("api_token")}
+            elif target.type == "jenkins":
+                updates = {"admin_user": payload.get("admin_user"), "api_token": payload.get("api_token")}
             elif target.type == "ssh":
                 updates = {"management_user": payload.get("management_user"),
                            "management_password": payload.get("management_password"),
@@ -284,19 +295,34 @@ def build_unverified_connector(target_id: str) -> Connector:
             "admin_user": payload.get("admin_user"),
             "admin_password": payload.get("admin_password"),
         }
+    elif target.type in {"gitlab", "gitea", "immich"}:
+        updates = {"api_token": payload.get("api_token")}
+    elif target.type == "jenkins":
+        updates = {
+            "admin_user": payload.get("admin_user"),
+            "api_token": payload.get("api_token"),
+        }
     elif target.type == "ssh":
         updates = {
             "management_user": payload.get("management_user"),
             "management_password": payload.get("management_password"),
             "management_private_key": payload.get("management_private_key"),
         }
+    from na_sso.connectors.gitea import GiteaConnector
+    from na_sso.connectors.gitlab import GitlabConnector
+    from na_sso.connectors.immich import ImmichConnector
+    from na_sso.connectors.jenkins import JenkinsConnector
     from na_sso.connectors.nextcloud import NextcloudConnector
     from na_sso.connectors.nexus import NexusConnector
     from na_sso.connectors.opnsense import OPNsenseConnector
     from na_sso.connectors.ssh import SSHConnector
     hydrated = target.__class__.model_validate({**target.model_dump(), **updates})
-    return {"opnsense": OPNsenseConnector, "nexus": NexusConnector,
-            "nextcloud": NextcloudConnector, "ssh": SSHConnector}[target.type](hydrated)
+    return {
+        "opnsense": OPNsenseConnector, "nexus": NexusConnector,
+        "nextcloud": NextcloudConnector, "ssh": SSHConnector,
+        "gitlab": GitlabConnector, "gitea": GiteaConnector,
+        "immich": ImmichConnector, "jenkins": JenkinsConnector,
+    }[target.type](hydrated)
 
 
 def validate_for_targets(user: ManagedUser, connectors: list[Connector]) -> IdentityValidation:

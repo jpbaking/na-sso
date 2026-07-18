@@ -3,8 +3,8 @@
 **Not Another SSO.**
 
 One place to manage local identities across OPNsense, Nexus Repository,
-Nextcloud, and SSH—without introducing an identity provider or changing how
-those systems authenticate.
+Nextcloud, Jenkins, GitLab, Gitea, Immich, and SSH—without introducing an
+identity provider or changing how those systems authenticate.
 
 NA-SSO gives operators a focused administrative console for creating and
 maintaining local accounts across any number of configured targets. Each
@@ -63,10 +63,16 @@ NA-SSO currently includes connectors for:
 - OPNsense Auth User API
 - Nexus Repository Security API
 - Nextcloud OCS Provisioning API
+- Jenkins built-in local security realm
+- GitLab Self-Managed Users API
+- Gitea administrator Users API
+- Immich administrator Users API
 - Debian, Ubuntu, RHEL, and Rocky Linux over pinned-host SSH
 
 Each target instance has a stable identity, independent health and credential
-state, and its own configured default groups or roles.
+state, and configured default groups or roles where the target supports them.
+Jenkins local-realm accounts support create, read, and delete; Jenkins core has
+no realm-independent disable operation, so NA-SSO fails that action safely.
 
 ## How it fits
 
@@ -77,6 +83,10 @@ flowchart LR
     NaSso -->|"Native API"| OPNsense["OPNsense"]
     NaSso -->|"Native API"| Nexus["Nexus Repository"]
     NaSso -->|"OCS API"| Nextcloud["Nextcloud"]
+    NaSso -->|"Local realm"| Jenkins["Jenkins"]
+    NaSso -->|"Users API"| GitLab["GitLab"]
+    NaSso -->|"Admin API"| Gitea["Gitea"]
+    NaSso -->|"Admin API"| Immich["Immich"]
     NaSso -->|"Pinned-host SSH"| Linux["Linux hosts"]
 ```
 

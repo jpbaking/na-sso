@@ -77,6 +77,10 @@ flowchart LR
     Sync --> OPN["OPNsense connector"]
     Sync --> NEX["Nexus connector"]
     Sync --> NC["Nextcloud connector"]
+    Sync --> JENKINS["Jenkins connector"]
+    Sync --> GITLAB["GitLab connector"]
+    Sync --> GITEA["Gitea connector"]
+    Sync --> IMMICH["Immich connector"]
     Sync --> SSHC["SSH connector"]
 
     Security <--> ORM["SQLAlchemy models"]

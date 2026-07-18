@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from na_sso.config import FileConfig, SshTarget, load_file_config
+from na_sso.config import FileConfig, GiteaTarget, GitlabTarget, ImmichTarget, JenkinsTarget, SshTarget, load_file_config
 
 
 def write(tmp_path: Path, text: str) -> Path:
@@ -26,6 +26,19 @@ targets:
     assert [target.id for target in config.targets] == ["shell_a", "shell_b"]
     assert isinstance(config.targets[0], SshTarget)
     assert config.targets[0].management_private_key.get_secret_value() == "private material"
+
+
+def test_loads_jenkins_gitlab_gitea_and_immich_targets(tmp_path):
+    config = load_file_config(write(tmp_path, """
+targets:
+  - {id: ci, type: jenkins, display_name: Jenkins, base_url: https://ci.test}
+  - {id: gitlab, type: gitlab, display_name: GitLab, base_url: https://gitlab.test}
+  - {id: gitea, type: gitea, display_name: Gitea, base_url: https://gitea.test}
+  - {id: photos, type: immich, display_name: Immich, base_url: https://photos.test}
+"""))
+    assert [type(target) for target in config.targets] == [
+        JenkinsTarget, GitlabTarget, GiteaTarget, ImmichTarget,
+    ]
 
 
 @pytest.mark.parametrize("text,match", [

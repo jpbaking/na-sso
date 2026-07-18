@@ -7,7 +7,11 @@ import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 
-from na_sso.config import Settings
+from na_sso.config import GiteaTarget, GitlabTarget, ImmichTarget, JenkinsTarget, Settings
+from na_sso.connectors.gitea import GiteaConnector
+from na_sso.connectors.gitlab import GitlabConnector
+from na_sso.connectors.immich import ImmichConnector
+from na_sso.connectors.jenkins import JenkinsConnector
 from na_sso.connectors.nextcloud import NextcloudConnector
 from na_sso.connectors.nexus import NexusConnector
 from na_sso.connectors.opnsense import OPNsenseConnector
@@ -153,6 +157,77 @@ def test_nextcloud_mock_user_lifecycle():
     ).json()["ocs"]["meta"]["statuscode"] == 404
 
 
+def test_gitlab_mock_user_lifecycle():
+    client = _client()
+    headers = {"PRIVATE-TOKEN": "demo-token"}
+    created = client.post("/api/v4/users", headers=headers, json={
+        "username": "alice", "name": "Alice Example", "email": "alice@example.test",
+        "password": "first-secret",
+    })
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+    assert client.put(f"/api/v4/users/{user_id}", headers=headers, json={
+        "name": "Updated Alice", "password": "second-secret",
+    }).status_code == 200
+    assert client.post(f"/api/v4/users/{user_id}/block", headers=headers).status_code == 201
+    user = client.get("/api/v4/users", headers=headers, params={"username": "alice"}).json()[0]
+    assert (user["name"], user["state"]) == ("Updated Alice", "blocked")
+    assert "password" not in user
+    assert client.delete(f"/api/v4/users/{user_id}", headers=headers).status_code == 204
+
+
+def test_gitea_mock_user_lifecycle():
+    client = _client()
+    headers = {"Authorization": "token demo-token"}
+    assert client.post("/api/v1/admin/users", headers=headers, json={
+        "username": "alice", "full_name": "Alice Example", "email": "alice@example.test",
+        "password": "first-secret",
+    }).status_code == 201
+    updated = client.patch("/api/v1/admin/users/alice", headers=headers, json={
+        "login_name": "alice", "source_id": 0, "full_name": "Updated Alice",
+        "active": False, "prohibit_login": True, "password": "second-secret",
+    })
+    assert updated.status_code == 200
+    user = client.get("/api/v1/admin/users", headers=headers).json()[0]
+    assert (user["full_name"], user["prohibit_login"]) == ("Updated Alice", True)
+    assert "password" not in user
+    assert client.delete("/api/v1/admin/users/alice", headers=headers).status_code == 204
+
+
+def test_immich_mock_user_lifecycle():
+    client = _client()
+    headers = {"x-api-key": "demo-token"}
+    created = client.post("/api/admin/users", headers=headers, json={
+        "email": "alice@example.test", "name": "Alice Example", "password": "first-secret",
+    })
+    assert created.status_code == 201
+    user_id = created.json()["id"]
+    assert client.put(f"/api/admin/users/{user_id}", headers=headers, json={
+        "name": "Updated Alice", "password": "second-secret",
+    }).status_code == 200
+    assert client.request("DELETE", f"/api/admin/users/{user_id}", headers=headers, json={"force": False}).status_code == 200
+    assert client.get("/api/admin/users", headers=headers).json() == []
+    deleted = client.get("/api/admin/users", headers=headers, params={"withDeleted": "true"}).json()[0]
+    assert (deleted["name"], deleted["status"]) == ("Updated Alice", "deleted")
+    assert client.post(f"/api/admin/users/{user_id}/restore", headers=headers).json()["status"] == "active"
+    assert client.request("DELETE", f"/api/admin/users/{user_id}", headers=headers, json={"force": True}).status_code == 200
+
+
+def test_jenkins_mock_local_realm_lifecycle():
+    client = _client()
+    auth = ("admin", "demo-token")
+    assert client.get("/api/json", auth=auth).status_code == 200
+    assert client.post("/securityRealm/createAccountByAdmin", auth=auth, data={
+        "username": "alice", "password1": "first-secret", "password2": "first-secret",
+        "fullname": "Alice Example", "email": "alice@example.test",
+    }, follow_redirects=False).status_code == 303
+    user = client.get("/user/alice/api/json", auth=auth).json()
+    assert (user["id"], user["fullName"]) == ("alice", "Alice Example")
+    assert "password" not in user
+    assert client.post("/user/alice/doDelete", auth=auth, follow_redirects=False).status_code == 303
+    assert client.get("/user/alice/api/json", auth=auth).status_code == 404
+
+
 def test_mock_health_reset_auth_and_failure_injection():
     client = _client()
     assert client.get("/healthz").json() == {"status": "ok"}
@@ -168,12 +243,25 @@ def test_mock_health_reset_auth_and_failure_injection():
     assert client.post(
         "/api/auth/user/search", auth=("demo-key", "demo-secret"), json={}
     ).status_code == 200
+    assert client.post("/__mock__/fail/gitlab").json() == {
+        "status": "armed", "target": "gitlab",
+    }
+    assert client.get("/api/v4/user", headers={"PRIVATE-TOKEN": "demo-token"}).status_code == 503
+    assert client.get("/api/v4/user", headers={"PRIVATE-TOKEN": "demo-token"}).status_code == 200
 
 
 def test_target_wide_availability_controls():
     client = _client()
     page = client.get("/")
     assert page.status_code == 200 and "Mock target controls" in page.text
+    assert all(label in page.text for label in (
+        "OPNsense", "Nexus Repository", "Nextcloud", "Jenkins", "GitLab", "Gitea", "Immich",
+    ))
+    assert page.text.count('class="card stack-2"') == 7
+    assert all(asset in page.text for asset in (
+        "/design/styles.css", "/design/components.css", "/static/favicon.svg",
+        "/static/favicon.ico", "/static/apple-touch-icon.png",
+    ))
     assert client.post(
         "/api/auth/user/search", auth=("demo-key", "demo-secret"), json={}
     ).status_code == 200
@@ -230,6 +318,49 @@ async def test_connector_lifecycle_over_real_http(live_mock_url, connector_type)
     user.status = "disabled"
     assert (await connector.disable_user(user)).ok
     assert (await connector.inspect_user(user)).status == ReconciliationStatus.IN_SYNC
+    assert (await connector.delete_user(user)).ok
+    user.desired_action = "delete"
+    assert (await connector.inspect_user(user)).status == ReconciliationStatus.IN_SYNC
+    assert (await connector.delete_user(user)).ok
+
+
+@pytest.mark.parametrize("target_type", ["gitlab", "gitea", "immich", "jenkins"])
+async def test_new_connector_lifecycle_over_real_http(live_mock_url, target_type):
+    async with httpx.AsyncClient() as client:
+        assert (await client.post(f"{live_mock_url}/__mock__/reset")).status_code == 200
+    connector = {
+        "gitlab": lambda: GitlabConnector(GitlabTarget(
+            id="gitlab", type="gitlab", display_name="GitLab", base_url=live_mock_url,
+            api_token="demo-token", verify_tls=False,
+        )),
+        "gitea": lambda: GiteaConnector(GiteaTarget(
+            id="gitea", type="gitea", display_name="Gitea", base_url=live_mock_url,
+            api_token="demo-token", verify_tls=False,
+        )),
+        "immich": lambda: ImmichConnector(ImmichTarget(
+            id="immich", type="immich", display_name="Immich", base_url=live_mock_url,
+            api_token="demo-token", verify_tls=False,
+        )),
+        "jenkins": lambda: JenkinsConnector(JenkinsTarget(
+            id="jenkins", type="jenkins", display_name="Jenkins", base_url=live_mock_url,
+            admin_user="admin", api_token="demo-token", verify_tls=False,
+        )),
+    }[target_type]()
+    user = ManagedUser(
+        username="integration_user", display_name="Integration User",
+        email="integration@example.test", status="active",
+    )
+
+    assert (await connector.probe()).ok
+    assert (await connector.ensure_user(user, "first-secret")).ok
+    assert (await connector.inspect_user(user)).status == ReconciliationStatus.IN_SYNC
+    if target_type == "jenkins":
+        disabled = await connector.disable_user(user)
+        assert not disabled.ok and "cannot safely disable" in disabled.detail
+    else:
+        user.status = "disabled"
+        assert (await connector.disable_user(user)).ok
+        assert (await connector.inspect_user(user)).status == ReconciliationStatus.IN_SYNC
     assert (await connector.delete_user(user)).ok
     user.desired_action = "delete"
     assert (await connector.inspect_user(user)).status == ReconciliationStatus.IN_SYNC

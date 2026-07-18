@@ -2,8 +2,8 @@
 
 The standalone demo runs the real NA-SSO application and production
 connectors against stateful, protocol-faithful mock OPNsense, Nexus Repository,
-and Nextcloud APIs plus two isolated Debian OpenSSH targets. It does not contact
-or modify real target systems.
+Nextcloud, Jenkins, GitLab, Gitea, and Immich APIs plus two isolated Debian
+OpenSSH targets. It does not contact or modify real target systems.
 
 ## Start the demo
 
@@ -56,6 +56,36 @@ Select **SAVE** on each firewall separately.
 | --- | --- |
 | **Admin user** | `admin` |
 | **Admin password** | `demo-password` |
+
+### Jenkins
+
+| UI field | Value |
+| --- | --- |
+| **Admin user** | `admin` |
+| **Admin API token** | `demo-token` |
+
+The Jenkins mock represents the built-in local security realm. Jenkins core
+does not provide a realm-independent disable operation, so NA-SSO deliberately
+reports disable or unassignment as unsupported instead of deleting the account.
+Create, inspect, discover, and explicit delete remain available.
+
+### GitLab
+
+| UI field | Value |
+| --- | --- |
+| **Administrator API token** | `demo-token` |
+
+### Gitea
+
+| UI field | Value |
+| --- | --- |
+| **Administrator API token** | `demo-token` |
+
+### Immich
+
+| UI field | Value |
+| --- | --- |
+| **Administrator API token** | `demo-token` |
 
 ### Debian SSH password
 
@@ -214,7 +244,7 @@ recovery acknowledgement.
 On first start, `demo-ssh-bootstrap` creates the following ignored files under
 `.config-demo/`:
 
-- `na-sso.yaml` containing the effective six-target registry
+- `na-sso.yaml` containing the effective ten-target registry
 - `management_key` and `management_key.pub` for the SSH management login
 - Password-target host key and public key
 - Combined-target host key and public key
@@ -227,9 +257,11 @@ reusable production private key is committed to the repository.
 ## Exercise failures and recovery
 
 Open <http://localhost:9000> to control mock API availability. OPNsense, Nexus,
-and Nextcloud each have an independent whole-target success/failure switch.
-Health checks remain healthy while a target is switched to failure, allowing
-deterministic synchronization failures and automatic recovery testing.
+Nextcloud, Jenkins, GitLab, Gitea, and Immich each have an independent
+whole-target success/failure switch. Both OPNsense instances share the OPNsense
+protocol switch. Health checks remain healthy while a target is switched to
+failure, allowing deterministic synchronization failures and automatic
+recovery testing.
 
 Useful evaluation flows include:
 
@@ -294,7 +326,8 @@ matching fingerprints.
 ## Troubleshooting
 
 - **Authentication failed:** verify the exact credentials in the table above;
-  Nexus and Nextcloud use `demo-password`, not `admin123`.
+  Nexus and Nextcloud use `demo-password`; Jenkins, GitLab, Gitea, and Immich
+  use `demo-token` as documented above.
 - **SSH private-key upload fails:** choose `.config-demo/management_key`, select
   **Private key**, leave **Admin password** empty, and do not upload a `.pub` or
   host-key file.
