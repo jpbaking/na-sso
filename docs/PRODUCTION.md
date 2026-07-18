@@ -48,6 +48,10 @@ flowchart LR
     App -->|"HTTPS API"| OPNsense["OPNsense"]
     App -->|"HTTPS API"| Nexus["Nexus Repository"]
     App -->|"HTTPS OCS API"| Nextcloud["Nextcloud"]
+    App -->|"HTTPS API"| Jenkins["Jenkins"]
+    App -->|"HTTPS API"| GitLab["GitLab"]
+    App -->|"HTTPS API"| Gitea["Gitea"]
+    App -->|"HTTPS API"| Immich["Immich"]
     App -->|"Pinned-host SSH"| Linux["Linux targets"]
 
     Backup["Backup and secret escrow"] -.-> Data
@@ -347,6 +351,36 @@ and preferably an app password. The connector uses Basic authentication and
 sends `OCS-APIRequest: true` on every request.
 
 Every configured default group must already exist.
+
+### GitLab
+
+Create an administrator access token on the GitLab Self-Managed instance. The
+connector uses the v4 Users and User moderation APIs to read, create, update,
+block, unblock, and delete accounts. Managed users require both an email address
+and display name.
+
+### Gitea
+
+Create an administrator API token. The connector uses the v1 administrator
+Users API to create, edit, prohibit login for, and delete accounts. Managed
+users require an email address.
+
+### Immich
+
+Create an API key with the administrator user read, create, update, delete, and
+restore permissions. Immich identifies accounts by email; managed users must
+therefore have a unique email address. NA-SSO maps disable to Immich's
+recoverable soft delete and re-enable to restore; explicit purge uses forced
+deletion.
+
+### Jenkins
+
+Use a dedicated Jenkins administrator username and API token. This target is
+limited to Jenkins' built-in local security realm and creates users through the
+core administrator account action. Jenkins core does not expose a universal
+disable operation across security realms, so unassignment or disable fails
+safely instead of deleting the account; explicit user deletion remains
+available. External Jenkins realms are outside this connector's scope.
 
 ### SSH
 
