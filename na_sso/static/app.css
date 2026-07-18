@@ -403,3 +403,33 @@
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
+/* Targets page: render each disclosure as its own card instead of a flat
+   zebra-striped list, so one target's status/credential fields read as a
+   contained unit. Native <details name="..."> still keeps one open at a time. */
+.disclosure-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.disclosure-cards .disclosure-row {
+  background: var(--base);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+
+/* Cancel the shared list's hairline separator and zebra striping. */
+.disclosure-cards .disclosure-row,
+.disclosure-cards .disclosure-row:nth-child(even) {
+  border-bottom: 1px solid var(--line);
+  background: var(--base);
+}
+
+/* An open card separates its header from the body with the surface tint. */
+.disclosure-cards .disclosure-row[open] > .disclosure-summary {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}

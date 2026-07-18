@@ -2,13 +2,13 @@
 {% block title %}Targets{% endblock %}
 {% block nav %}{% with active_nav='targets' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
 {% block content %}
-<section class="section container">
+<section class="section container-narrow">
   <div class="section-head">
     <div class="section-kicker">// Propagation targets</div>
     <h1 class="section-title">Target status</h1>
   </div>
   {% if probes %}
-  <div class="disclosure-list">
+  <div class="disclosure-list disclosure-cards">
     {% for p in probes %}
     <details class="disclosure-row" name="target-credentials"{% if expanded_target == p.id %} open{% endif %}>
       <summary class="disclosure-summary">
