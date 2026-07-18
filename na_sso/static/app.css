@@ -537,3 +537,12 @@ details.collapse-card[open] > summary {
 .filters-form:has(.filters-more[open]) .filters-search-inline {
   display: none;
 }
+
+/* Section header with more than one trailing action (e.g. Users: Add user +
+   Bulk import). Mirrors .section-all's right-alignment for a button group. */
+.section-actions {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}

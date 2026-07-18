@@ -6,7 +6,10 @@
   <div class="section-head">
     <div class="section-kicker">// Managed accounts</div>
     <h1 class="section-title">Users</h1>
-    <a class="section-all" href="/users/new">Add user</a>
+    <div class="section-actions">
+      <a class="btn btn-primary btn-sm" href="/users/new">Add user</a>
+      <a class="btn btn-secondary btn-sm" href="/users/bulk/import">Bulk import</a>
+    </div>
   </div>
 
   {% set filters_active = inventory.params.lifecycle != 'all' or inventory.params.target or inventory.params.issues != 'all' or inventory.params.sort != 'username' or inventory.params.direction != 'asc' %}
