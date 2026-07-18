@@ -260,10 +260,10 @@ def test_user_crud_roundtrip(admin_client):
     assert "0 of 0 targets complete" in r.text and "operation " in r.text
     purge = c.get("/users/1/purge")
     assert 'for="confirm-username"' in purge.text
-    assert "Type jdoe to confirm" in purge.text
+    assert 'Type "jdoe" to confirm' in purge.text
     rejected = c.post("/users/1/purge", data={"confirm_username": "wrong"})
     assert rejected.status_code == 422
-    assert "Type jdoe exactly" in rejected.text
+    assert 'Type &#34;jdoe&#34; exactly' in rejected.text
     r = c.post(
         "/users/1/purge", data={"confirm_username": "jdoe"}, follow_redirects=False
     )

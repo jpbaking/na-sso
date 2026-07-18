@@ -1015,7 +1015,7 @@ async def purge_user(
                     user,
                     action_kind="purge",
                     title="Purge local record",
-                    error=f"Type {user.username} exactly to confirm permanent removal.",
+                    error=f'Type "{user.username}" exactly to confirm permanent removal.',
                     status_code=422,
                 )
             username = user.username
