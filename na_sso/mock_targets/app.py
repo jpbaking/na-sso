@@ -3,11 +3,24 @@ from __future__ import annotations
 import os
 from copy import deepcopy
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+
+
+TARGET_LABELS = {
+    "opnsense": "OPNsense",
+    "nexus": "Nexus Repository",
+    "nextcloud": "Nextcloud",
+    "jenkins": "Jenkins",
+    "gitlab": "GitLab",
+    "gitea": "Gitea",
+    "immich": "Immich",
+}
 
 
 @dataclass
@@ -15,21 +28,32 @@ class MockState:
     opnsense: dict[str, dict[str, Any]] = field(default_factory=dict)
     nexus: dict[str, dict[str, Any]] = field(default_factory=dict)
     nextcloud: dict[str, dict[str, Any]] = field(default_factory=dict)
+    jenkins: dict[str, dict[str, Any]] = field(default_factory=dict)
+    gitlab: dict[str, dict[str, Any]] = field(default_factory=dict)
+    gitea: dict[str, dict[str, Any]] = field(default_factory=dict)
+    immich: dict[str, dict[str, Any]] = field(default_factory=dict)
     fail_next: set[str] = field(default_factory=set)
     available: dict[str, bool] = field(
-        default_factory=lambda: {"opnsense": True, "nexus": True, "nextcloud": True}
+        default_factory=lambda: {target: True for target in TARGET_LABELS}
     )
 
     def reset(self) -> None:
         self.opnsense.clear()
         self.nexus.clear()
         self.nextcloud.clear()
+        self.jenkins.clear()
+        self.gitlab.clear()
+        self.gitea.clear()
+        self.immich.clear()
         self.fail_next.clear()
-        self.available = {"opnsense": True, "nexus": True, "nextcloud": True}
+        self.available = {target: True for target in TARGET_LABELS}
 
 
 state = MockState()
 app = FastAPI(title="NA-SSO mock targets", docs_url=None, redoc_url=None)
+static_root = Path(__file__).resolve().parents[1] / "static"
+app.mount("/design", StaticFiles(directory=static_root / "design"), name="mock-design")
+app.mount("/static", StaticFiles(directory=static_root), name="mock-static")
 
 
 def _credentials(prefix: str, username_default: str, password_default: str) -> tuple[str, str]:
@@ -45,6 +69,11 @@ def _require_basic(request: Request, credentials: tuple[str, str]) -> None:
 
     expected = "Basic " + base64.b64encode(f"{credentials[0]}:{credentials[1]}".encode()).decode()
     if auth != expected:
+        raise HTTPException(status_code=401, detail="invalid demo credentials")
+
+
+def _require_header(request: Request, name: str, expected: str) -> None:
+    if request.headers.get(name, "") != expected:
         raise HTTPException(status_code=401, detail="invalid demo credentials")
 
 
@@ -73,19 +102,25 @@ async def health() -> dict[str, str]:
 @app.get("/", response_class=HTMLResponse)
 async def control_page() -> str:
     cards = "".join(
-        f"""<article><h2>{target.title()}</h2>
-        <p class=\"{'up' if available else 'down'}\">{'Reply success' if available else 'Reply failure'}</p>
+        f"""<article class=\"card stack-2\"><div class=\"card-meta\">API availability</div>
+        <h2 class=\"card-title\">{TARGET_LABELS[target]}</h2>
+        <p><span class=\"badge {'badge-shipped' if available else 'badge-danger'}\">{'Reply success' if available else 'Reply failure'}</span></p>
         <form method=\"post\" action=\"/__mock__/availability/{target}\">
         <input type=\"hidden\" name=\"available\" value=\"{'false' if available else 'true'}\">
-        <button type=\"submit\">Switch to {'failure' if available else 'success'}</button></form></article>"""
+        <button class=\"btn btn-secondary btn-sm\" type=\"submit\">Switch to {'failure' if available else 'success'}</button></form></article>"""
         for target, available in state.available.items()
     )
-    return f"""<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\">
-    <title>NA-SSO mock controls</title><style>
-    body{{font:16px system-ui;background:#101828;color:#f8fafc;margin:0;padding:3rem}}main{{max-width:900px;margin:auto}}
-    section{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}}article{{background:#1d2939;padding:1.5rem;border-radius:12px}}
-    .up{{color:#6ce9a6}}.down{{color:#f97066}}button{{padding:.7rem 1rem;border:0;border-radius:8px;cursor:pointer}}</style></head>
-    <body><main><h1>Mock target controls</h1><p>Each switch applies to every API request for that target.</p><section>{cards}</section></main></body></html>"""
+    return f"""<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+    <title>NA-SSO mock controls</title>
+    <link rel=\"icon\" href=\"/static/favicon.svg\" type=\"image/svg+xml\">
+    <link rel=\"icon\" href=\"/static/favicon.ico\" sizes=\"32x32\">
+    <link rel=\"apple-touch-icon\" href=\"/static/apple-touch-icon.png\">
+    <link rel=\"stylesheet\" href=\"/design/styles.css\">
+    <link rel=\"stylesheet\" href=\"/design/components.css\"></head>
+    <body class=\"site-page\"><main class=\"section container stack-3\">
+    <div class=\"section-head\"><div class=\"kicker\">// Disposable demo</div><h1 class=\"section-title\">Mock target controls</h1>
+    <p class=\"lead\">Each switch applies to every API request for that target.</p></div>
+    <section class=\"grid-cards\">{cards}</section></main></body></html>"""
 
 
 @app.post("/__mock__/availability/{target}")
@@ -104,7 +139,7 @@ async def reset() -> dict[str, str]:
 
 @app.post("/__mock__/fail/{target}")
 async def fail_next(target: str) -> dict[str, str]:
-    if target not in {"opnsense", "nexus", "nextcloud"}:
+    if target not in state.available:
         raise HTTPException(status_code=404, detail="unknown target")
     state.fail_next.add(target)
     return {"status": "armed", "target": target}
@@ -304,3 +339,250 @@ async def nextcloud_delete(username: str, request: Request) -> dict[str, Any]:
     if state.nextcloud.pop(username, None) is None:
         return _ocs(404, "User does not exist")
     return _ocs()
+
+
+def _public_user(user: dict[str, Any]) -> dict[str, Any]:
+    return {key: deepcopy(value) for key, value in user.items() if key != "password"}
+
+
+# GitLab Self-Managed Users and moderation APIs
+def _require_gitlab(request: Request) -> None:
+    _require_header(request, "PRIVATE-TOKEN", os.getenv("MOCK_GITLAB_TOKEN", "demo-token"))
+    _maybe_fail("gitlab")
+
+
+@app.get("/api/v4/user")
+async def gitlab_current_user(request: Request) -> dict[str, Any]:
+    _require_gitlab(request)
+    return {"id": 1, "username": "admin", "name": "Demo administrator", "is_admin": True, "state": "active"}
+
+
+@app.get("/api/v4/users")
+async def gitlab_users(request: Request, username: str = "") -> list[dict[str, Any]]:
+    _require_gitlab(request)
+    return [
+        _public_user(user) for name, user in state.gitlab.items()
+        if not username or name.lower() == username.lower()
+    ]
+
+
+@app.post("/api/v4/users", status_code=201)
+async def gitlab_add(request: Request) -> JSONResponse:
+    _require_gitlab(request)
+    payload = dict(await request.json())
+    username = str(payload.get("username", ""))
+    if not username or username in state.gitlab:
+        raise HTTPException(status_code=409, detail="user already exists")
+    user = {
+        "id": str(uuid4()), "username": username, "name": str(payload.get("name", username)),
+        "email": str(payload.get("email", "")), "password": str(payload.get("password", "")),
+        "state": "active", "is_admin": False,
+    }
+    state.gitlab[username] = user
+    return JSONResponse(_public_user(user), status_code=201)
+
+
+@app.put("/api/v4/users/{user_id}")
+async def gitlab_set(user_id: str, request: Request) -> dict[str, Any]:
+    _require_gitlab(request)
+    user = next((item for item in state.gitlab.values() if item["id"] == user_id), None)
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    payload = dict(await request.json())
+    for key in ("name", "email", "password"):
+        if key in payload:
+            user[key] = payload[key]
+    return _public_user(user)
+
+
+@app.post("/api/v4/users/{user_id}/{action}", status_code=201)
+async def gitlab_status(user_id: str, action: str, request: Request) -> JSONResponse:
+    _require_gitlab(request)
+    user = next((item for item in state.gitlab.values() if item["id"] == user_id), None)
+    if user is None or action not in {"block", "unblock"}:
+        raise HTTPException(status_code=404, detail="user not found")
+    user["state"] = "blocked" if action == "block" else "active"
+    return JSONResponse({"message": "Success"}, status_code=201)
+
+
+@app.delete("/api/v4/users/{user_id}", status_code=204)
+async def gitlab_delete(user_id: str, request: Request) -> Response:
+    _require_gitlab(request)
+    username = next((name for name, item in state.gitlab.items() if item["id"] == user_id), None)
+    if username is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    del state.gitlab[username]
+    return Response(status_code=204)
+
+
+# Gitea administrator Users API
+def _require_gitea(request: Request) -> None:
+    _require_header(request, "Authorization", f"token {os.getenv('MOCK_GITEA_TOKEN', 'demo-token')}")
+    _maybe_fail("gitea")
+
+
+@app.get("/api/v1/admin/users")
+async def gitea_users(request: Request) -> list[dict[str, Any]]:
+    _require_gitea(request)
+    return [_public_user(user) for user in state.gitea.values()]
+
+
+@app.post("/api/v1/admin/users", status_code=201)
+async def gitea_add(request: Request) -> JSONResponse:
+    _require_gitea(request)
+    payload = dict(await request.json())
+    username = str(payload.get("username", ""))
+    if not username or username in state.gitea:
+        raise HTTPException(status_code=422, detail="user already exists")
+    user = {
+        "id": str(uuid4()), "login": username, "login_name": username,
+        "full_name": str(payload.get("full_name", username)), "email": str(payload.get("email", "")),
+        "password": str(payload.get("password", "")), "active": True, "prohibit_login": False,
+    }
+    state.gitea[username] = user
+    return JSONResponse(_public_user(user), status_code=201)
+
+
+@app.patch("/api/v1/admin/users/{username}")
+async def gitea_set(username: str, request: Request) -> dict[str, Any]:
+    _require_gitea(request)
+    user = state.gitea.get(username)
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    payload = dict(await request.json())
+    for key in ("login_name", "full_name", "email", "password", "active", "prohibit_login"):
+        if key in payload:
+            user[key] = payload[key]
+    return _public_user(user)
+
+
+@app.delete("/api/v1/admin/users/{username}", status_code=204)
+async def gitea_delete(username: str, request: Request) -> Response:
+    _require_gitea(request)
+    if state.gitea.pop(username, None) is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    return Response(status_code=204)
+
+
+# Immich stable administrator Users API
+def _require_immich(request: Request) -> None:
+    _require_header(request, "x-api-key", os.getenv("MOCK_IMMICH_TOKEN", "demo-token"))
+    _maybe_fail("immich")
+
+
+@app.get("/api/admin/users")
+async def immich_users(request: Request, withDeleted: bool = False) -> list[dict[str, Any]]:
+    _require_immich(request)
+    return [
+        _public_user(user) for user in state.immich.values()
+        if withDeleted or user.get("status") == "active"
+    ]
+
+
+@app.post("/api/admin/users", status_code=201)
+async def immich_add(request: Request) -> JSONResponse:
+    _require_immich(request)
+    payload = dict(await request.json())
+    email = str(payload.get("email", ""))
+    if not email or email.lower() in state.immich:
+        raise HTTPException(status_code=400, detail="user already exists")
+    user = {
+        "id": str(uuid4()), "email": email, "name": str(payload.get("name", email)),
+        "password": str(payload.get("password", "")), "status": "active",
+        "isAdmin": False, "deletedAt": None, "shouldChangePassword": bool(payload.get("shouldChangePassword", False)),
+    }
+    state.immich[email.lower()] = user
+    return JSONResponse(_public_user(user), status_code=201)
+
+
+@app.put("/api/admin/users/{user_id}")
+async def immich_set(user_id: str, request: Request) -> dict[str, Any]:
+    _require_immich(request)
+    user = next((item for item in state.immich.values() if item["id"] == user_id), None)
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    payload = dict(await request.json())
+    for key in ("email", "name", "password", "shouldChangePassword"):
+        if key in payload:
+            user[key] = payload[key]
+    return _public_user(user)
+
+
+@app.post("/api/admin/users/{user_id}/restore")
+async def immich_restore(user_id: str, request: Request) -> dict[str, Any]:
+    _require_immich(request)
+    user = next((item for item in state.immich.values() if item["id"] == user_id), None)
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    user.update(status="active", deletedAt=None)
+    return _public_user(user)
+
+
+@app.delete("/api/admin/users/{user_id}")
+async def immich_delete(user_id: str, request: Request) -> dict[str, Any]:
+    _require_immich(request)
+    key = next((email for email, item in state.immich.items() if item["id"] == user_id), None)
+    if key is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    payload = dict(await request.json())
+    if payload.get("force"):
+        return _public_user(state.immich.pop(key))
+    state.immich[key].update(status="deleted", deletedAt="demo-soft-delete")
+    return _public_user(state.immich[key])
+
+
+# Jenkins built-in local security realm administrator actions
+def _require_jenkins(request: Request) -> None:
+    _require_basic(request, _credentials("JENKINS", "admin", "demo-token"))
+    _maybe_fail("jenkins")
+
+
+@app.get("/api/json")
+async def jenkins_root(request: Request) -> dict[str, str]:
+    _require_jenkins(request)
+    return {"mode": "NORMAL", "nodeDescription": "NA-SSO demo Jenkins"}
+
+
+@app.get("/crumbIssuer/api/json")
+async def jenkins_crumb(request: Request) -> dict[str, str]:
+    _require_jenkins(request)
+    return {"crumbRequestField": "Jenkins-Crumb", "crumb": "demo-crumb"}
+
+
+@app.get("/user/{username}/api/json")
+async def jenkins_user(username: str, request: Request) -> dict[str, Any]:
+    _require_jenkins(request)
+    user = state.jenkins.get(username)
+    if user is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    return _public_user(user)
+
+
+@app.get("/asynchPeople/api/json")
+async def jenkins_users(request: Request) -> dict[str, list[dict[str, dict[str, Any]]]]:
+    _require_jenkins(request)
+    return {"users": [{"user": _public_user(user)} for user in state.jenkins.values()]}
+
+
+@app.post("/securityRealm/createAccountByAdmin")
+async def jenkins_add(
+    request: Request, username: str = Form(...), password1: str = Form(...),
+    password2: str = Form(...), fullname: str = Form(""), email: str = Form(""),
+) -> RedirectResponse:
+    _require_jenkins(request)
+    if password1 != password2:
+        raise HTTPException(status_code=400, detail="passwords do not match")
+    if not username or username in state.jenkins:
+        raise HTTPException(status_code=400, detail="user already exists")
+    state.jenkins[username] = {
+        "id": username, "fullName": fullname or username, "email": email, "password": password1,
+    }
+    return RedirectResponse("/", status_code=303)
+
+
+@app.post("/user/{username}/doDelete")
+async def jenkins_delete(username: str, request: Request) -> RedirectResponse:
+    _require_jenkins(request)
+    if state.jenkins.pop(username, None) is None:
+        raise HTTPException(status_code=404, detail="user not found")
+    return RedirectResponse("/", status_code=303)

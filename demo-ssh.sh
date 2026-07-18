@@ -22,6 +22,10 @@ targets:
   - {id: firewall_b, type: opnsense, display_name: Firewall B, base_url: http://mock-targets:9000, verify_tls: false}
   - {id: nexus_demo, type: nexus, display_name: Nexus Repository, base_url: http://mock-targets:9000, default_roles: [nx-anonymous], verify_tls: false}
   - {id: cloud_demo, type: nextcloud, display_name: Nextcloud, base_url: http://mock-targets:9000, verify_tls: false, default_groups: [employees]}
+  - {id: jenkins_demo, type: jenkins, display_name: Jenkins, base_url: http://mock-targets:9000, verify_tls: false}
+  - {id: gitlab_demo, type: gitlab, display_name: GitLab, base_url: http://mock-targets:9000, verify_tls: false}
+  - {id: gitea_demo, type: gitea, display_name: Gitea, base_url: http://mock-targets:9000, verify_tls: false}
+  - {id: immich_demo, type: immich, display_name: Immich, base_url: http://mock-targets:9000, verify_tls: false}
 EOF
     # The public demo UI uploads management_key from the host. It is a disposable
     # demo credential, so keep it host-readable; host private keys stay restricted.
