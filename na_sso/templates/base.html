@@ -83,7 +83,7 @@
             <span>Account</span>
           </summary>
           <ul class="nav-links account-menu-links" role="list" aria-label="My account options">
-            <li class="account-menu-identity">Signed in as <strong>{{ admin }}</strong></li>
+            <li class="account-menu-identity"><span class="account-menu-identity-label">Signed in as</span><strong class="account-menu-username">{{ admin }}</strong></li>
             <li><a href="/account" class="nav-link{% if current_path.startswith('/account') %} active{% endif %}"{% if current_path.startswith('/account') %} aria-current="page"{% endif %}>My account</a></li>
             <li><form method="post" action="/logout"><button type="submit" class="btn btn-quiet btn-sm">Sign out</button></form></li>
           </ul>

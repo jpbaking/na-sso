@@ -219,7 +219,11 @@
   border: var(--border-hair) solid var(--line);
   box-shadow: var(--shadow-pop);
   flex-direction: column;
+  /* Size to the widest item (e.g. the username) instead of wrapping it, but
+     stay within the viewport on narrow screens. */
+  width: max-content;
   min-width: calc(var(--space-8) * 2);
+  max-width: min(90vw, calc(var(--space-8) * 5));
   padding: var(--space-1);
   position: absolute;
   right: 0;
@@ -241,7 +245,17 @@
 .account-menu-identity {
   border-bottom: var(--border-hair) solid var(--line);
   color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding: var(--space-1) var(--space-2);
+}
+
+/* Keep the username on its own line and never break it mid-word (e.g. at a
+   hyphen); the menu widens to fit it via width: max-content. */
+.account-menu-username {
+  color: var(--ink);
+  white-space: nowrap;
 }
 
 .sidebar-scrim {
