@@ -212,7 +212,7 @@ async def emergency_revoke_all(
     if not account:
         return RedirectResponse("/login", status_code=303)
     if confirmation != "REVOKE ALL KEYS":
-        return HTMLResponse("Enter REVOKE ALL KEYS exactly.", status_code=422)
+        return HTMLResponse('Enter "REVOKE ALL KEYS" exactly.', status_code=422)
     with get_session() as db:
         user = db.get(ManagedUser, account["id"])
         if not user or not user.password_hash or not verify_password(current_password, user.password_hash):

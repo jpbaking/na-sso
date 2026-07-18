@@ -138,7 +138,7 @@
         <p>Remove every active SSH key if a device or private key may be compromised.</p>
         <form method="post" action="/account/ssh-keys/emergency-revoke" class="stack-2">
           <div class="field"><label class="label" for="emergency-password">Current password</label><input class="input" id="emergency-password" name="current_password" type="password" required autocomplete="current-password"></div>
-          <div class="field"><label class="label" for="emergency-confirmation">Type REVOKE ALL KEYS</label><input class="input" id="emergency-confirmation" name="confirmation" required autocomplete="off"></div>
+          <div class="field"><label class="label" for="emergency-confirmation">Type "REVOKE ALL KEYS"</label><input class="input" id="emergency-confirmation" name="confirmation" required autocomplete="off"></div>
           <button class="btn btn-danger" type="submit">Revoke all SSH keys</button>
         </form>
       </details>
