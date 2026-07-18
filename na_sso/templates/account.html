@@ -43,28 +43,6 @@
     {% endif %}
   </div>
 
-  {% if account.role != 'root' %}
-  <div class="section-head">
-    <div class="section-kicker">// My access</div>
-    <h2 class="section-title">Assigned targets</h2>
-  </div>
-  <div class="stack-2">
-    {% for item in access %}
-    <article class="card">
-      <div class="card-meta">{{ item.type }} · {{ item.credential_mode }}</div>
-      <h3 class="card-title">{{ item.name }}</h3>
-      <p class="card-desc">{{ item.view.presentation.description }}</p>
-      <div class="data-list">
-        <div class="data-row"><div class="data-key">Access state</div><div class="data-value"><span class="badge {{ item.view.presentation.badge_class }}" aria-label="{{ item.view.presentation.label }}. {{ item.view.presentation.description }}">{{ item.view.presentation.label }}</span></div></div>
-        <div class="data-row"><div class="data-key">Sign-in method</div><div class="data-value">{{ item.credential_mode }}</div></div>
-        {% if item.next_retry_at %}<div class="data-row"><div class="data-key">Retry</div><div class="data-value">Automatic retry after {{ item.next_retry_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC</div></div>{% endif %}
-      </div>
-      {% if item.needs_support %}<div class="alert alert-info"><div class="alert-title">Operator help needed</div><div>{{ support.guidance }}</div>{% if support.url %}<a class="btn btn-secondary btn-sm" href="{{ support.url }}">{{ support.label }}</a>{% else %}<div class="field-hint">{{ support.label }}</div>{% endif %}</div>{% endif %}
-    </article>
-    {% else %}<div class="alert alert-info"><div class="alert-title">Local account only</div>No propagation targets are assigned to this account.</div>{% endfor %}
-  </div>
-  {% endif %}
-
   <div class="stack-4">
     <section class="card">
       <div class="card-meta">Password</div>
@@ -88,13 +66,31 @@
       <h2 class="card-title">SSH keys</h2>
       <p class="card-desc">Use separate named keys for each device. Private keys stay in your browser; NA-SSO stores and propagates only public keys.</p>
       {% if ssh_keys %}
-      <div class="data-list">
+      <div class="stack-3">
         {% for key in ssh_keys %}
-        <div class="data-row">
-          <div class="data-key">{{ key.name }}<small>{{ key.algorithm|upper }} · enrolled {{ key.enrolled_at.strftime('%Y-%m-%d') }}</small></div>
-          <div class="data-value"><span class="badge {{ 'badge-success' if key.status == 'active' else 'badge-neutral' }}">{{ key.status }}</span> <code>{{ key.fingerprint }}</code><small>Expires {{ key.expires_at.strftime('%Y-%m-%d') if key.expires_at else 'never' }} · Last used: {{ key.last_used_at.strftime('%Y-%m-%d %H:%M UTC') if key.last_used_at else 'not reported by target' }}</small>
-            {% if key.status == 'active' %}<form method="post" action="/account/ssh-key/{{ key.id }}/revoke"><button class="btn btn-danger btn-sm" type="submit">Revoke key</button></form>{% endif %}
+        <div class="data-list">
+          <div class="data-row">
+            <div class="data-key">{{ key.name }}</div>
+            <div class="data-value"><span class="badge {{ 'badge-success' if key.status == 'active' else 'badge-neutral' }}">{{ key.status }}</span></div>
           </div>
+          <div class="data-row">
+            <div class="data-key">Fingerprint</div>
+            <div class="data-value"><code>{{ key.fingerprint }}</code></div>
+          </div>
+          <div class="data-row">
+            <div class="data-key">Enrolled</div>
+            <div class="data-value">{{ key.algorithm|upper }} · {{ key.enrolled_at.strftime('%Y-%m-%d') }}</div>
+          </div>
+          <div class="data-row">
+            <div class="data-key">Expiry</div>
+            <div class="data-value">{{ key.expires_at.strftime('%Y-%m-%d') if key.expires_at else 'never' }}<small>Last used: {{ key.last_used_at.strftime('%Y-%m-%d %H:%M UTC') if key.last_used_at else 'not reported by target' }}</small></div>
+          </div>
+          {% if key.status == 'active' %}
+          <div class="data-row">
+            <div class="data-key">Actions</div>
+            <div class="data-value"><form method="post" action="/account/ssh-key/{{ key.id }}/revoke"><button class="btn btn-danger btn-sm" type="submit">Revoke key</button></form></div>
+          </div>
+          {% endif %}
         </div>
         {% endfor %}
       </div>
@@ -150,6 +146,28 @@
     </section>
     {% endif %}
   </div>
+
+  {% if account.role != 'root' %}
+  <div class="section-head">
+    <div class="section-kicker">// My access</div>
+    <h2 class="section-title">Assigned targets</h2>
+  </div>
+  <div class="stack-2">
+    {% for item in access %}
+    <article class="card">
+      <div class="card-meta">{{ item.type }} · {{ item.credential_mode }}</div>
+      <h3 class="card-title">{{ item.name }}</h3>
+      <p class="card-desc">{{ item.view.presentation.description }}</p>
+      <div class="data-list">
+        <div class="data-row"><div class="data-key">Access state</div><div class="data-value"><span class="badge {{ item.view.presentation.badge_class }}" aria-label="{{ item.view.presentation.label }}. {{ item.view.presentation.description }}">{{ item.view.presentation.label }}</span></div></div>
+        <div class="data-row"><div class="data-key">Sign-in method</div><div class="data-value">{{ item.credential_mode }}</div></div>
+        {% if item.next_retry_at %}<div class="data-row"><div class="data-key">Retry</div><div class="data-value">Automatic retry after {{ item.next_retry_at.strftime('%Y-%m-%d %H:%M:%S') }} UTC</div></div>{% endif %}
+      </div>
+      {% if item.needs_support %}<div class="alert alert-info"><div class="alert-title">Operator help needed</div><div>{{ support.guidance }}</div>{% if support.url %}<a class="btn btn-secondary btn-sm" href="{{ support.url }}">{{ support.label }}</a>{% else %}<div class="field-hint">{{ support.label }}</div>{% endif %}</div>{% endif %}
+    </article>
+    {% else %}<div class="alert alert-info"><div class="alert-title">Local account only</div>No propagation targets are assigned to this account.</div>{% endfor %}
+  </div>
+  {% endif %}
 </section>
 {% if account.role != 'root' %}
 <script>
