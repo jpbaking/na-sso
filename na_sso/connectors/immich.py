@@ -79,6 +79,8 @@ class ImmichConnector(Connector):
                     response = await client.post(f"/admin/users/{existing['id']}/restore")
                     response.raise_for_status()
                 if user.status == "disabled":
+                    if existing.get("status") != "active":
+                        return SyncResult(True, "already disabled")
                     response = await client.request("DELETE", f"/admin/users/{existing['id']}", json={"force": False})
                     response.raise_for_status()
                     return SyncResult(True, "disabled")

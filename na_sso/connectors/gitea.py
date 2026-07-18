@@ -26,10 +26,21 @@ class GiteaConnector(Connector):
             verify=self._verify, timeout=DEFAULT_CONNECT_TIMEOUT_SECONDS,
         )
 
+    # Gitea caps page size at its MAX_RESPONSE_ITEMS (50 by default); page until
+    # a short page so accounts beyond the first page are still seen.
+    async def _users(self, client: httpx.AsyncClient, *, limit: int = 50, max_pages: int = 20) -> list[dict]:
+        users: list[dict] = []
+        for page in range(1, max_pages + 1):
+            response = await client.get("/admin/users", params={"page": page, "limit": limit})
+            response.raise_for_status()
+            batch = response.json()
+            users.extend(batch)
+            if len(batch) < limit:
+                break
+        return users
+
     async def _find_user(self, client: httpx.AsyncClient, username: str) -> dict | None:
-        response = await client.get("/admin/users", params={"limit": 100})
-        response.raise_for_status()
-        return next((item for item in response.json()
+        return next((item for item in await self._users(client)
                      if str(item.get("login", "")).lower() == username.lower()), None)
 
     async def inspect_user(self, user: ManagedUser) -> ReconciliationReport:
@@ -52,12 +63,11 @@ class GiteaConnector(Connector):
     async def discover_accounts(self) -> AccountDiscovery:
         try:
             async with self._client() as client:
-                response = await client.get("/admin/users", params={"limit": 100})
-                response.raise_for_status()
+                users = await self._users(client)
             return AccountDiscovery(True, tuple(
                 RemoteAccount(username=str(item.get("login", "")), display_name=str(item.get("full_name", "")),
                               email=str(item.get("email", "")), status="disabled" if item.get("prohibit_login") else "active")
-                for item in response.json() if item.get("login")
+                for item in users if item.get("login")
             ))
         except (httpx.HTTPError, ValueError, TypeError):
             return AccountDiscovery(True, detail="Gitea account discovery failed.")

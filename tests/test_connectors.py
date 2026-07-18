@@ -73,6 +73,26 @@ async def test_gitea_creates_user_through_admin_api():
 
 
 @respx.mock
+async def test_gitea_disables_user_found_beyond_the_first_listing_page():
+    from na_sso.config import GiteaTarget
+    from na_sso.connectors.gitea import GiteaConnector
+
+    connector = GiteaConnector(GiteaTarget(
+        id="gitea", type="gitea", display_name="Gitea",
+        base_url="https://gitea.test", api_token="token",
+    ))
+    respx.get("https://gitea.test/api/v1/admin/users").mock(side_effect=[
+        Response(200, json=[{"login": f"user{i}"} for i in range(50)]),
+        Response(200, json=[{"login": "jdoe", "prohibit_login": False}]),
+    ])
+    update = respx.patch("https://gitea.test/api/v1/admin/users/jdoe").mock(return_value=Response(200, json={}))
+
+    result = await connector.disable_user(_user())
+
+    assert result.ok and update.called
+
+
+@respx.mock
 async def test_immich_restores_and_updates_soft_deleted_user():
     from na_sso.config import ImmichTarget
     from na_sso.connectors.immich import ImmichConnector
@@ -94,6 +114,24 @@ async def test_immich_restores_and_updates_soft_deleted_user():
 
 
 @respx.mock
+async def test_immich_ensure_of_disabled_user_skips_repeated_soft_delete():
+    from na_sso.config import ImmichTarget
+    from na_sso.connectors.immich import ImmichConnector
+
+    connector = ImmichConnector(ImmichTarget(
+        id="photos", type="immich", display_name="Immich",
+        base_url="https://photos.test", api_token="token",
+    ))
+    respx.get("https://photos.test/api/admin/users").mock(return_value=Response(200, json=[
+        {"id": "user-id", "email": "j@x", "name": "J", "status": "deleted"},
+    ]))
+
+    result = await connector.ensure_user(_user(status="disabled"), None)
+
+    assert result.ok and result.detail == "already disabled"
+
+
+@respx.mock
 async def test_jenkins_creates_local_realm_user_and_fails_disable_safely():
     from na_sso.config import JenkinsTarget
     from na_sso.connectors.jenkins import JenkinsConnector
@@ -102,7 +140,9 @@ async def test_jenkins_creates_local_realm_user_and_fails_disable_safely():
         id="ci", type="jenkins", display_name="Jenkins", base_url="https://ci.test",
         admin_user="admin", api_token="token",
     ))
-    respx.get("https://ci.test/user/jdoe/api/json").mock(return_value=Response(404))
+    respx.get("https://ci.test/user/jdoe/api/json").mock(side_effect=[
+        Response(404), Response(200, json={"id": "jdoe", "fullName": "J"}),
+    ])
     respx.get("https://ci.test/crumbIssuer/api/json").mock(return_value=Response(200, json={
         "crumbRequestField": "Jenkins-Crumb", "crumb": "crumb-value",
     }))
@@ -114,6 +154,26 @@ async def test_jenkins_creates_local_realm_user_and_fails_disable_safely():
     assert created.ok and create.called
     assert create.calls[0].request.headers["jenkins-crumb"] == "crumb-value"
     assert not disabled.ok and "cannot safely disable" in disabled.detail
+
+
+@respx.mock
+async def test_jenkins_reports_creation_rejected_by_the_200_signup_error_page():
+    from na_sso.config import JenkinsTarget
+    from na_sso.connectors.jenkins import JenkinsConnector
+
+    connector = JenkinsConnector(JenkinsTarget(
+        id="ci", type="jenkins", display_name="Jenkins", base_url="https://ci.test",
+        admin_user="admin", api_token="token",
+    ))
+    respx.get("https://ci.test/user/jdoe/api/json").mock(return_value=Response(404))
+    respx.get("https://ci.test/crumbIssuer/api/json").mock(return_value=Response(404))
+    respx.post("https://ci.test/securityRealm/createAccountByAdmin").mock(
+        return_value=Response(200, text="<html>signup error</html>")
+    )
+
+    result = await connector.ensure_user(_user(), "new-password")
+
+    assert not result.ok and "rejected the account creation" in result.detail
 
 
 def test_yaml_registry_preserves_order_repeated_types_and_capabilities(tmp_path, monkeypatch):

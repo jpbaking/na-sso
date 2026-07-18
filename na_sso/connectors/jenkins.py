@@ -82,6 +82,10 @@ class JenkinsConnector(Connector):
                 })
                 if response.status_code >= 400:
                     response.raise_for_status()
+                # Jenkins reports signup errors as a 200 form page, so confirm
+                # the account actually exists before claiming success.
+                if await self._find_user(client, user.username) is None:
+                    return SyncResult(False, "Jenkins security realm rejected the account creation")
             return SyncResult(True, "created")
         except (httpx.HTTPError, KeyError, ValueError, TypeError) as error:
             return SyncResult(False, f"Jenkins HTTP error: {error}")
