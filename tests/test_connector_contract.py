@@ -80,7 +80,11 @@ def test_failed_results_always_receive_error_taxonomy_and_retry_semantics():
 
 
 def test_every_builtin_connector_declares_read_discovery_and_dry_run_capabilities():
-    from na_sso.config import NextcloudTarget, NexusTarget, OpnsenseTarget, SshTarget
+    from na_sso.config import GiteaTarget, GitlabTarget, ImmichTarget, JenkinsTarget, NextcloudTarget, NexusTarget, OpnsenseTarget, SshTarget
+    from na_sso.connectors.gitea import GiteaConnector
+    from na_sso.connectors.gitlab import GitlabConnector
+    from na_sso.connectors.immich import ImmichConnector
+    from na_sso.connectors.jenkins import JenkinsConnector
     from na_sso.connectors.nextcloud import NextcloudConnector
     from na_sso.connectors.nexus import NexusConnector
     from na_sso.connectors.opnsense import OPNsenseConnector
@@ -102,6 +106,19 @@ def test_every_builtin_connector_declares_read_discovery_and_dry_run_capabilitie
             id="shell", type="ssh", display_name="Shell", host="shell",
             management_user="manager", management_password="secret",
             host_key_sha256="SHA256:AAAAAAAAAAAAAAAAAAAA", platform="ubuntu",
+        )),
+        GitlabConnector(GitlabTarget(
+            id="gitlab", type="gitlab", display_name="GitLab", base_url="https://gitlab", api_token="secret",
+        )),
+        GiteaConnector(GiteaTarget(
+            id="gitea", type="gitea", display_name="Gitea", base_url="https://gitea", api_token="secret",
+        )),
+        ImmichConnector(ImmichTarget(
+            id="immich", type="immich", display_name="Immich", base_url="https://immich", api_token="secret",
+        )),
+        JenkinsConnector(JenkinsTarget(
+            id="jenkins", type="jenkins", display_name="Jenkins", base_url="https://jenkins",
+            admin_user="admin", api_token="secret",
         )),
     ]
     for connector in connectors:

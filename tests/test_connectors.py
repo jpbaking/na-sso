@@ -33,6 +33,89 @@ def _user(username="jdoe", status="active"):
     return ManagedUser(username=username, display_name="J", email="j@x", status=status)
 
 
+@respx.mock
+async def test_gitlab_updates_and_unblocks_existing_user():
+    from na_sso.config import GitlabTarget
+    from na_sso.connectors.gitlab import GitlabConnector
+
+    connector = GitlabConnector(GitlabTarget(
+        id="gitlab", type="gitlab", display_name="GitLab",
+        base_url="https://gitlab.test", api_token="token",
+    ))
+    respx.get("https://gitlab.test/api/v4/users").mock(
+        return_value=Response(200, json=[{"id": 7, "username": "jdoe", "state": "blocked"}])
+    )
+    update = respx.put("https://gitlab.test/api/v4/users/7").mock(return_value=Response(200, json={}))
+    unblock = respx.post("https://gitlab.test/api/v4/users/7/unblock").mock(return_value=Response(201, json={}))
+
+    result = await connector.ensure_user(_user(), "new-password")
+
+    assert result.ok and update.called and unblock.called
+    assert update.calls[0].request.headers["private-token"] == "token"
+
+
+@respx.mock
+async def test_gitea_creates_user_through_admin_api():
+    from na_sso.config import GiteaTarget
+    from na_sso.connectors.gitea import GiteaConnector
+
+    connector = GiteaConnector(GiteaTarget(
+        id="gitea", type="gitea", display_name="Gitea",
+        base_url="https://gitea.test", api_token="token",
+    ))
+    respx.get("https://gitea.test/api/v1/admin/users").mock(return_value=Response(200, json=[]))
+    create = respx.post("https://gitea.test/api/v1/admin/users").mock(return_value=Response(201, json={}))
+
+    result = await connector.ensure_user(_user(), "new-password")
+
+    assert result.ok and create.called
+    assert create.calls[0].request.headers["authorization"] == "token token"
+
+
+@respx.mock
+async def test_immich_restores_and_updates_soft_deleted_user():
+    from na_sso.config import ImmichTarget
+    from na_sso.connectors.immich import ImmichConnector
+
+    connector = ImmichConnector(ImmichTarget(
+        id="photos", type="immich", display_name="Immich",
+        base_url="https://photos.test", api_token="token",
+    ))
+    respx.get("https://photos.test/api/admin/users").mock(return_value=Response(200, json=[
+        {"id": "user-id", "email": "j@x", "name": "Old", "status": "deleted"},
+    ]))
+    restore = respx.post("https://photos.test/api/admin/users/user-id/restore").mock(return_value=Response(200, json={}))
+    update = respx.put("https://photos.test/api/admin/users/user-id").mock(return_value=Response(200, json={}))
+
+    result = await connector.ensure_user(_user(), "new-password")
+
+    assert result.ok and restore.called and update.called
+    assert update.calls[0].request.headers["x-api-key"] == "token"
+
+
+@respx.mock
+async def test_jenkins_creates_local_realm_user_and_fails_disable_safely():
+    from na_sso.config import JenkinsTarget
+    from na_sso.connectors.jenkins import JenkinsConnector
+
+    connector = JenkinsConnector(JenkinsTarget(
+        id="ci", type="jenkins", display_name="Jenkins", base_url="https://ci.test",
+        admin_user="admin", api_token="token",
+    ))
+    respx.get("https://ci.test/user/jdoe/api/json").mock(return_value=Response(404))
+    respx.get("https://ci.test/crumbIssuer/api/json").mock(return_value=Response(200, json={
+        "crumbRequestField": "Jenkins-Crumb", "crumb": "crumb-value",
+    }))
+    create = respx.post("https://ci.test/securityRealm/createAccountByAdmin").mock(return_value=Response(302))
+
+    created = await connector.ensure_user(_user(), "new-password")
+    disabled = await connector.disable_user(_user(status="disabled"))
+
+    assert created.ok and create.called
+    assert create.calls[0].request.headers["jenkins-crumb"] == "crumb-value"
+    assert not disabled.ok and "cannot safely disable" in disabled.detail
+
+
 def test_yaml_registry_preserves_order_repeated_types_and_capabilities(tmp_path, monkeypatch):
     path = tmp_path / "targets.yaml"
     path.write_text("""

@@ -186,3 +186,32 @@ def test_ssh_password_key_or_combined_credentials_are_encrypted(admin_client, tm
 def test_target_credential_routes_require_auth(client):
     assert client.post("/targets/forged/credentials", data={}, follow_redirects=False).status_code == 303
     assert client.post("/targets/forged/probe", follow_redirects=False).status_code == 303
+
+
+@respx.mock
+def test_token_target_credentials_are_encrypted_verified_and_write_only(
+    admin_client, tmp_path, monkeypatch
+):
+    _registry(tmp_path, monkeypatch, """targets:
+  - {id: gitlab, type: gitlab, display_name: GitLab, base_url: https://gitlab.test}
+""")
+    respx.get("https://gitlab.test/api/v4/user").mock(
+        return_value=Response(200, json={"id": 1, "username": "admin", "is_admin": True})
+    )
+
+    response = admin_client.post("/targets/gitlab/credentials", data={
+        "auth_mode": "token", "api_token": "administrator-token",
+    }, follow_redirects=False)
+
+    assert response.status_code == 303
+    from na_sso.connectors import get_connectors
+    from na_sso.db import get_session
+    from na_sso.models import TargetCredential
+    with get_session() as db:
+        row = db.query(TargetCredential).filter_by(target_id="gitlab").one()
+        assert row.auth_mode == "token" and row.verified_at is not None
+        assert "administrator-token" not in row.encrypted_payload
+    assert [connector.target_type for connector in get_connectors()] == ["gitlab"]
+    page = admin_client.get("/status")
+    assert "Administrator API token" in page.text
+    assert "administrator-token" not in page.text

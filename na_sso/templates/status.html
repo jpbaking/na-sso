@@ -60,9 +60,15 @@
         {% endif %}
       </div>
       <form method="post" action="/targets/{{ p.id }}/credentials" enctype="multipart/form-data" class="disclosure-body stack-1"{% if p.type == 'ssh' %} data-ssh-credentials{% endif %}>
+        {% if p.type in ['gitlab', 'gitea', 'immich', 'jenkins'] %}<input type="hidden" name="auth_mode" value="token">{% endif %}
         {% if p.type == 'opnsense' %}
         <label class="label">API key <input class="input" name="api_key" required autocomplete="off"></label>
         <label class="label">API secret <input class="input" name="api_secret" type="password" required autocomplete="new-password"></label>
+        {% elif p.type in ['gitlab', 'gitea', 'immich'] %}
+        <label class="label">Administrator API token <input class="input" name="api_token" type="password" required autocomplete="new-password"></label>
+        {% elif p.type == 'jenkins' %}
+        <label class="label">Admin user <input class="input" name="admin_user" required autocomplete="off"></label>
+        <label class="label">Admin API token <input class="input" name="api_token" type="password" required autocomplete="new-password"></label>
         {% else %}
         <label class="label">{{ 'SSH admin' if p.type == 'ssh' else 'Admin user' }} <input class="input" name="admin_user" required autocomplete="off"></label>
         {% if p.type == 'ssh' %}

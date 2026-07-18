@@ -238,6 +238,32 @@ class NextcloudTarget(TargetBase):
     default_groups: list[str] = []
 
 
+class TokenApiTarget(TargetBase):
+    base_url: str
+    api_token: SecretStr | None = None
+    verify_tls: bool = True
+
+
+class GitlabTarget(TokenApiTarget):
+    type: Literal["gitlab"]
+
+
+class GiteaTarget(TokenApiTarget):
+    type: Literal["gitea"]
+
+
+class ImmichTarget(TokenApiTarget):
+    type: Literal["immich"]
+
+
+class JenkinsTarget(TargetBase):
+    type: Literal["jenkins"]
+    base_url: str
+    admin_user: str | None = None
+    api_token: SecretStr | None = None
+    verify_tls: bool = True
+
+
 class SshTarget(TargetBase):
     type: Literal["ssh"]
     host: str
@@ -263,7 +289,8 @@ class SshTarget(TargetBase):
 
 
 Target = Annotated[
-    OpnsenseTarget | NexusTarget | NextcloudTarget | SshTarget,
+    OpnsenseTarget | NexusTarget | NextcloudTarget | GitlabTarget | GiteaTarget
+    | ImmichTarget | JenkinsTarget | SshTarget,
     Field(discriminator="type"),
 ]
 

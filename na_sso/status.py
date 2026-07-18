@@ -198,6 +198,7 @@ async def configure_target(request: Request, target_id: str,
                            auth_mode: str = Form("password"),
                            admin_user: str = Form(""), password: str = Form(""),
                            api_key: str = Form(""), api_secret: str = Form(""),
+                           api_token: str = Form(""),
                            private_key: UploadFile | None = File(default=None)):
     principal = permission_guard(request, MANAGE_TARGETS)
     if isinstance(principal, Response):
@@ -216,6 +217,10 @@ async def configure_target(request: Request, target_id: str,
         payload = {"api_key": api_key.strip(), "api_secret": api_secret}
     elif target.type in {"nexus", "nextcloud"}:
         payload = {"admin_user": admin_user.strip(), "admin_password": password}
+    elif target.type in {"gitlab", "gitea", "immich"}:
+        payload = {"api_token": api_token}
+    elif target.type == "jenkins":
+        payload = {"admin_user": admin_user.strip(), "api_token": api_token}
     else:
         uploaded = (await private_key.read()).decode("utf-8") if private_key and private_key.filename else ""
         payload = {"management_user": admin_user.strip(),
