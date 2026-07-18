@@ -10,12 +10,12 @@
   </div>
 
   {% set filters_active = inventory.params.lifecycle != 'all' or inventory.params.target or inventory.params.issues != 'all' or inventory.params.sort != 'username' or inventory.params.direction != 'asc' %}
-  <form method="get" action="/users" class="card stack-2" aria-label="Filter users">
+  <form method="get" action="/users" class="card stack-2 filters-form" aria-label="Filter users">
     <div class="field">
       <label class="label" for="user-search">Search</label>
       <div class="filters-search-row">
         <input class="input" id="user-search" name="q" type="search" value="{{ inventory.params.search }}" placeholder="Username, name or email">
-        <button class="btn btn-primary btn-sm" type="submit">Search</button>
+        <button class="btn btn-primary btn-sm filters-search-inline" type="submit">Search</button>
       </div>
     </div>
     <details class="filters-more"{% if filters_active %} open{% endif %}>
@@ -62,8 +62,8 @@
           </div>
         </div>
         <div class="hero-actions">
+          <button class="btn btn-primary btn-sm" type="submit">Search</button>
           <a class="btn btn-secondary btn-sm" href="/users">Clear all</a>
-          <span class="field-hint">Filters apply when you press Search.</span>
         </div>
       </div>
     </details>

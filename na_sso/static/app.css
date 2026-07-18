@@ -528,3 +528,12 @@ details.collapse-card[open] > summary {
 }
 
 .filters-more-body { margin-top: var(--space-3); }
+
+/* Collapsed (simple) mode: the Search button sits beside the search box. When
+   the filters are expanded, that inline button is hidden and the Search button
+   in the filter footer (next to Clear all) takes over, reading clearly as the
+   submit for the whole form. The footer button lives inside the <details> body
+   so it is naturally absent while collapsed. */
+.filters-form:has(.filters-more[open]) .filters-search-inline {
+  display: none;
+}
