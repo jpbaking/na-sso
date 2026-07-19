@@ -29,9 +29,10 @@
   align-self: flex-start;
   background: var(--base);
   border-right: var(--border-hair) solid var(--line);
+  display: flex;
   flex: 0 0 calc(var(--space-8) * 3);
+  flex-direction: column;
   height: 100vh;
-  overflow-y: auto;
   position: sticky;
   top: 0;
   transition: flex-basis 0.15s, width 0.15s;
@@ -112,7 +113,11 @@
   display: inline-flex;
 }
 
+/* The nav scrolls on its own (instead of the whole aside) so the footer stays
+   pinned and the account popup is not clipped by an overflow context. */
 #sidebar-navigation {
+  flex: 1;
+  overflow-y: auto;
   padding: var(--space-2);
 }
 
@@ -183,6 +188,103 @@
 }
 
 .sidebar-collapsed .sidebar-link-label {
+  display: none;
+}
+
+/* The page-level heading (the .section-head wrapping the <h1>) carries the
+   page's amber kicker on every page, matching the design kit's .kicker. */
+.section-head:has(> h1.section-title) .section-kicker {
+  align-items: center;
+  color: var(--accent-amber);
+  display: flex;
+  font-weight: var(--fw-medium);
+  gap: var(--space-2);
+}
+
+.section-head:has(> h1.section-title) .section-kicker::before {
+  background: var(--accent-amber);
+  content: "";
+  flex-shrink: 0;
+  height: 3px;
+  width: 28px;
+}
+
+/* Shared height for the sidebar footer and the page footer so the two bottom
+   bands line up. */
+.app-shell {
+  --shell-footer-height: var(--space-6);
+}
+
+.sidebar-footer {
+  align-items: center;
+  border-top: var(--border-hair) solid var(--line);
+  display: flex;
+  gap: var(--space-1);
+  height: var(--shell-footer-height);
+  justify-content: space-between;
+  padding: 0 var(--space-2);
+}
+
+/* Beats .account-menu's margin-left: auto, which is declared later. */
+.account-menu.sidebar-account-menu {
+  margin-left: 0;
+}
+
+/* Boxless icon-only burger. */
+.sidebar-account-toggle {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--ui-title);
+  line-height: 1;
+  padding: var(--space-1);
+}
+
+.sidebar-account-toggle:is(:hover, :focus-visible) {
+  color: var(--brand-blue);
+}
+
+/* The popup opens upward from the sidebar footer, hugging its right edge. */
+.sidebar-account-menu .account-menu-links {
+  bottom: calc(100% + var(--space-1));
+  left: auto;
+  right: 0;
+  top: auto;
+}
+
+.sidebar-signout .btn {
+  white-space: nowrap;
+}
+
+/* Expanded sidebar: Sign out is its own footer button, not a menu item. */
+.account-menu-signout {
+  display: none;
+}
+
+/* Collapsed sidebar: burger only; Sign out moves inside the menu. */
+.sidebar-collapsed .sidebar-signout {
+  display: none;
+}
+
+.sidebar-collapsed .account-menu-signout {
+  display: block;
+}
+
+.sidebar-collapsed .sidebar-footer {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+/* Collapsed: the sidebar hugs the viewport's left edge, so the popup grows
+   rightward instead of hugging the (too narrow) sidebar. */
+.sidebar-collapsed .sidebar-account-menu .account-menu-links {
+  left: 0;
+  right: auto;
+}
+
+/* Admin console pages: the top bar only hosts the account menu on
+   sidebar-less pages, so on desktop it is empty — hide it. On mobile it
+   carries the sidebar toggle, so it comes back below. */
+.app-shell:not(.app-shell-plain) .nav-wrap {
   display: none;
 }
 
@@ -275,8 +377,15 @@
 }
 
 .app-column .footer {
+  align-items: center;
+  display: flex;
+  height: var(--shell-footer-height);
   margin-top: var(--space-6);
-  padding-block: var(--space-1);
+  padding-block: 0;
+}
+
+.app-column .footer .footer-inner {
+  flex: 1;
 }
 
 .app-column .footer-inner {
@@ -316,6 +425,10 @@
 
   .mobile-sidebar-toggle {
     display: flex;
+  }
+
+  .app-shell:not(.app-shell-plain) .nav-wrap {
+    display: block;
   }
 
   .app-sidebar {
