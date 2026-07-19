@@ -232,6 +232,7 @@ def get_connectors() -> list[Connector]:
         from na_sso.connectors.jenkins import JenkinsConnector
         from na_sso.connectors.nextcloud import NextcloudConnector
         from na_sso.connectors.nexus import NexusConnector
+        from na_sso.connectors.npm import NpmConnector
         from na_sso.connectors.opnsense import OPNsenseConnector
         from na_sso.connectors.ssh import SSHConnector
         factories = {
@@ -239,6 +240,7 @@ def get_connectors() -> list[Connector]:
             "nextcloud": NextcloudConnector, "ssh": SSHConnector,
             "gitlab": GitlabConnector, "gitea": GiteaConnector,
             "immich": ImmichConnector, "jenkins": JenkinsConnector,
+            "npm": NpmConnector,
         }
         from na_sso.target_credentials import credential_payload
         connectors = []
@@ -251,7 +253,7 @@ def get_connectors() -> list[Connector]:
             updates = {}
             if target.type == "opnsense":
                 updates = {"api_key": payload.get("api_key"), "api_secret": payload.get("api_secret")}
-            elif target.type in {"nexus", "nextcloud"}:
+            elif target.type in {"nexus", "nextcloud", "npm"}:
                 updates = {"admin_user": payload.get("admin_user"), "admin_password": payload.get("admin_password")}
             elif target.type in {"gitlab", "gitea", "immich"}:
                 updates = {"api_token": payload.get("api_token")}
@@ -290,7 +292,7 @@ def build_unverified_connector(target_id: str) -> Connector:
             "api_key": payload.get("api_key"),
             "api_secret": payload.get("api_secret"),
         }
-    elif target.type in {"nexus", "nextcloud"}:
+    elif target.type in {"nexus", "nextcloud", "npm"}:
         updates = {
             "admin_user": payload.get("admin_user"),
             "admin_password": payload.get("admin_password"),
@@ -314,6 +316,7 @@ def build_unverified_connector(target_id: str) -> Connector:
     from na_sso.connectors.jenkins import JenkinsConnector
     from na_sso.connectors.nextcloud import NextcloudConnector
     from na_sso.connectors.nexus import NexusConnector
+    from na_sso.connectors.npm import NpmConnector
     from na_sso.connectors.opnsense import OPNsenseConnector
     from na_sso.connectors.ssh import SSHConnector
     hydrated = target.__class__.model_validate({**target.model_dump(), **updates})
@@ -322,6 +325,7 @@ def build_unverified_connector(target_id: str) -> Connector:
         "nextcloud": NextcloudConnector, "ssh": SSHConnector,
         "gitlab": GitlabConnector, "gitea": GiteaConnector,
         "immich": ImmichConnector, "jenkins": JenkinsConnector,
+        "npm": NpmConnector,
     }[target.type](hydrated)
 
 
@@ -346,10 +350,12 @@ def _universal_requirements() -> tuple[bool, bool]:
     from na_sso.connectors.jenkins import JenkinsConnector
     from na_sso.connectors.nextcloud import NextcloudConnector
     from na_sso.connectors.nexus import NexusConnector
+    from na_sso.connectors.npm import NpmConnector
     from na_sso.connectors.opnsense import OPNsenseConnector
     from na_sso.connectors.ssh import SSHConnector
     classes = (OPNsenseConnector, NexusConnector, NextcloudConnector, SSHConnector,
-               GitlabConnector, GiteaConnector, ImmichConnector, JenkinsConnector)
+               GitlabConnector, GiteaConnector, ImmichConnector, JenkinsConnector,
+               NpmConnector)
     return (any(cls.capabilities.email_required for cls in classes),
             any(cls.capabilities.display_name_required for cls in classes))
 

@@ -26,6 +26,7 @@ targets:
   - {id: gitlab_demo, type: gitlab, display_name: GitLab, base_url: http://mock-targets:9000, verify_tls: false}
   - {id: gitea_demo, type: gitea, display_name: Gitea, base_url: http://mock-targets:9000, verify_tls: false}
   - {id: immich_demo, type: immich, display_name: Immich, base_url: http://mock-targets:9000, verify_tls: false}
+  - {id: npm_demo, type: npm, display_name: Nginx Proxy Manager, base_url: http://mock-targets:9000, verify_tls: false}
 EOF
     # The public demo UI uploads management_key from the host. It is a disposable
     # demo credential, so keep it host-readable; host private keys stay restricted.

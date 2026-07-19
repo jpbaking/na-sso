@@ -81,6 +81,7 @@ flowchart LR
     Sync --> GITLAB["GitLab connector"]
     Sync --> GITEA["Gitea connector"]
     Sync --> IMMICH["Immich connector"]
+    Sync --> NPM["Nginx Proxy Manager connector"]
     Sync --> SSHC["SSH connector"]
 
     Security <--> ORM["SQLAlchemy models"]

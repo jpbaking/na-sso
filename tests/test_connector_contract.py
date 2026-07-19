@@ -80,13 +80,14 @@ def test_failed_results_always_receive_error_taxonomy_and_retry_semantics():
 
 
 def test_every_builtin_connector_declares_read_discovery_and_dry_run_capabilities():
-    from na_sso.config import GiteaTarget, GitlabTarget, ImmichTarget, JenkinsTarget, NextcloudTarget, NexusTarget, OpnsenseTarget, SshTarget
+    from na_sso.config import GiteaTarget, GitlabTarget, ImmichTarget, JenkinsTarget, NextcloudTarget, NexusTarget, NpmTarget, OpnsenseTarget, SshTarget
     from na_sso.connectors.gitea import GiteaConnector
     from na_sso.connectors.gitlab import GitlabConnector
     from na_sso.connectors.immich import ImmichConnector
     from na_sso.connectors.jenkins import JenkinsConnector
     from na_sso.connectors.nextcloud import NextcloudConnector
     from na_sso.connectors.nexus import NexusConnector
+    from na_sso.connectors.npm import NpmConnector
     from na_sso.connectors.opnsense import OPNsenseConnector
     from na_sso.connectors.ssh import SSHConnector
     connectors = [
@@ -119,6 +120,11 @@ def test_every_builtin_connector_declares_read_discovery_and_dry_run_capabilitie
         JenkinsConnector(JenkinsTarget(
             id="jenkins", type="jenkins", display_name="Jenkins", base_url="https://jenkins",
             admin_user="admin", api_token="secret",
+        )),
+        NpmConnector(NpmTarget(
+            id="npm", type="npm", display_name="Nginx Proxy Manager",
+            base_url="https://npm", admin_user="admin@example.test",
+            admin_password="secret-password",
         )),
     ]
     for connector in connectors:

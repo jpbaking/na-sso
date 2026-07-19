@@ -52,6 +52,7 @@ flowchart LR
     App -->|"HTTPS API"| GitLab["GitLab"]
     App -->|"HTTPS API"| Gitea["Gitea"]
     App -->|"HTTPS API"| Immich["Immich"]
+    App -->|"HTTPS API"| NPM["Nginx Proxy Manager"]
     App -->|"Pinned-host SSH"| Linux["Linux targets"]
 
     Backup["Backup and secret escrow"] -.-> Data
@@ -372,6 +373,16 @@ restore permissions. Immich identifies accounts by email; managed users must
 therefore have a unique email address. NA-SSO maps disable to Immich's
 recoverable soft delete and re-enable to restore; explicit purge uses forced
 deletion.
+
+### Nginx Proxy Manager
+
+Use a dedicated administrator email and password that can mint an API token
+without a two-factor challenge. The connector targets the v2.15.1 Users API,
+identifies managed users by unique lowercase email, maps the NA-SSO username to
+NPM nickname, and propagates profile, password, disabled state, discovery, and
+soft deletion. NPM exact role/group management and SSH-key lifecycle are
+unsupported. NPM accepts managed-user passwords from 8 through 64 characters;
+align the NA-SSO password policy maximum accordingly when this target is used.
 
 ### Jenkins
 

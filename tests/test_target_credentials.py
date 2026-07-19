@@ -215,3 +215,41 @@ def test_token_target_credentials_are_encrypted_verified_and_write_only(
     page = admin_client.get("/status")
     assert "Administrator API token" in page.text
     assert "administrator-token" not in page.text
+
+
+@respx.mock
+def test_npm_password_credentials_are_encrypted_verified_and_write_only(
+    admin_client, tmp_path, monkeypatch
+):
+    _registry(tmp_path, monkeypatch, """targets:
+  - {id: npm, type: npm, display_name: Nginx Proxy Manager, base_url: https://npm.test}
+""")
+    token = respx.post("https://npm.test/api/tokens").mock(
+        return_value=Response(200, json={"token": "short-lived-jwt"})
+    )
+    users = respx.get("https://npm.test/api/users").mock(
+        return_value=Response(200, json=[])
+    )
+
+    response = admin_client.post("/targets/npm/credentials", data={
+        "auth_mode": "password",
+        "admin_user": "admin@example.test",
+        "password": "administrator-password",
+    }, follow_redirects=False)
+
+    assert response.status_code == 303 and token.called and users.called
+    from na_sso.connectors import get_connectors
+    from na_sso.connectors.npm import NpmConnector
+    from na_sso.db import get_session
+    from na_sso.models import TargetCredential
+    with get_session() as db:
+        row = db.query(TargetCredential).filter_by(target_id="npm").one()
+        assert row.auth_mode == "password" and row.verified_at is not None
+        assert "admin@example.test" not in row.encrypted_payload
+        assert "administrator-password" not in row.encrypted_payload
+    connectors = get_connectors()
+    assert len(connectors) == 1 and isinstance(connectors[0], NpmConnector)
+    page = admin_client.get("/status")
+    assert "Admin user" in page.text and "Admin password" in page.text
+    assert "admin@example.test" not in page.text
+    assert "administrator-password" not in page.text

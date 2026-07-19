@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from na_sso.config import FileConfig, GiteaTarget, GitlabTarget, ImmichTarget, JenkinsTarget, SshTarget, load_file_config
+from na_sso.config import FileConfig, GiteaTarget, GitlabTarget, ImmichTarget, JenkinsTarget, NpmTarget, SshTarget, load_file_config
 
 
 def write(tmp_path: Path, text: str) -> Path:
@@ -28,17 +28,21 @@ targets:
     assert config.targets[0].management_private_key.get_secret_value() == "private material"
 
 
-def test_loads_jenkins_gitlab_gitea_and_immich_targets(tmp_path):
+def test_loads_jenkins_gitlab_gitea_immich_and_npm_targets(tmp_path, monkeypatch):
+    monkeypatch.setenv("NPM_ADMIN_PASSWORD", "npm-secret")
     config = load_file_config(write(tmp_path, """
 targets:
   - {id: ci, type: jenkins, display_name: Jenkins, base_url: https://ci.test}
   - {id: gitlab, type: gitlab, display_name: GitLab, base_url: https://gitlab.test}
   - {id: gitea, type: gitea, display_name: Gitea, base_url: https://gitea.test}
   - {id: photos, type: immich, display_name: Immich, base_url: https://photos.test}
+  - {id: npm, type: npm, display_name: NPM, base_url: https://npm.test,
+     admin_user: admin@example.test, admin_password: "${NPM_ADMIN_PASSWORD}"}
 """))
     assert [type(target) for target in config.targets] == [
-        JenkinsTarget, GitlabTarget, GiteaTarget, ImmichTarget,
+        JenkinsTarget, GitlabTarget, GiteaTarget, ImmichTarget, NpmTarget,
     ]
+    assert config.targets[-1].admin_password.get_secret_value() == "npm-secret"
 
 
 @pytest.mark.parametrize("text,match", [

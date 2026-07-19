@@ -1,3 +1,4 @@
+import httpx
 import pytest
 import respx
 from httpx import Response
@@ -129,6 +130,147 @@ async def test_immich_ensure_of_disabled_user_skips_repeated_soft_delete():
     result = await connector.ensure_user(_user(status="disabled"), None)
 
     assert result.ok and result.detail == "already disabled"
+
+
+def _npm_connector():
+    from na_sso.config import NpmTarget
+    from na_sso.connectors.npm import NpmConnector
+
+    return NpmConnector(NpmTarget(
+        id="npm", type="npm", display_name="Nginx Proxy Manager",
+        base_url="https://npm.test", admin_user="admin@example.test",
+        admin_password="admin-secret",
+    ))
+
+
+def _npm_token():
+    return respx.post("https://npm.test/api/tokens").mock(
+        return_value=Response(200, json={"token": "jwt-token", "expires": "later"})
+    )
+
+
+@respx.mock
+async def test_npm_mints_token_and_creates_email_identified_user():
+    connector = _npm_connector()
+    token = _npm_token()
+    respx.get("https://npm.test/api/users").mock(return_value=Response(200, json=[]))
+    create = respx.post("https://npm.test/api/users").mock(
+        return_value=Response(201, json={"id": 2})
+    )
+
+    result = await connector.ensure_user(_user(), "new-password")
+
+    assert result.ok and result.detail == "created"
+    assert token.calls[0].request.content == (
+        b'{"identity":"admin@example.test","secret":"admin-secret"}'
+    )
+    assert create.calls[0].request.headers["authorization"] == "Bearer jwt-token"
+    assert create.calls[0].request.content == (
+        b'{"name":"J","nickname":"jdoe","email":"j@x","is_disabled":false,'
+        b'"roles":[],"auth":{"type":"password","secret":"new-password"}}'
+    )
+
+
+@respx.mock
+async def test_npm_updates_profile_status_and_password():
+    connector = _npm_connector()
+    _npm_token()
+    respx.get("https://npm.test/api/users").mock(return_value=Response(200, json=[{
+        "id": 7, "email": "J@X", "name": "Old", "nickname": "old",
+        "is_disabled": False, "roles": [],
+    }]))
+    update = respx.put("https://npm.test/api/users/7").mock(
+        return_value=Response(200, json={})
+    )
+    password = respx.put("https://npm.test/api/users/7/auth").mock(
+        return_value=Response(200, json=True)
+    )
+
+    result = await connector.ensure_user(_user(status="disabled"), "new-password")
+
+    assert result.ok and update.called and password.called
+    assert b'"nickname":"jdoe"' in update.calls[0].request.content
+    assert b'"is_disabled":true' in update.calls[0].request.content
+    assert b'"roles"' not in update.calls[0].request.content
+
+
+@respx.mock
+async def test_npm_inspection_discovery_and_delete_absent_are_read_only_and_idempotent():
+    connector = _npm_connector()
+    token = respx.post("https://npm.test/api/tokens").mock(
+        side_effect=[
+            Response(200, json={"token": "one"}),
+            Response(200, json={"token": "two"}),
+            Response(200, json={"token": "three"}),
+        ]
+    )
+    users = respx.get("https://npm.test/api/users").mock(
+        side_effect=[
+            Response(200, json=[{
+                "id": 7, "email": "j@x", "name": "J", "nickname": "jdoe",
+                "is_disabled": False, "roles": [],
+            }]),
+            Response(200, json=[{
+                "id": 7, "email": "j@x", "name": "J", "nickname": "jdoe",
+                "is_disabled": True, "roles": [],
+            }]),
+            Response(200, json=[]),
+        ]
+    )
+
+    report = await connector.inspect_user(_user())
+    discovery = await connector.discover_accounts()
+    deleted = await connector.delete_user(_user())
+
+    assert report.status is ReconciliationStatus.IN_SYNC
+    assert discovery.supported and discovery.accounts[0].username == "j@x"
+    assert discovery.accounts[0].status == "disabled"
+    assert deleted.ok and deleted.detail == "already absent"
+    assert token.call_count == users.call_count == 3
+    assert respx.calls.last.request.method not in {"POST", "PUT", "PATCH", "DELETE"}
+
+
+@respx.mock
+async def test_npm_maps_authentication_unavailable_and_timeout_errors():
+    from na_sso.connectors.base import ConnectorErrorKind
+
+    connector = _npm_connector()
+    token = respx.post("https://npm.test/api/tokens").mock(
+        side_effect=[
+            Response(400, json={"error": {"code": 400, "message": "bad"}}),
+            httpx.ReadTimeout("late"),
+            Response(429, json={"error": {"code": 429, "message": "slow down"}}),
+            Response(200, json={"token": "jwt-token"}),
+            Response(200, json={"requires_2fa": True, "challenge_token": "secret"}),
+        ]
+    )
+    users = respx.get("https://npm.test/api/users").mock(
+        return_value=Response(503, json={"error": {"code": 503, "message": "down"}})
+    )
+
+    authentication = await connector.probe()
+    timeout = await connector.probe()
+    rate_limited = await connector.probe()
+    unavailable = await connector.probe()
+    two_factor = await connector.probe()
+
+    assert authentication.error_kind is ConnectorErrorKind.AUTHENTICATION
+    assert timeout.error_kind is ConnectorErrorKind.TIMEOUT and timeout.retryable
+    assert rate_limited.error_kind is ConnectorErrorKind.RATE_LIMITED
+    assert rate_limited.retryable
+    assert unavailable.error_kind is ConnectorErrorKind.UNAVAILABLE and unavailable.retryable
+    assert two_factor.error_kind is ConnectorErrorKind.AUTHENTICATION
+    assert "secret" not in two_factor.detail
+    assert token.call_count == 5 and users.call_count == 1
+
+
+async def test_npm_rejects_out_of_range_password_before_http():
+    from na_sso.connectors.base import ConnectorErrorKind
+
+    connector = _npm_connector()
+    invalid = await connector.ensure_user(_user(), "short")
+
+    assert not invalid.ok and invalid.error_kind is ConnectorErrorKind.VALIDATION
 
 
 @respx.mock

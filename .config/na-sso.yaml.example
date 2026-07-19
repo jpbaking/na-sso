@@ -176,6 +176,16 @@ targets:
     verify_tls: true
     # api_token: ${IMMICH_PRIMARY_API_TOKEN}
 
+  # Nginx Proxy Manager v2.15.1 administrator Users API target.
+  - id: npm_primary
+    type: npm
+    display_name: Nginx Proxy Manager
+    enabled: true
+    base_url: https://npm.example.lan
+    verify_tls: true
+    # admin_user: ${NPM_PRIMARY_ADMIN_USER}
+    # admin_password: ${NPM_PRIMARY_ADMIN_PASSWORD}
+
   # Jenkins built-in local security realm. Core Jenkins cannot disable users;
   # unassignment is reported as unsupported instead of deleting the account.
   - id: jenkins_primary

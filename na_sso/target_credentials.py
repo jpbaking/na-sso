@@ -91,7 +91,7 @@ def save_credentials(target_id: str, auth_mode: str, payload: dict[str, str]) ->
         },
     }
     required = ({"api_key", "api_secret"} if target.type == "opnsense" else
-                {"admin_user", "admin_password"} if target.type in {"nexus", "nextcloud"} else
+                {"admin_user", "admin_password"} if target.type in {"nexus", "nextcloud", "npm"} else
                 {"api_token"} if target.type in {"gitlab", "gitea", "immich"} else
                 {"admin_user", "api_token"} if target.type == "jenkins" else
                 ssh_required.get(auth_mode, set()))

@@ -238,6 +238,14 @@ class NextcloudTarget(TargetBase):
     default_groups: list[str] = []
 
 
+class NpmTarget(TargetBase):
+    type: Literal["npm"]
+    base_url: str
+    admin_user: str | None = None
+    admin_password: SecretStr | None = None
+    verify_tls: bool = True
+
+
 class TokenApiTarget(TargetBase):
     base_url: str
     api_token: SecretStr | None = None
@@ -289,8 +297,8 @@ class SshTarget(TargetBase):
 
 
 Target = Annotated[
-    OpnsenseTarget | NexusTarget | NextcloudTarget | GitlabTarget | GiteaTarget
-    | ImmichTarget | JenkinsTarget | SshTarget,
+    OpnsenseTarget | NexusTarget | NextcloudTarget | NpmTarget | GitlabTarget
+    | GiteaTarget | ImmichTarget | JenkinsTarget | SshTarget,
     Field(discriminator="type"),
 ]
 

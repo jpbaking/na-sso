@@ -215,7 +215,7 @@ async def configure_target(request: Request, target_id: str,
     payload: dict[str, str]
     if target.type == "opnsense":
         payload = {"api_key": api_key.strip(), "api_secret": api_secret}
-    elif target.type in {"nexus", "nextcloud"}:
+    elif target.type in {"nexus", "nextcloud", "npm"}:
         payload = {"admin_user": admin_user.strip(), "admin_password": password}
     elif target.type in {"gitlab", "gitea", "immich"}:
         payload = {"api_token": api_token}

@@ -3,8 +3,8 @@
 **Not Another SSO.**
 
 One place to manage local identities across OPNsense, Nexus Repository,
-Nextcloud, Jenkins, GitLab, Gitea, Immich, and SSH—without introducing an
-identity provider or changing how those systems authenticate.
+Nextcloud, Jenkins, GitLab, Gitea, Immich, Nginx Proxy Manager, and SSH—without
+introducing an identity provider or changing how those systems authenticate.
 
 NA-SSO gives operators a focused administrative console for creating and
 maintaining local accounts across any number of configured targets. Each
@@ -67,12 +67,15 @@ NA-SSO currently includes connectors for:
 - GitLab Self-Managed Users API
 - Gitea administrator Users API
 - Immich administrator Users API
+- Nginx Proxy Manager v2.15.1 Users API
 - Debian, Ubuntu, RHEL, and Rocky Linux over pinned-host SSH
 
 Each target instance has a stable identity, independent health and credential
 state, and configured default groups or roles where the target supports them.
 Jenkins local-realm accounts support create, read, and delete; Jenkins core has
 no realm-independent disable operation, so NA-SSO fails that action safely.
+Nginx Proxy Manager supports profile, password, disable, discovery, and delete
+operations, but not exact role/group or SSH-key management.
 
 ## How it fits
 
@@ -87,6 +90,7 @@ flowchart LR
     NaSso -->|"Users API"| GitLab["GitLab"]
     NaSso -->|"Admin API"| Gitea["Gitea"]
     NaSso -->|"Admin API"| Immich["Immich"]
+    NaSso -->|"Users API"| NPM["Nginx Proxy Manager"]
     NaSso -->|"Pinned-host SSH"| Linux["Linux hosts"]
 ```
 
