@@ -36,11 +36,15 @@ def test_shared_page_shell_pins_footer_to_viewport(client, admin_client):
     assert 'aria-label="Primary navigation"' in users.text
     assert 'data-mobile-sidebar-toggle aria-expanded="false"' in users.text
     assert 'aria-label="My account options"' in users.text
+    # The account menu lives in the sidebar footer now; the top bar is bare
+    # on sidebar pages (it only carries the mobile toggle).
     header = users.text.split('<header class="nav-wrap">', 1)[1].split("</header>", 1)[0]
-    assert 'href="/users" class="nav-link' not in header
-    assert 'href="/account" class="nav-link' in header
-    assert 'href="/account/password"' not in header
-    assert 'href="/account/mfa"' not in header
+    assert 'href="/account"' not in header
+    footer = users.text.split('class="sidebar-footer"', 1)[1].split('</aside>', 1)[0]
+    assert 'href="/account" class="nav-link' in footer
+    assert 'action="/logout"' in footer
+    assert 'href="/account/password"' not in footer
+    assert 'href="/account/mfa"' not in footer
     assert 'class="brand sidebar-brand"' in users.text
     assert 'data-sidebar-expand' in users.text
     assert 'class="sidebar-control-icon sidebar-collapse-idle"' in users.text
@@ -54,7 +58,7 @@ def test_shared_page_shell_pins_footer_to_viewport(client, admin_client):
 
     navigation = users.text.split('<ul class="nav-links sidebar-links"', 1)[1].split("</ul>", 1)[0]
     expected_order = (
-        "Users", "Assignment profiles", "Access reviews", "Unmanaged accounts",
+        "Dashboard", "Users", "Assignment profiles", "Access reviews", "Unmanaged accounts",
         "Targets", "Reconciliation", "Service accounts", "Notifications", "Audit",
     )
     assert [navigation.index(f'class="sidebar-link-label">{label}</span>') for label in expected_order] == sorted(

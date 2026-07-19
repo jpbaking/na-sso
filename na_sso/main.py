@@ -132,6 +132,7 @@ from na_sso.api import router as api_router  # noqa: E402
 from na_sso.audit import router as audit_router  # noqa: E402
 from na_sso.assignments import router as assignment_router  # noqa: E402
 from na_sso.bulk import router as bulk_router  # noqa: E402
+from na_sso.dashboard import router as dashboard_router  # noqa: E402
 from na_sso.mfa import router as mfa_router  # noqa: E402
 from na_sso.notifications import router as notification_router  # noqa: E402
 from na_sso.reconcile import router as reconciliation_router  # noqa: E402
@@ -147,6 +148,7 @@ app.include_router(api_router)
 app.include_router(audit_router)
 app.include_router(assignment_router)
 app.include_router(bulk_router)
+app.include_router(dashboard_router)
 app.include_router(mfa_router)
 app.include_router(notification_router)
 app.include_router(reconciliation_router)

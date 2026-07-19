@@ -36,9 +36,9 @@ def _login(client, username: str):
 
 
 @pytest.mark.parametrize(("role", "home", "allowed", "denied", "visible", "hidden"), [
-    ("user_operator", "/users", "/users", ("/status", "/audit", "/audit/export.json", "/notifications", "/service-accounts"), "Users", ("Targets", "Audit", "Notifications", "Service accounts")),
-    ("target_operator", "/status", "/status", ("/users", "/users/bulk/import", "/reconciliation", "/assignment-profiles", "/access-reviews", "/audit", "/audit/export.json", "/notifications", "/service-accounts"), "Targets", ("Users", "Reconciliation", "Assignment profiles", "Access reviews", "Audit", "Notifications", "Service accounts")),
-    ("auditor", "/audit", "/audit", ("/users", "/users/bulk/import", "/reconciliation", "/assignment-profiles", "/access-reviews", "/status", "/notifications", "/service-accounts"), "Audit", ("Users", "Reconciliation", "Assignment profiles", "Access reviews", "Targets", "Notifications", "Service accounts")),
+    ("user_operator", "/dashboard", "/users", ("/status", "/audit", "/audit/export.json", "/notifications", "/service-accounts"), "Users", ("Targets", "Audit", "Notifications", "Service accounts")),
+    ("target_operator", "/dashboard", "/status", ("/users", "/users/bulk/import", "/reconciliation", "/assignment-profiles", "/access-reviews", "/audit", "/audit/export.json", "/notifications", "/service-accounts"), "Targets", ("Users", "Reconciliation", "Assignment profiles", "Access reviews", "Audit", "Notifications", "Service accounts")),
+    ("auditor", "/dashboard", "/audit", ("/users", "/users/bulk/import", "/reconciliation", "/assignment-profiles", "/access-reviews", "/status", "/notifications", "/service-accounts"), "Audit", ("Users", "Reconciliation", "Assignment profiles", "Access reviews", "Targets", "Notifications", "Service accounts")),
     ("user", "/account", "/account", ("/users", "/users/bulk/import", "/reconciliation", "/assignment-profiles", "/access-reviews", "/status", "/audit", "/audit/export.json", "/notifications", "/service-accounts"), "My account", ("Users", "Reconciliation", "Assignment profiles", "Access reviews", "Targets", "Audit", "Notifications", "Service accounts")),
 ])
 def test_scoped_roles_enforce_routes_and_navigation(

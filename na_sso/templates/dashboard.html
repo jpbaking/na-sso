@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block nav %}{% with active_nav='dashboard' %}{% include "_admin_nav.html" %}{% endwith %}{% endblock %}
+{% block content %}
+<section class="section container">
+  <div class="section-head">
+    <div class="section-kicker">// Operations overview</div>
+    <h1 class="section-title">Dashboard</h1>
+  </div>
+
+  <div class="grid-stats">
+    <div class="stat">
+      <div class="stat-value">{{ tiles.users.total }}</div>
+      <div class="stat-label">Managed users</div>
+      <div class="stat-delta">{{ tiles.users.active }} active · {{ tiles.users.disabled }} disabled</div>
+      <div id="spark-users" aria-label="Managed users over the last 30 days"></div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ tiles.targets.healthy }}<small>/{{ tiles.targets.total }}</small></div>
+      <div class="stat-label">Targets healthy</div>
+      <div class="stat-delta">verified and reachable</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ tiles.findings.open }}</div>
+      <div class="stat-label">Open findings</div>
+      <div class="stat-delta">{{ tiles.findings.drift }} drift · {{ tiles.findings.unmanaged }} unmanaged</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">{{ tiles.operations_24h.total }}</div>
+      <div class="stat-label">Operations (24h)</div>
+      <div class="stat-delta">{{ tiles.operations_24h.succeeded }} succeeded · {{ tiles.operations_24h.failed }} failed</div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="chart">
+      <h2 class="chart-title">Per-target sync health</h2>
+      <p class="chart-sub">Assigned accounts by state</p>
+      <div id="chart-sync"></div>
+    </div>
+    <div class="chart">
+      <h2 class="chart-title">Lifecycle operations</h2>
+      <p class="chart-sub">Last 14 days</p>
+      <div id="chart-operations"></div>
+    </div>
+    <div class="chart">
+      <h2 class="chart-title">Expiry horizon</h2>
+      <p class="chart-sub">Credentials expiring soon</p>
+      <div id="chart-expiry"></div>
+    </div>
+    <div class="chart">
+      <h2 class="chart-title">Reconciliation drift</h2>
+      <p class="chart-sub" id="chart-recon-sub">Latest completed run</p>
+      <div id="chart-recon"></div>
+    </div>
+  </div>
+
+  <details class="insights" data-insights>
+    <summary class="insights-toggle" title="Charts load when expanded">
+      <span class="insights-rule" aria-hidden="true"></span>
+      <span class="insights-label">More insights</span>
+      <span class="insights-rule" aria-hidden="true"></span>
+    </summary>
+    <div class="insights-body">
+      <div class="grid-2">
+        <div class="chart">
+          <h2 class="chart-title">User lifecycle</h2>
+          <p class="chart-sub">Distribution</p>
+          <div id="chart-lifecycle"></div>
+        </div>
+        <div class="chart">
+          <h2 class="chart-title">Audit activity</h2>
+          <p class="chart-sub">Events per day, last 14 days</p>
+          <div id="chart-audit"></div>
+        </div>
+        <div class="chart">
+          <h2 class="chart-title">Webhook deliveries</h2>
+          <p class="chart-sub" id="chart-webhooks-sub">Last 30 days</p>
+          <div id="chart-webhooks"></div>
+        </div>
+        <div class="chart">
+          <h2 class="chart-title">Access review progress</h2>
+          <p class="chart-sub" id="chart-review-sub">Open review cycle</p>
+          <div id="chart-review"></div>
+        </div>
+      </div>
+    </div>
+  </details>
+</section>
+
+<script src="/design/charts.js"></script>
+<script id="dashboard-data" type="application/json">{{ data_json | safe }}</script>
+<script>
+(() => {
+  const data = JSON.parse(document.getElementById('dashboard-data').textContent);
+  const empty = (el, message) => {
+    const node = document.querySelector(el);
+    node.innerHTML = '<p class="chart-sub">' + message + '</p>';
+  };
+  const hasValues = dataset => dataset.series.some(s => s.values.some(v => v > 0));
+
+  // Charts measure their container width when drawn; wait for layout so the
+  // viewBox aspect is computed from the real column width.
+  requestAnimationFrame(() => {
+  if (data.tiles.users.spark.some(v => v > 0)) {
+    lwCharts.sparkline('#spark-users', { values: data.tiles.users.spark });
+  }
+  if (hasValues(data.sync_health)) {
+    lwCharts.bar('#chart-sync', data.sync_health);
+  } else empty('#chart-sync', 'No assigned accounts yet');
+  if (hasValues(data.operations_timeline)) {
+    lwCharts.line('#chart-operations', data.operations_timeline);
+  } else empty('#chart-operations', 'No operations in the last 14 days');
+  if (hasValues(data.expiry_horizon)) {
+    lwCharts.bar('#chart-expiry', data.expiry_horizon);
+  } else empty('#chart-expiry', 'Nothing expires within 60 days');
+  if (data.recon_findings.slices.length) {
+    lwCharts.donut('#chart-recon', { slices: data.recon_findings.slices });
+  } else empty('#chart-recon', data.recon_findings.run_completed_at ? 'No drift in the latest run' : 'No completed reconciliation run yet');
+  });
+
+  const insights = document.querySelector('[data-insights]');
+  let loaded = false;
+  insights.addEventListener('toggle', async () => {
+    if (!insights.open || loaded) return;
+    loaded = true;
+    let extra;
+    try {
+      extra = await (await fetch('/dashboard/insights', { headers: { 'Accept': 'application/json' } })).json();
+    } catch (error) {
+      loaded = false;
+      empty('#chart-lifecycle', 'Failed to load — collapse and expand to retry');
+      return;
+    }
+    if (extra.lifecycle.slices.length) {
+      lwCharts.donut('#chart-lifecycle', { slices: extra.lifecycle.slices });
+    } else empty('#chart-lifecycle', 'No managed users yet');
+    if (extra.audit_timeline.series.some(s => s.values.some(v => v > 0))) {
+      lwCharts.line('#chart-audit', extra.audit_timeline);
+    } else empty('#chart-audit', 'No audit events in the last 14 days');
+    if (extra.webhooks.slices.length) {
+      if (extra.webhooks.success_rate !== null) {
+        document.getElementById('chart-webhooks-sub').textContent =
+          'Last 30 days · ' + extra.webhooks.success_rate + '% delivered';
+      }
+      lwCharts.donut('#chart-webhooks', { slices: extra.webhooks.slices });
+    } else empty('#chart-webhooks', 'No deliveries in the last 30 days');
+    if (extra.access_review.open) {
+      document.getElementById('chart-review-sub').textContent =
+        extra.access_review.name + ' · due ' + (extra.access_review.due_at || '').slice(0, 10);
+      lwCharts.donut('#chart-review', { slices: [
+        { label: 'Decided', value: extra.access_review.decided },
+        { label: 'Pending', value: extra.access_review.pending },
+      ].filter(s => s.value > 0) });
+    } else empty('#chart-review', 'No open review cycle');
+  });
+})();
+</script>
+{% endblock %}

@@ -79,14 +79,14 @@ def test_required_totp_login_recovery_and_secret_storage(mfa_client):
         "/login/mfa/code", data={"code": _totp(secret, int(time()) + 30)},
         follow_redirects=False
     )
-    assert verified.headers["location"] == "/users"
+    assert verified.headers["location"] == "/dashboard"
 
     mfa_client.post("/logout")
     _login(mfa_client)
     recovered = mfa_client.post(
         "/login/mfa/code", data={"code": codes[0]}, follow_redirects=False
     )
-    assert recovered.headers["location"] == "/users"
+    assert recovered.headers["location"] == "/dashboard"
     mfa_client.post("/logout")
     _login(mfa_client)
     reused = mfa_client.post("/login/mfa/code", data={"code": codes[0]})
@@ -101,7 +101,7 @@ def test_root_emergency_recovery_is_one_use_per_configured_value(mfa_client):
         "/login/mfa/code", data={"code": "Root-Emergency-Once-2026"},
         follow_redirects=False,
     )
-    assert first.headers["location"] == "/users"
+    assert first.headers["location"] == "/dashboard"
     mfa_client.post("/logout")
     _login(mfa_client)
     second = mfa_client.post(
@@ -167,7 +167,7 @@ def test_webauthn_enrol_login_and_final_factor_revocation(mfa_client, monkeypatc
         "id": bytes_to_base64url(b"credential-id"), "response": {},
     })
     assert authenticated.status_code == 200
-    assert authenticated.json()["redirect"] == "/users"
+    assert authenticated.json()["redirect"] == "/dashboard"
     assert mfa_client.get("/users").status_code == 200
 
 

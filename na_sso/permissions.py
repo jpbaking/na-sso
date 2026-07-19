@@ -71,11 +71,8 @@ def permission_context(role: str) -> dict[str, bool]:
 
 
 def default_home(role: str) -> str:
-    for permission, path in (
-        (MANAGE_USERS, "/users"),
-        (MANAGE_TARGETS, "/status"),
-        (VIEW_AUDIT, "/audit"),
-    ):
+    # Every console role lands on the dashboard; managed users keep self-service.
+    for permission in (MANAGE_USERS, MANAGE_TARGETS, VIEW_AUDIT):
         if has_permission(role, permission):
-            return path
+            return "/dashboard"
     return "/account"

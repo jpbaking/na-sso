@@ -40,6 +40,7 @@ Owns all Python modules, templates, and static assets under `na_sso/`. Connector
 - **Notifications** — redacted events, signed webhook delivery/retry, root destination controls. Start: `notifications.py`.
 - **Target onboarding** — encrypted credential revisions, probes, reachability. Start: `target_credentials.py`.
 - **Admin UI** — server-rendered templates with live state updates. Start: `templates/base.html`. Files: `templates/`, `static/app.css`, `feedback.py`.
+- **Console dashboard** — operational home page for console roles: eager tiles/charts plus a lazily-fetched insights section. Start: `dashboard.py`. Files: `templates/dashboard.html`.
 
 ## Child DOX Index
 

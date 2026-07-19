@@ -651,6 +651,61 @@ details.collapse-card[open] > summary {
   display: none;
 }
 
+/* Dashboard: cap the rendered chart height — the SVGs scale with container
+   width via their viewBox and grow far too tall on wide viewports. */
+.chart svg {
+  display: block;
+  height: auto;
+  margin-inline: auto;
+  max-height: 280px;
+  width: 100%;
+}
+
+/* Dashboard "More insights": a quiet centred divider that discloses the
+   lazy-loaded chart grid. */
+.insights > summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-3);
+  list-style: none;
+  margin-block: var(--space-5) 0;
+}
+
+.insights > summary::-webkit-details-marker {
+  display: none;
+}
+
+.insights-rule {
+  border-top: var(--border-hair) solid var(--line);
+  flex: 1;
+}
+
+.insights-label {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--ui-kicker);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  transition: color 0.15s;
+}
+
+.insights-label::before {
+  content: "\25B8  ";
+}
+
+.insights[open] .insights-label::before {
+  content: "\25BE  ";
+}
+
+.insights > summary:is(:hover, :focus-visible) .insights-label {
+  color: var(--brand-blue);
+}
+
+.insights-body {
+  margin-top: var(--space-4);
+}
+
 /* Section header with more than one trailing action (e.g. Users: Add user +
    Bulk import). Mirrors .section-all's right-alignment for a button group. */
 .section-actions {

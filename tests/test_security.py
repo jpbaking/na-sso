@@ -261,7 +261,7 @@ def test_admin_navigation_exposes_account_security_and_root_change_reauthenticat
         assert '<a href="/account/mfa" class="nav-link">MFA</a>' not in page.text
 
     account = admin_client.get("/account")
-    assert '<a href="/users" class="brand sidebar-brand"' in account.text
+    assert '<a href="/dashboard" class="brand sidebar-brand"' in account.text
     assert '<a href="/account" class="nav-link active" aria-current="page">My account</a>' in account.text
     assert '<a href="/account/password" class="btn btn-primary">Change password</a>' in account.text
     assert '<a href="/account/mfa" class="btn btn-secondary">Manage MFA</a>' in account.text

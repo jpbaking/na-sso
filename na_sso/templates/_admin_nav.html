@@ -1,3 +1,9 @@
+{% if permissions.users or permissions.targets or permissions.audit %}
+<li><a href="/dashboard" class="nav-link{% if active_nav == 'dashboard' %} active{% endif %}" aria-label="Dashboard" title="Dashboard"{% if active_nav == 'dashboard' %} aria-current="page"{% endif %}>
+  <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect></svg></span>
+  <span class="sidebar-link-label">Dashboard</span>
+</a></li>
+{% endif %}
 {% if permissions.users %}
 <li><a href="/users" class="nav-link{% if active_nav == 'users' %} active{% endif %}" aria-label="Users" title="Users"{% if active_nav == 'users' %} aria-current="page"{% endif %}>
   <span class="sidebar-link-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span>

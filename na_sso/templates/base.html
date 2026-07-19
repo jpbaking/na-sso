@@ -22,7 +22,7 @@
   {% if has_sidebar %}
   <aside class="app-sidebar" id="app-sidebar" data-sidebar aria-label="Primary navigation">
     <div class="sidebar-header">
-      <a href="{{ home_url | default('/users', true) }}" class="brand sidebar-brand" aria-label="NA-SSO — home">
+      <a href="{{ home_url | default('/dashboard', true) }}" class="brand sidebar-brand" aria-label="NA-SSO — home">
         <img src="/na-sso-logo.png" alt="">
         <span class="brand-name">NA-SSO</span>
       </a>
@@ -86,7 +86,7 @@
           <span class="brand-name">NA-SSO</span>
         </button>
         {% else %}
-        <a href="{{ home_url | default('/users', true) }}" class="brand" aria-label="NA-SSO — home">
+        <a href="{{ home_url | default('/dashboard', true) }}" class="brand" aria-label="NA-SSO — home">
           <img src="/na-sso-logo.png" alt="">
           <span class="brand-name">NA-SSO</span>
         </a>
