@@ -229,7 +229,13 @@ Scheduled reconciliation creates reports only, with retry/backoff controlled by
 
 For larger onboarding or offboarding jobs, use the CSV workflow or the
 `/api/v1/bulk/preview` and `/api/v1/bulk/{workflow_id}/execute` endpoints. A job accepts at
-most 1,000 rows and a CSV upload at most 1 MiB. Preview validates every row
+most `bulk_import_policy.max_rows` rows, 1,000 by default. The CSV upload cap is
+derived from that row cap rather than set independently: it is
+`max_rows x bulk_import_policy.row_byte_allowance`, where the allowance defaults
+to 2 KiB per row — comfortably above the 455-byte widest row the schema permits,
+leaving room for rows that list many targets. Raise `max_rows` only with the
+execution cost in mind: rows are processed sequentially, each fanning out to its
+own targets, so a job's duration grows with rows x targets per row. Preview validates every row
 without mutation, execution is idempotent for the authenticated actor, and the
 result preserves per-row failures under one correlated operation. Generated
 temporary passwords are available through one audited POST download and are

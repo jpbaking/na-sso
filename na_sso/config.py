@@ -121,6 +121,22 @@ class LifecycleAutomationPolicy(StrictModel):
     max_review_accounts: int = Field(default=1000, ge=1, le=5000)
 
 
+class BulkImportPolicy(StrictModel):
+    """Bounds for one bulk onboarding/offboarding job.
+
+    Execution fans out to each row's targets in sequence, so the practical
+    ceiling is wall-clock time rather than parsing or memory.
+    """
+
+    max_rows: int = Field(default=1000, ge=1, le=100000)
+    row_byte_allowance: int = Field(default=2048, ge=512, le=65536)
+
+    @property
+    def max_upload_bytes(self) -> int:
+        """Upload cap derived from the row cap, not an independent number."""
+        return self.max_rows * self.row_byte_allowance
+
+
 class AutomationApiPolicy(StrictModel):
     enabled: bool = True
     requests_per_minute: int = Field(default=120, ge=10, le=10000)
@@ -312,6 +328,7 @@ class FileConfig(StrictModel):
     reconciliation_policy: ReconciliationPolicy = ReconciliationPolicy()
     unmanaged_account_policy: UnmanagedAccountPolicy = UnmanagedAccountPolicy()
     lifecycle_automation_policy: LifecycleAutomationPolicy = LifecycleAutomationPolicy()
+    bulk_import_policy: BulkImportPolicy = BulkImportPolicy()
     automation_api_policy: AutomationApiPolicy = AutomationApiPolicy()
     admin_mfa_policy: AdminMfaPolicy = AdminMfaPolicy()
     notification_policy: NotificationPolicy = NotificationPolicy()

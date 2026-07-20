@@ -263,7 +263,10 @@ and uses the preview UUID as an idempotency key. Replaying it returns the stored
 result without changing users or adding audit events.
 
 `bulk.py` extends that contract to CSV and JSON onboarding/offboarding jobs of
-up to 1,000 rows. It stores the normalized preview, binds idempotency to the
+up to `bulk_import_policy.max_rows` rows, 1,000 by default; the upload byte cap
+is derived from that row cap. Both are read per request through
+`max_bulk_rows()` and `max_csv_bytes()`, never captured at import time, so a
+configuration change takes effect without code edits. It stores the normalized preview, binds idempotency to the
 authenticated actor, and records a parent operation with per-row children.
 Generated temporary passwords remain encrypted until a single audited POST
 download, then are erased; export fields are neutralized against spreadsheet

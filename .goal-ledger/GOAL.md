@@ -1,43 +1,38 @@
-# GOAL — Example CSV template and target_ids modal for bulk onboarding
+# GOAL — Configurable bulk import limits
 
 ## Goal
-- Goal ID: 20260721-bulk-csv-template-targets
-- Outcome: The bulk onboarding/offboarding page offers a downloadable example CSV pre-filled with real configured target IDs, and the `target_ids` token in the column hint opens a modal listing available targets with their IDs.
-- Done when: `/users/bulk/import` renders a clickable `target_ids` link that opens a modal table of enabled connectors (target_id, display name, type); a template download returns a CSV whose `target_ids` values are real configured IDs and that the existing bulk preview validator accepts; the test suite passes.
+- Goal ID: 20260721-configurable-bulk-limits
+- Outcome: The bulk row cap is a per-deployment configuration value, and the CSV upload byte cap is derived from it instead of being an independent round number.
+- Done when: `bulk_import_policy.max_rows` in the config file drives both the row limit and the derived upload byte limit (2 KiB per row), no import-time constant remains, the page hint and rejection messages report the configured values, `docs/PRODUCTION.md` matches, and the test suite passes.
 - Goal status: completed
 - Goal status meaning: drafting | approved | executing | blocked-on-human | awaiting-acceptance | completed | abandoned
-- Last completed phase: phase-0005
+- Last completed phase: phase-0003
 
 ## Git
 - Repository: yes
 - Strategy: isolated-branch
 - Starting branch: main
-- Work branch: goal/20260721-bulk-csv-template-targets
-- Baseline commit: f66a053b11569943afd1b7e30b9be5091c6dde14
-- Starting upstream at start: origin/main@f66a053b11569943afd1b7e30b9be5091c6dde14
+- Work branch: goal/20260721-configurable-bulk-limits
+- Baseline commit: 615d9301399c6ba95ba29a629d3281066a0b5ef6
+- Starting upstream at start: origin/main@615d9301399c6ba95ba29a629d3281066a0b5ef6
 - Work upstream at start: none
 
 ## Phases
-- [done] phase-0001 — Template CSV endpoint built from configured targets
-- [done] phase-0002 — Bulk import page: target_ids modal and template download
-- [done] phase-0003 — Tests, demo verification, DOX pass
-- [done] phase-0004 — Require every CSV field except target_ids
-- [done] phase-0005 — Declutter the CSV column instructions
+- [done] phase-0001 — BulkImportPolicy config with a derived byte cap
+- [done] phase-0002 — Report the configured limits in the UI, errors and docs
+- [done] phase-0003 — Boundary tests, full suite, DOX pass
 
 ## Handoff
 - Current position: completed
 - Next action: none
-- Last verified evidence: 243 tests pass; demo shows the column table, modal opens, template round-trips
+- Last verified evidence: 247 tests pass, including four boundary tests against a real capped config file
 - Blockers: none
 
 ## Log
 - created ledger with 3 phases
-- Gate A/B/C approved by user ("start"); isolated branch created from f66a053
-- phase-0001 done: template CSV endpoint live
-- phase-0002 done: target_ids modal trigger, targets table and CSV download on the page
-- phase-0003 done: tests, demo verification and DOX pass complete; goal awaiting acceptance
-- user added scope after review: require every CSV field except target_ids (Add User parity); phase-0004 appended
-- phase-0004 done: all CSV fields required except target_ids; goal awaiting acceptance
-- user feedback: the required-columns hint is too crowded; phase-0005 appended
-- phase-0005 done: upload card instructions restructured as a column table; goal awaiting acceptance
+- supersedes completed goal 20260721-bulk-csv-template-targets (retained in Git history)
+- Gate A/B/C approved by user; per-row byte allowance chosen as 2 KiB (default upload cap becomes 2 MiB)
+- phase-0001 done: limits now come from bulk_import_policy
+- phase-0002 done: UI, errors and docs report the configured limits
+- phase-0003 done: boundary tests, suite and DOX complete; goal awaiting acceptance
 - user accepted 2026-07-21; goal commits squashed into one snapshot commit and merged to main

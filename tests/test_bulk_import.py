@@ -2,6 +2,8 @@ import csv
 import io
 import re
 
+import pytest
+
 from na_sso.connectors import Connector, IdentityCapabilities, SyncResult
 from na_sso.models import ManagedUser, SyncState
 
@@ -313,3 +315,102 @@ def test_onboard_rows_require_display_name_and_email(admin_client, monkeypatch):
     assert "email" in rows["no_profile_user"].detail
     assert rows["named_user"].validation_status == "valid"
     assert rows["offboard_user"].validation_status == "valid"
+
+
+@pytest.fixture()
+def capped_client(tmp_path, monkeypatch):
+    """App client whose configuration caps bulk jobs at five rows."""
+    config_path = tmp_path / "na-sso.yaml"
+    config_path.write_text(
+        "version: 1\n"
+        "bulk_import_policy:\n"
+        "  max_rows: 5\n"
+        "  row_byte_allowance: 512\n"
+    )
+    monkeypatch.setenv("NA_SSO_DATABASE_PATH", str(tmp_path / "capped.db"))
+    monkeypatch.setenv("NA_SSO_SECRET_KEY", "capped-secret")
+    monkeypatch.setenv("NA_SSO_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("NA_SSO_ADMIN_BOOTSTRAP_PASSWORD", "admin-pass")
+    monkeypatch.setenv("NA_SSO_CONFIG_FILE", str(config_path))
+    import na_sso.config as config
+    import na_sso.db as db
+
+    config.get_settings.cache_clear()
+    db._engine = db._session_factory = None
+    from fastapi.testclient import TestClient
+
+    from na_sso.main import app, bootstrap_admin
+
+    db.init_db()
+    bootstrap_admin()
+    with TestClient(app) as client:
+        client.post(
+            "/login", data={"username": "admin", "password": "admin-pass"},
+            follow_redirects=True,
+        )
+        yield client
+    db._engine = db._session_factory = None
+    config.get_settings.cache_clear()
+
+
+def _rows_csv(count):
+    body = "username,action,display_name,email,target_ids\n"
+    for index in range(count):
+        body += f"user_{index:04d},onboard,User {index},u{index}@example.test,cloud\n"
+    return body
+
+
+def test_configured_row_cap_drives_the_derived_upload_cap(capped_client):
+    from na_sso.bulk import max_bulk_rows, max_csv_bytes, upload_size_label
+
+    assert max_bulk_rows() == 5
+    assert max_csv_bytes() == 5 * 512
+    assert upload_size_label() == "2 KiB"
+
+
+def test_csv_path_accepts_the_configured_cap_and_rejects_one_more(capped_client):
+    at_cap = capped_client.post(
+        "/users/bulk/import/preview",
+        files={"csv_file": ("at.csv", _rows_csv(5).encode(), "text/csv")},
+        follow_redirects=False,
+    )
+    assert at_cap.status_code == 303
+
+    over_cap = capped_client.post(
+        "/users/bulk/import/preview",
+        files={"csv_file": ("over.csv", _rows_csv(6).encode(), "text/csv")},
+        follow_redirects=True,
+    )
+    assert over_cap.status_code == 200
+    assert "1–5 data rows" in over_cap.text
+
+
+def test_api_path_rejects_above_the_configured_cap(capped_client):
+    rows = [{
+        "username": f"api_user_{index}", "action": "onboard",
+        "display_name": f"API User {index}", "email": f"api{index}@example.test",
+        "target_ids": ["cloud"],
+    } for index in range(6)]
+
+    response = capped_client.post("/api/v1/bulk/preview", json={
+        "idempotency_key": "capped-preview-01", "rows": rows,
+    })
+
+    assert response.status_code == 422
+    assert "1–5 rows" in response.text
+
+
+def test_upload_larger_than_the_derived_cap_is_rejected(capped_client):
+    oversized = "username,action,display_name,email,target_ids\n" + (
+        "u,onboard,Padded Name,padded@example.test,cloud\n" * 100
+    )
+    assert len(oversized) > 5 * 512
+
+    rejected = capped_client.post(
+        "/users/bulk/import/preview",
+        files={"csv_file": ("big.csv", oversized.encode(), "text/csv")},
+        follow_redirects=True,
+    )
+
+    assert rejected.status_code == 200
+    assert "exceeds 2 KiB" in rejected.text

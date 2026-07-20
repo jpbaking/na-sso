@@ -10,7 +10,7 @@
     <article class="card stack-2">
       <div class="card-meta">CSV preview</div><h2 class="card-title">Upload accounts</h2>
       <form method="post" action="/users/bulk/import/preview" enctype="multipart/form-data" class="stack-2">
-        <div class="field"><label class="label" for="csv_file">CSV file</label><input class="input" id="csv_file" name="csv_file" type="file" accept="text/csv,.csv" required><p class="field-hint">UTF-8, up to {{ max_rows }} rows and 1 MiB. All five columns below must be present; cells stay empty where noted.</p></div>
+        <div class="field"><label class="label" for="csv_file">CSV file</label><input class="input" id="csv_file" name="csv_file" type="file" accept="text/csv,.csv" required><p class="field-hint">UTF-8, up to {{ "{:,}".format(max_rows) }} rows and {{ max_upload }}. All five columns below must be present; cells stay empty where noted.</p></div>
         <div class="table-wrap"><table class="table csv-columns">
           <thead><tr><th>Column</th><th>Requirement</th></tr></thead>
           <tbody>

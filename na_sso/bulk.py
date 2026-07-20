@@ -31,10 +31,30 @@ from na_sso.users import USERNAME_RE, _set_pending
 
 router = APIRouter()
 _api_bearer = HTTPBearer(auto_error=False)
-MAX_BULK_ROWS = 1000
-MAX_CSV_BYTES = 1024 * 1024
 IDEMPOTENCY_RE = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
 CSV_COLUMNS = ("username", "action", "display_name", "email", "target_ids")
+
+
+def max_bulk_rows() -> int:
+    """Configured row cap; read per request so a config change takes effect."""
+    from na_sso.config import get_settings
+
+    return get_settings().file.bulk_import_policy.max_rows
+
+
+def max_csv_bytes() -> int:
+    """Upload cap derived from the configured row cap."""
+    from na_sso.config import get_settings
+
+    return get_settings().file.bulk_import_policy.max_upload_bytes
+
+
+def upload_size_label(byte_cap: int | None = None) -> str:
+    """The upload cap in the largest unit that keeps it readable."""
+    byte_cap = max_csv_bytes() if byte_cap is None else byte_cap
+    if byte_cap >= 1024 * 1024:
+        return f"{byte_cap / 1024 / 1024:.1f} MiB"
+    return f"{byte_cap // 1024} KiB"
 
 
 class BulkApiRow(BaseModel):
@@ -47,7 +67,7 @@ class BulkApiRow(BaseModel):
 
 class BulkApiPreviewRequest(BaseModel):
     idempotency_key: str = Field(min_length=8, max_length=128)
-    rows: list[BulkApiRow] = Field(min_length=1, max_length=MAX_BULK_ROWS)
+    rows: list[BulkApiRow] = Field(min_length=1)
 
 
 class BulkApiExecuteRequest(BaseModel):
@@ -75,8 +95,9 @@ def preview_bulk_workflow(
 ) -> BulkWorkflow:
     if not IDEMPOTENCY_RE.fullmatch(idempotency_key):
         raise ValueError("idempotency key must be 8–128 safe characters")
-    if not rows or len(rows) > MAX_BULK_ROWS:
-        raise ValueError(f"bulk input must contain 1–{MAX_BULK_ROWS} rows")
+    row_cap = max_bulk_rows()
+    if not rows or len(rows) > row_cap:
+        raise ValueError(f"bulk input must contain 1–{row_cap} rows")
     connectors = {item.target_id: item for item in get_connectors()}
     with get_session() as db:
         existing_workflow = db.query(BulkWorkflow).filter_by(
@@ -387,8 +408,9 @@ def _load_owned_workflow(workflow_id: str, actor: str) -> BulkWorkflow | None:
 
 
 def _parse_csv(upload: bytes) -> list[dict]:
-    if len(upload) > MAX_CSV_BYTES:
-        raise ValueError("CSV upload exceeds 1 MiB")
+    byte_cap = max_csv_bytes()
+    if len(upload) > byte_cap:
+        raise ValueError(f"CSV upload exceeds {upload_size_label(byte_cap)}")
     try:
         text = upload.decode("utf-8-sig")
     except UnicodeDecodeError as error:
@@ -399,8 +421,9 @@ def _parse_csv(upload: bytes) -> list[dict]:
     if missing:
         raise ValueError("CSV is missing required column(s): " + ", ".join(missing))
     rows = list(reader)
-    if not rows or len(rows) > MAX_BULK_ROWS:
-        raise ValueError(f"CSV must contain 1–{MAX_BULK_ROWS} data rows")
+    row_cap = max_bulk_rows()
+    if not rows or len(rows) > row_cap:
+        raise ValueError(f"CSV must contain 1–{row_cap} data rows")
     return rows
 
 
@@ -472,7 +495,8 @@ async def bulk_import_page(request: Request):
     return template_response(templates, request, "bulk_import.html", {
         "admin": principal["username"], "admin_area": True,
         "permissions": permission_context(principal["role"]),
-        "workflows": workflows, "max_rows": MAX_BULK_ROWS,
+        "workflows": workflows, "max_rows": max_bulk_rows(),
+        "max_upload": upload_size_label(),
         "targets": available_targets(),
     })
 
@@ -486,7 +510,7 @@ async def bulk_import_preview(
     if isinstance(principal, Response):
         return principal
     try:
-        rows = _parse_csv(await csv_file.read(MAX_CSV_BYTES + 1))
+        rows = _parse_csv(await csv_file.read(max_csv_bytes() + 1))
         workflow = preview_bulk_workflow(
             actor=principal["username"], source="csv",
             idempotency_key=str(uuid4()), rows=rows,
