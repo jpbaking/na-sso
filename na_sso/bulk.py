@@ -34,6 +34,7 @@ _api_bearer = HTTPBearer(auto_error=False)
 MAX_BULK_ROWS = 1000
 MAX_CSV_BYTES = 1024 * 1024
 IDEMPOTENCY_RE = re.compile(r"^[A-Za-z0-9._:-]{8,128}$")
+CSV_COLUMNS = ("username", "action", "display_name", "email", "target_ids")
 
 
 class BulkApiRow(BaseModel):
@@ -118,6 +119,10 @@ def preview_bulk_workflow(
                 errors.append("unknown target(s): " + ", ".join(unknown_targets))
             if action == "onboard" and not target_ids:
                 errors.append("onboarding requires at least one target")
+            if action == "onboard" and not display_name:
+                errors.append("onboarding requires a display name")
+            if action == "onboard" and not email:
+                errors.append("onboarding requires an email address")
             if action == "offboard" and existing is None:
                 errors.append("offboarding requires an existing account")
             if existing and (existing.is_root or existing.role != "user" or existing.desired_action == "delete"):
@@ -390,8 +395,9 @@ def _parse_csv(upload: bytes) -> list[dict]:
         raise ValueError("CSV must use UTF-8") from error
     reader = csv.DictReader(io.StringIO(text))
     fields = set(reader.fieldnames or [])
-    if not {"username", "action"} <= fields:
-        raise ValueError("CSV requires username and action columns")
+    missing = [column for column in CSV_COLUMNS if column not in fields]
+    if missing:
+        raise ValueError("CSV is missing required column(s): " + ", ".join(missing))
     rows = list(reader)
     if not rows or len(rows) > MAX_BULK_ROWS:
         raise ValueError(f"CSV must contain 1–{MAX_BULK_ROWS} data rows")
@@ -415,6 +421,44 @@ def _csv_response(rows: list[dict], filename: str) -> Response:
     })
 
 
+def available_targets() -> list[dict]:
+    """Enabled targets offered to bulk imports, for the picker modal and CSV template."""
+    return [{
+        "target_id": connector.target_id,
+        "display_name": connector.display_name,
+        "target_type": connector.target_type,
+    } for connector in get_connectors()]
+
+
+def bulk_template_rows() -> list[dict]:
+    """Example rows using real configured target IDs, or a placeholder when none exist."""
+    target_ids = [target["target_id"] for target in available_targets()]
+    primary = target_ids[0] if target_ids else "example-target"
+    several = "|".join(target_ids[:3]) if target_ids else primary
+    return [
+        {
+            "username": "jane.doe", "action": "onboard", "display_name": "Jane Doe",
+            "email": "jane.doe@example.com", "target_ids": several,
+        },
+        {
+            "username": "john.roe", "action": "onboard", "display_name": "John Roe",
+            "email": "john.roe@example.com", "target_ids": primary,
+        },
+        {
+            "username": "former.staff", "action": "offboard", "display_name": "",
+            "email": "", "target_ids": "",
+        },
+    ]
+
+
+@router.get("/users/bulk/import/template.csv")
+async def bulk_import_template(request: Request):
+    principal = _guard(request)
+    if isinstance(principal, Response):
+        return principal
+    return _csv_response(bulk_template_rows(), "na-sso-bulk-import-template.csv")
+
+
 @router.get("/users/bulk/import")
 async def bulk_import_page(request: Request):
     principal = _guard(request)
@@ -429,6 +473,7 @@ async def bulk_import_page(request: Request):
         "admin": principal["username"], "admin_area": True,
         "permissions": permission_context(principal["role"]),
         "workflows": workflows, "max_rows": MAX_BULK_ROWS,
+        "targets": available_targets(),
     })
 
 

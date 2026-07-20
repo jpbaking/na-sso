@@ -29,7 +29,7 @@ Owns all Python modules, templates, and static assets under `na_sso/`. Connector
 - **Synchronization** — serialized fan-out to targets, operation correlation, encrypted pending secrets, retry/recovery worker. Start: `sync.py`. Files: `operations.py`, `target_credentials.py`.
 - **SSH key management** — named per-device keys, add-before-revoke rotation, expiry, revocation. Start: `ssh_keys.py`.
 - **Assignment profiles** — immutable profile versions, preview/publish/apply, per-user exceptions. Start: `assignments.py`.
-- **Bulk onboarding/offboarding** — bounded CSV/JSON preview and idempotent execution with exports. Start: `bulk.py`.
+- **Bulk onboarding/offboarding** — bounded CSV/JSON preview and idempotent execution with exports, a target-ID picker modal, and an example CSV template built from the configured targets. Start: `bulk.py`. Files: `templates/bulk_import.html`.
 - **Reconciliation** — sanitized snapshots, drift classification, approval-bound repair, scheduled previews. Start: `reconciliation.py`. Files: `reconcile.py`.
 - **Unmanaged accounts** — read-only discovery, dispositions, adoption, guarded one-use removal. Start: `unmanaged.py`.
 - **Access governance** — effective-date/inactivity policy, access reviews, attestations, reminders. Start: `governance.py`. Files: `inventory.py`.

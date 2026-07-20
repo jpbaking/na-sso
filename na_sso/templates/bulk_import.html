@@ -10,8 +10,18 @@
     <article class="card stack-2">
       <div class="card-meta">CSV preview</div><h2 class="card-title">Upload accounts</h2>
       <form method="post" action="/users/bulk/import/preview" enctype="multipart/form-data" class="stack-2">
-        <div class="field"><label class="label" for="csv_file">CSV file</label><input class="input" id="csv_file" name="csv_file" type="file" accept="text/csv,.csv" required><p class="field-hint">Required columns: <code>username</code>, <code>action</code>. Optional: <code>display_name</code>, <code>email</code>, <code>target_ids</code>. Use <code>onboard</code> or <code>offboard</code>; separate target IDs with <code>|</code>. Maximum {{ max_rows }} rows and 1 MiB.</p></div>
-        <button class="btn btn-primary" type="submit">Validate and preview</button>
+        <div class="field"><label class="label" for="csv_file">CSV file</label><input class="input" id="csv_file" name="csv_file" type="file" accept="text/csv,.csv" required><p class="field-hint">UTF-8, up to {{ max_rows }} rows and 1 MiB. All five columns below must be present; cells stay empty where noted.</p></div>
+        <div class="table-wrap"><table class="table csv-columns">
+          <thead><tr><th>Column</th><th>Requirement</th></tr></thead>
+          <tbody>
+            <tr><td><code>username</code></td><td>Always</td></tr>
+            <tr><td><code>action</code></td><td>Always — <code>onboard</code> or <code>offboard</code></td></tr>
+            <tr><td><code>display_name</code></td><td>Onboard only</td></tr>
+            <tr><td><code>email</code></td><td>Onboard only</td></tr>
+            <tr><td><button class="copy-btn" type="button" data-modal-open="#targets-modal" aria-haspopup="dialog">target_ids</button></td><td>Onboard only — separate several with <code>|</code>. Empty offboards every assigned target.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Validate and preview</button><a class="btn btn-secondary" href="/users/bulk/import/template.csv" download>Download example CSV</a></div>
       </form>
     </article>
     <article class="card stack-2">
@@ -22,4 +32,19 @@
   <div class="section-head"><div class="section-kicker">// Recent imports</div><h2 class="section-title">Your workflows</h2></div>
   {% if workflows %}<div class="table-wrap"><table class="table"><thead><tr><th>Created (UTC)</th><th>Source</th><th>Status</th><th>Rows</th><th>Succeeded</th><th>Failed</th><th>Correlation</th></tr></thead><tbody>{% for workflow in workflows %}<tr><td>{{ workflow.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td><td>{{ workflow.source }}</td><td><span class="badge {{ 'badge-shipped' if workflow.status == 'completed' else ('badge-danger' if workflow.status in ['failed','partially_failed'] else 'badge-planned') }}">{{ workflow.status | replace('_',' ') }}</span></td><td>{{ workflow.row_count }}</td><td>{{ workflow.succeeded_count }}</td><td>{{ workflow.failed_count }}</td><td><a href="/users/bulk/import/{{ workflow.id }}">{{ workflow.id[:8] }}</a></td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="alert alert-info"><div class="alert-title">No import workflows</div>Upload a CSV to create the first validation preview.</div>{% endif %}
 </section>
+<dialog id="targets-modal" class="modal" aria-labelledby="targets-modal-title">
+  <div class="modal-head">
+    <h2 class="modal-title" id="targets-modal-title">Available target IDs</h2>
+    <button class="modal-close" type="button" data-modal-close aria-label="Close">Close</button>
+  </div>
+  <div class="modal-body stack-2">
+    <p>Use these IDs in the <code>target_ids</code> column. Separate several with <code>|</code>. Onboard rows need at least one; an offboard row may leave the cell empty to cover every assigned target.</p>
+    {% if targets %}<div class="table-wrap"><table class="table"><thead><tr><th>Target ID</th><th>Name</th><th>Type</th></tr></thead><tbody>{% for target in targets %}<tr><td><code>{{ target.target_id }}</code></td><td>{{ target.display_name }}</td><td>{{ target.target_type }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<div class="alert alert-info"><div class="alert-title">No targets available</div>A target accepts bulk imports only once its management credentials are saved and verified on <a href="/targets">Targets</a>.</div>{% endif %}
+  </div>
+  <div class="modal-foot">
+    <a class="btn btn-secondary" href="/users/bulk/import/template.csv" download>Download example CSV</a>
+    <button class="btn btn-primary" type="button" data-modal-close>Close</button>
+  </div>
+</dialog>
+<script src="/design/components.js"></script>
 {% endblock %}

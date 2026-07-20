@@ -214,3 +214,102 @@ def test_api_preview_is_bounded_and_validates_assignment_mapping_at_scale(
     with get_session() as db:
         assert db.query(BulkWorkflowRow).count() == 250
         assert db.query(ManagedUser).filter(ManagedUser.username.like("scale_user_%")).count() == 0
+
+
+def test_csv_template_download_uses_configured_target_ids(admin_client, monkeypatch):
+    _install(monkeypatch, BulkImportConnector())
+
+    response = admin_client.get("/users/bulk/import/template.csv")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "na-sso-bulk-import-template.csv" in response.headers["content-disposition"]
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+    assert [row["action"] for row in rows] == ["onboard", "onboard", "offboard"]
+    assert {"username", "action", "display_name", "email", "target_ids"} == set(rows[0])
+    onboard_targets = {
+        target for row in rows if row["action"] == "onboard"
+        for target in row["target_ids"].split("|")
+    }
+    assert onboard_targets == {"cloud"}
+
+
+def test_csv_template_rows_pass_preview_validation(admin_client, monkeypatch):
+    _install(monkeypatch, BulkImportConnector())
+    template = admin_client.get("/users/bulk/import/template.csv").text
+
+    preview = admin_client.post(
+        "/users/bulk/import/preview",
+        files={"csv_file": ("template.csv", template.encode(), "text/csv")},
+        follow_redirects=True,
+    )
+
+    assert preview.status_code == 200
+    assert "unknown target" not in preview.text
+
+
+def test_csv_template_requires_an_authenticated_admin(client):
+    response = client.get("/users/bulk/import/template.csv", follow_redirects=False)
+
+    assert response.status_code in {302, 303, 307, 403}
+
+
+def test_bulk_import_page_lists_target_ids_in_a_modal(admin_client, monkeypatch):
+    _install(monkeypatch, BulkImportConnector())
+
+    page = admin_client.get("/users/bulk/import")
+
+    assert page.status_code == 200
+    assert 'data-modal-open="#targets-modal"' in page.text
+    assert 'id="targets-modal"' in page.text
+    assert "<code>cloud</code>" in page.text
+    assert "Cloud access" in page.text
+    assert "/users/bulk/import/template.csv" in page.text
+
+
+def test_csv_upload_requires_every_column(admin_client, monkeypatch):
+    _install(monkeypatch, BulkImportConnector())
+    csv_body = "username,action\nnew_bulk_user,onboard\n"
+
+    rejected = admin_client.post(
+        "/users/bulk/import/preview",
+        files={"csv_file": ("accounts.csv", csv_body, "text/csv")},
+        follow_redirects=True,
+    )
+
+    assert rejected.status_code == 200
+    assert "missing required column" in rejected.text
+    for column in ("display_name", "email", "target_ids"):
+        assert column in rejected.text
+
+
+def test_onboard_rows_require_display_name_and_email(admin_client, monkeypatch):
+    from na_sso.db import get_session
+    from na_sso.models import BulkWorkflowRow
+
+    _install(monkeypatch, BulkImportConnector())
+    _existing_user()
+    csv_body = (
+        "username,action,display_name,email,target_ids\n"
+        "no_profile_user,onboard,,,cloud\n"
+        "named_user,onboard,Named User,named@example.test,cloud\n"
+        "offboard_user,offboard,,,\n"
+    )
+
+    preview = admin_client.post(
+        "/users/bulk/import/preview",
+        files={"csv_file": ("accounts.csv", csv_body, "text/csv")},
+        follow_redirects=False,
+    )
+
+    assert preview.status_code == 303
+    with get_session() as db:
+        rows = {
+            row.username: row
+            for row in db.query(BulkWorkflowRow).order_by(BulkWorkflowRow.row_number).all()
+        }
+    assert rows["no_profile_user"].validation_status == "invalid"
+    assert "display name" in rows["no_profile_user"].detail
+    assert "email" in rows["no_profile_user"].detail
+    assert rows["named_user"].validation_status == "valid"
+    assert rows["offboard_user"].validation_status == "valid"
