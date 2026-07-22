@@ -8,7 +8,7 @@ from na_sso.models import ManagedUser
 from na_sso.reconciliation import InspectionCapabilities, ReconciliationReport, unavailable_report
 
 
-CONNECTOR_CONTRACT_VERSION = "1.0"
+CONNECTOR_CONTRACT_VERSION = "1.1"
 DEFAULT_CONNECT_TIMEOUT_SECONDS = 15
 DEFAULT_OPERATION_TIMEOUT_SECONDS = 20
 
@@ -151,6 +151,9 @@ class DryRunResult:
 class ConnectorContract:
     version: str
     connector_type: str
+    ensure_supported: bool
+    disable_supported: bool
+    delete_supported: bool
     inspect: bool
     account_discovery: bool
     dry_run: bool
@@ -172,6 +175,9 @@ class Connector(ABC):
     connect_timeout_seconds = DEFAULT_CONNECT_TIMEOUT_SECONDS
     operation_timeout_seconds = DEFAULT_OPERATION_TIMEOUT_SECONDS
     public_key_last_used_supported = False
+    ensure_supported = True
+    disable_supported = True
+    delete_supported = True
 
     @property
     def name(self) -> str:  # compatibility alias; persistence migrates to target_id
@@ -196,6 +202,32 @@ class Connector(ABC):
     @property
     def default_memberships(self) -> frozenset[str]:
         return frozenset(getattr(self, "_groups", getattr(self, "_roles", ())))
+
+    def lifecycle_operation_for(
+        self,
+        user: ManagedUser,
+        *,
+        delete: bool = False,
+        disable: bool = False,
+    ) -> str:
+        """Select the lifecycle mutation that sync would perform for this user."""
+        if delete or user.desired_action == "delete" or user.deleted_at is not None:
+            return "delete"
+        if (
+            disable
+            or user.status == "disabled"
+            or user.password_decision_kind == "expired"
+        ):
+            return "disable"
+        return "ensure"
+
+    def supports_operation(self, operation: str) -> bool:
+        if operation not in {"ensure", "disable", "delete"}:
+            raise ValueError(f"unknown connector lifecycle operation: {operation}")
+        return bool(getattr(self, f"{operation}_supported", True))
+
+    def unsupported_operation_detail(self, operation: str) -> str:
+        return f"{self.display_name} declares {operation} unsupported."
 
     @abstractmethod
     async def ensure_user(self, user: ManagedUser, password: str | None) -> SyncResult:
@@ -237,6 +269,9 @@ class Connector(ABC):
         return ConnectorContract(
             version=CONNECTOR_CONTRACT_VERSION,
             connector_type=self.target_type,
+            ensure_supported=self.ensure_supported,
+            disable_supported=self.disable_supported,
+            delete_supported=self.delete_supported,
             inspect=inspect,
             account_discovery=discovery,
             dry_run=inspect,
@@ -254,11 +289,14 @@ class Connector(ABC):
         if type(self).inspect_user is Connector.inspect_user:
             return DryRunResult(False, detail="Connector dry-run planning is unsupported.")
         report = await self.inspect_user_for_assignment(user, memberships)
+        operation = self.lifecycle_operation_for(user)
         actions = tuple(
             f"set {field.field.value}"
             for field in report.fields if field.state.value == "drift"
         )
-        blockers = tuple(
+        blockers = (() if self.supports_operation(operation) else (
+            self.unsupported_operation_detail(operation),
+        )) + tuple(
             f"cannot observe {field.field.value}"
             for field in report.fields if field.state.value == "unknown"
         )

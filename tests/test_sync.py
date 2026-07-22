@@ -1,5 +1,6 @@
 from na_sso.connectors.base import Connector, SyncResult
 from na_sso.models import (
+    AuditEvent,
     LifecycleOperation,
     ManagedUser,
     OperationTargetAttempt,
@@ -376,6 +377,49 @@ async def test_validation_failure_is_terminal_unsupported_without_retry(client, 
         assert operation.status == "failed" and operation.failed_targets == 1
     assert await retry_due() == 0
     assert connector.calls.count(("disable", "syncme")) == 1
+
+
+async def test_declared_unsupported_unassignment_skips_connector_attempt(
+    client, monkeypatch,
+):
+    connector = StubConnector("jenkins")
+    connector.disable_supported = False
+    monkeypatch.setattr("na_sso.sync.get_connectors", lambda: [connector])
+    user_id = _stored_user()
+    from na_sso.db import get_session
+    from na_sso.sync import retry_due, sync_user
+
+    with get_session() as db:
+        user = db.get(ManagedUser, user_id)
+        db.add(SyncState(
+            user=user,
+            target="jenkins",
+            target_type="jenkins",
+            assigned=False,
+            state="pending_disable",
+        ))
+        db.commit()
+
+    operation_id = await sync_user(user_id)
+
+    assert connector.calls == []
+    with get_session() as db:
+        state = db.get(ManagedUser, user_id).sync_states[0]
+        operation = db.get(LifecycleOperation, operation_id)
+        audit = db.query(AuditEvent).filter_by(
+            action="sync.disable.unsupported",
+            operation_id=operation_id,
+        ).one()
+        assert state.state == "unsupported"
+        assert state.detail == "jenkins declares disable unsupported."
+        assert state.next_retry_at is None and state.attempt_count == 0
+        assert operation.status == "failed" and operation.failed_targets == 1
+        assert operation.detail == "1 target operation(s) unsupported"
+        assert db.query(OperationTargetAttempt).filter_by(
+            operation_id=operation_id,
+        ).count() == 0
+        assert audit.detail == "jenkins: jenkins declares disable unsupported."
+    assert await retry_due() == 0
 
 
 async def test_unassigned_disable_failure_retries_until_disabled(client, monkeypatch):

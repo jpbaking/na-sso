@@ -26,6 +26,14 @@
   </div>
 
   {% if action_kind == 'delete' %}
+  {% if operation_warnings %}
+  <div class="alert alert-info">
+    <div class="alert-title">Target operation limits</div>
+    <div class="data-list">
+      {% for warning in operation_warnings %}<div class="data-row"><div class="data-key">{{ warning.target_name }}</div><div class="data-value">{{ warning.message }}</div></div>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
   <div class="alert alert-danger">
     <div class="alert-title">Delete from every assigned target</div>
     <div>NA-SSO will remove the remote accounts first and retain the local record for recovery. Restore and purge remain unavailable until every target reaches a terminal result.</div>

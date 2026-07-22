@@ -14,7 +14,7 @@ from na_sso.config import get_settings
 from na_sso.connectors import get_connectors
 from na_sso.db import get_session
 from na_sso.feedback import redirect_with_feedback, template_response
-from na_sso.lifecycle import LifecycleCommand, OperationStatus
+from na_sso.lifecycle import LifecycleCommand, OperationStatus, SyncStateValue
 from na_sso.models import (
     LifecycleOperation,
     ManagedUser,
@@ -32,6 +32,7 @@ from na_sso.reconciliation import (
     ReconciliationField,
     ReconciliationReport,
     ReconciliationStatus,
+    mark_unsupported_operation,
 )
 from na_sso.sync import sync_user
 
@@ -48,7 +49,9 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _assigned_pairs(run: ReconciliationRun) -> list[tuple[ManagedUser, str, frozenset[str]]]:
+def _assigned_pairs(
+    run: ReconciliationRun,
+) -> list[tuple[ManagedUser, str, frozenset[str], str]]:
     limit = get_settings().file.reconciliation_policy.max_users_per_run
     connectors = {connector.target_id: connector for connector in get_connectors()}
     with get_session() as db:
@@ -59,7 +62,7 @@ def _assigned_pairs(run: ReconciliationRun) -> list[tuple[ManagedUser, str, froz
         users = query.order_by(ManagedUser.username, ManagedUser.id).limit(limit + 1).all()
         if len(users) > limit:
             raise ValueError(f"preview exceeds the configured {limit}-user limit")
-        pairs: list[tuple[ManagedUser, str, frozenset[str]]] = []
+        pairs: list[tuple[ManagedUser, str, frozenset[str], str]] = []
         for user in users:
             intents = resolve_assignment_intents(db, user, connectors)
             states = db.query(SyncState).filter_by(user_id=user.id, assigned=True, retired=False).all()
@@ -71,9 +74,17 @@ def _assigned_pairs(run: ReconciliationRun) -> list[tuple[ManagedUser, str, froz
                     pairs.append((
                         user, state.target,
                         intents.get(state.target, connector.default_memberships),
+                        connector.lifecycle_operation_for(
+                            user,
+                            disable=state.state in {
+                                SyncStateValue.PENDING_DISABLE.value,
+                                SyncStateValue.PENDING_CHPW_DISABLE.value,
+                                SyncStateValue.PENDING_EXPIRY_DISABLE.value,
+                            },
+                        ),
                     ))
         detached: set[int] = set()
-        for user, _target, _memberships in pairs:
+        for user, _target, _memberships, _operation in pairs:
             if user.id not in detached:
                 db.expunge(user)
                 detached.add(user.id)
@@ -107,20 +118,29 @@ async def refresh_reconciliation(run_id: str) -> ReconciliationRun | None:
     semaphore = asyncio.Semaphore(10)
 
     async def inspect(
-        user: ManagedUser, target_id: str, memberships: frozenset[str]
+        user: ManagedUser,
+        target_id: str,
+        memberships: frozenset[str],
+        operation: str,
     ) -> None:
         connector = connectors.get(target_id)
         if connector is None:
             return
         async with semaphore:
+            report = await connector.inspect_user_for_assignment(user, memberships)
+            if not connector.supports_operation(operation):
+                report = mark_unsupported_operation(
+                    report,
+                    connector.unsupported_operation_detail(operation),
+                )
             reports.append((
                 user, target_id,
-                await connector.inspect_user_for_assignment(user, memberships),
+                report,
             ))
 
     await asyncio.gather(*(
-        inspect(user, target_id, memberships)
-        for user, target_id, memberships in pairs
+        inspect(user, target_id, memberships, operation)
+        for user, target_id, memberships, operation in pairs
     ))
 
     drifted = unknown = destructive = 0

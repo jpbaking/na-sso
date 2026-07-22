@@ -45,6 +45,6 @@ Owns all Python modules, templates, and static assets under `na_sso/`. Connector
 
 ## Child DOX Index
 
-- connectors/ — target-specific adapters behind connector contract 1.0.
+- connectors/ — target-specific adapters behind connector contract 1.1.
 - mock_targets/ — in-process mock target app for the demo and tests.
 - static/design/ — shared design-system bundle (tokens, components, charts).

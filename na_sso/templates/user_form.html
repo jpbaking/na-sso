@@ -49,7 +49,10 @@
       <div class="hero-actions"><button class="btn btn-quiet btn-sm" type="button" id="select-all">Select all</button><button class="btn btn-quiet btn-sm" type="button" id="select-none">Unselect all</button></div>
       {% set assigned = form_values.get('target_ids') if form_values.get('target_ids') is not none else (user.sync_states | selectattr('assigned') | map(attribute='target') | list if user else []) %}
       {% for target in targets %}
+      {% set operation_warnings = target_operation_warnings[target.target_id] %}
       <label class="checkbox"><input type="checkbox" name="target_ids" value="{{ target.target_id }}" {{ 'checked' if target.target_id in assigned else '' }}> {{ target.display_name }} <span class="muted">({{ target.target_type }})</span></label>
+      {% if operation_warnings.ensure %}<div class="field-hint"><strong>{{ target.display_name }}:</strong> {{ operation_warnings.ensure }}</div>{% endif %}
+      {% if user and operation_warnings.disable %}<div class="field-hint"><strong>{{ target.display_name }}:</strong> {{ operation_warnings.disable }}</div>{% endif %}
       {% else %}<div class="field-hint">No active targets are configured. New users remain local-only.</div>{% endfor %}
       <div class="field-hint">Unassigning disables the remote account; it does not delete it.</div>
     </div>

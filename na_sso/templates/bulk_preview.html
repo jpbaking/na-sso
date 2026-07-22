@@ -8,6 +8,14 @@
     <div class="alert-title">{{ action_label }}</div>
     <div>{{ users | length }} eligible account(s){% if target %} · {{ target.display_name }}{% endif %}. {% if excluded %}{{ excluded }} missing or protected selection(s) will be reported as failures. {% endif %}No changes have been made.</div>
   </div>
+  {% if operation_warnings %}
+  <div class="alert alert-info">
+    <div class="alert-title">Target operation limits</div>
+    <div class="data-list">
+      {% for warning in operation_warnings %}<div class="data-row"><div class="data-key">{{ warning.target_name }}</div><div class="data-value">{{ warning.message }}</div></div>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
   <div class="data-list">
     {% for user in users %}<div class="data-row"><div class="data-key">{{ user.username }}</div><div class="data-value">{{ user.display_name or 'No display name' }}</div></div>{% endfor %}
   </div>

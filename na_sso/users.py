@@ -36,6 +36,20 @@ from na_sso.connectors import get_connectors, validate_universal_identity
 router = APIRouter()
 USERNAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_.-]{0,62}[a-z0-9])?$")
 BULK_ACTIONS = frozenset({"assign", "unassign", "disable", "retry"})
+OPERATION_WARNING_TEXT = {
+    "ensure": (
+        "This target cannot provision or update accounts — assignment will be "
+        "recorded as unsupported."
+    ),
+    "disable": (
+        "This target cannot disable accounts — the account will be recorded as "
+        "unsupported; delete instead if removal is required."
+    ),
+    "delete": (
+        "This target cannot delete accounts — removal will be recorded as "
+        "unsupported; disable instead if access must be stopped."
+    ),
+}
 
 
 def _guard(request: Request) -> str | Response:
@@ -60,7 +74,11 @@ def _can_manage_subject(request: Request, user: ManagedUser) -> bool:
 def _render(request: Request, name: str, ctx: dict, **kw):
     from na_sso.main import templates
 
-    ctx.setdefault("targets", _targets_context())
+    targets = ctx.setdefault("targets", _targets_context())
+    ctx.setdefault(
+        "target_operation_warnings",
+        _target_operation_warnings(targets),
+    )
     ctx.setdefault("password_policy", get_settings().file.password_policy)
     ctx.setdefault("admin_area", True)
     ctx.setdefault("form_values", {})
@@ -91,6 +109,37 @@ def _user_form_values(
 
 def _targets_context() -> list:
     return get_connectors()
+
+
+def _target_operation_warnings(targets: list) -> dict[str, dict[str, str]]:
+    return {
+        target.target_id: {
+            operation: (
+                ""
+                if bool(getattr(target, f"{operation}_supported", True))
+                else message
+            )
+            for operation, message in OPERATION_WARNING_TEXT.items()
+        }
+        for target in targets
+    }
+
+
+def _operation_warning_views(
+    targets: list,
+    operation: str,
+    target_ids: set[str],
+) -> list[dict[str, str]]:
+    warnings = _target_operation_warnings(targets)
+    return [
+        {
+            "target_id": target.target_id,
+            "target_name": target.display_name,
+            "message": warnings[target.target_id][operation],
+        }
+        for target in targets
+        if target.target_id in target_ids and warnings[target.target_id][operation]
+    ]
 
 
 def _sync_views(users: list[ManagedUser], targets: list) -> dict[int, dict[str, dict]]:
@@ -359,12 +408,27 @@ async def bulk_preview(
             if item in by_id and _can_manage_subject(request, by_id[item])
         ]
         excluded = len(selected) - len(users)
+        affected_target_ids = (
+            {
+                state.target
+                for user in users
+                for state in user.sync_states
+                if state.assigned and not state.retired
+            }
+            if action == "disable"
+            else {target_id} if action in {"assign", "unassign"} else set()
+        )
     action_labels = {
         "assign": "Assign target (onboard)",
         "unassign": "Unassign and disable target (offboard)",
         "disable": "Disable accounts",
         "retry": "Retry failed targets",
     }
+    warning_operation = {
+        "assign": "ensure",
+        "unassign": "disable",
+        "disable": "disable",
+    }.get(action)
     return _render(request, "bulk_preview.html", {
         "admin": admin,
         "users": users,
@@ -373,6 +437,14 @@ async def bulk_preview(
         "action_label": action_labels.get(action, "Bulk action"),
         "target_id": target_id,
         "target": connectors.get(target_id),
+        "operation_warnings": (
+            _operation_warning_views(
+                list(connectors.values()),
+                warning_operation,
+                affected_target_ids,
+            )
+            if warning_operation else []
+        ),
         "excluded": excluded,
         "replay_token": str(uuid4()),
         "error": error or None,
@@ -726,6 +798,7 @@ def _lifecycle_action_page(
             for state in attached.sync_states
             if state.assigned and not state.retired
         ]
+    targets = _targets_context()
     return _render(
         request,
         "user_action.html",
@@ -735,6 +808,15 @@ def _lifecycle_action_page(
             "title": title,
             "action_kind": action_kind,
             "assigned_targets": assigned_targets,
+            "targets": targets,
+            "operation_warnings": (
+                _operation_warning_views(
+                    targets,
+                    "delete",
+                    set(assigned_targets),
+                )
+                if action_kind == "delete" else []
+            ),
             "operation": operation,
             "error": error,
             "error_title": f"{title} not confirmed",

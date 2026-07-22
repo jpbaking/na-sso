@@ -18,8 +18,13 @@
 > against a real OPNsense 26.7 firewall. See `docs/CONNECTORS.md` and the
 > production notes in `docs/PRODUCTION.md`.
 >
-> This document also absorbs the former `FUTURE-WORK.md`; genuinely deferred
-> improvements are collected under **Deferred future work** at the end.
+> **Later delivery (2026-07-23, Connector Contract 1.1):** lifecycle-operation
+> support declarations now let sync, dry-run, reconciliation, operator warning
+> surfaces, and the targets API report unsupported ensure, disable, or delete
+> operations before remote mutation.
+>
+> This document also absorbs the former `FUTURE-WORK.md`; its final deferred
+> item is now recorded as delivered in the traceability table below.
 
 ## Recommendation
 
@@ -448,7 +453,8 @@ federate identities, or broker target sessions.
 | SSH key lifecycle | Multiple named keys expose fingerprint, algorithm, enrollment, expiry, history, truthful last-use support, zero-downtime replacement, individual/emergency/expiry revocation, and exact target key sets. | `na_sso/ssh_keys.py`, `tests/test_ssh_keys.py` |
 | Automation surface | Versioned redacted API, thin CLI, least-privilege service accounts, expiring/rotatable one-time Bearer credentials, request IDs, rate limits, idempotency, operation status, target health, audit export, and signed webhooks. | `na_sso/api.py`, `na_sso/cli.py`, `na_sso/service_accounts.py`, `tests/test_api.py`, `tests/test_cli.py` |
 | Unmanaged-account discovery | Built-in connectors enumerate safely without mutation; exclusions, persistent ignore, no-mutation adoption, and disabled-by-default two-step Root removal are explicit. | `na_sso/unmanaged.py`, `tests/test_unmanaged.py` |
-| Connector contract | Contract 1.0 publishes machine-readable capabilities, typed retry-aware errors, bounded timeouts, inspection-only dry-run, discovery, conformance tests, and third-party extension guidance. | `na_sso/connectors/base.py`, `docs/CONNECTORS.md`, `tests/test_connector_contract.py` |
+| Connector contract | Contract 1.1 publishes machine-readable capabilities, typed retry-aware errors, bounded timeouts, inspection-only dry-run, discovery, per-operation support declarations, conformance tests, and third-party extension guidance. | `na_sso/connectors/base.py`, `docs/CONNECTORS.md`, `tests/test_connector_contract.py` |
+| Capability-declared unsupported operations (deferred item) | Default-supported ensure, disable, and delete declarations are checked before mutation; unsupported work becomes a terminal outcome without a target attempt, while dry-run, reconciliation, operator decision surfaces, and the targets API expose the limitation in advance. | `na_sso/connectors/base.py`, `na_sso/sync.py`, `na_sso/reconciliation.py`, `na_sso/users.py`, `tests/test_connector_contract.py`, `tests/test_sync.py` |
 | Notifications and webhooks (Phase 3 plan item) | Policy-driven outbound notifications with per-endpoint event allowlists (`sync.persistent_failure`, `password.expired`, `lifecycle.completed`, `approval.completed`, `access_review.reminder`), HMAC-signed deliveries with retry/disable states, and no connector detail or secrets in payloads. | `na_sso/notifications.py`, `tests/test_notifications.py`, `.config/na-sso.yaml.example` |
 
 Self-service access requests remain outside this delivered phase. This follows
@@ -458,33 +464,7 @@ was included in the prioritised capability list.
 
 ## Deferred future work
 
-Deliberately deferred improvements, absorbed from the former `FUTURE-WORK.md`.
-Each entry records why it was deferred so a later phase can pick it up without
-rediscovering the context.
-
-## Capability-declared unsupported operations
-
-**Context.** Some connectors cannot perform every lifecycle operation: Jenkins'
-built-in local security realm has no realm-independent disable, so the Jenkins
-connector fails disable explicitly. Today the sync layer learns this only *after*
-attempting the operation: a connector `VALIDATION` failure persists as the
-terminal `unsupported` sync state, is presented truthfully, and is never
-auto-retried.
-
-**Deferred improvement.** Declare unsupported operations up front in the
-connector contract instead of discovering them at execution time:
-
-- Extend `ConnectorContract` / `IdentityCapabilities` (`na_sso/connectors/base.py`)
-  with per-operation support flags (e.g. `disable_supported`), bumping the
-  contract version.
-- Surface the limitation *before* the operation runs: warn in the assignment and
-  unassignment/offboarding UI ("this target cannot disable accounts — delete
-  instead?"), and include it in dry-run plans and reconciliation previews.
-- Let unassignment planning skip the doomed disable and record an explicit
-  unsupported outcome without a failed operation attempt.
-
-**Why deferred.** It is a contract version bump with UI, docs, API-serializer,
-and test surface across assignment, sync, reconciliation, and dry-run planning —
-a feature in its own right. Worth doing once more connectors with partial
-operation support exist; with only Jenkins affected, the execution-time
-`unsupported` state carries the same truth at a fraction of the surface.
+The sole deferred item, capability-declared unsupported operations, was
+delivered on 2026-07-23 as Connector Contract 1.1. Its outcome and primary
+evidence are recorded in **Prioritised expansion** above; no deferred entries
+remain.

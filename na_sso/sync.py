@@ -166,13 +166,33 @@ async def _sync_user(
         connectors = [available[state.target] for state in connector_states]
         for connector in connectors:
             state = states[connector.target_id]
+            chpw_disable = state.state == SyncStateValue.PENDING_CHPW_DISABLE.value
+            connector_operation = connector.lifecycle_operation_for(
+                user,
+                delete=desired_action is DesiredAction.DELETE,
+                disable=not state.assigned or chpw_disable,
+            )
+            if not connector.supports_operation(connector_operation):
+                detail = connector.unsupported_operation_detail(connector_operation)
+                state.state = SyncStateValue.UNSUPPORTED.value
+                state.detail = detail
+                state.next_retry_at = None
+                record_audit(
+                    db,
+                    actor,
+                    f"sync.{connector_operation}.unsupported",
+                    user.username,
+                    f"{connector.target_id}: {detail}",
+                    operation.id,
+                )
+                db.commit()
+                continue
             if (
                 desired_action is not DesiredAction.DELETE
                 and state.state == SyncStateValue.AWAITING_CREDENTIALS.value
                 and password is None
             ):
                 continue
-            chpw_disable = state.state == SyncStateValue.PENDING_CHPW_DISABLE.value
             attempt = start_target_attempt(
                 db,
                 operation,
@@ -181,9 +201,9 @@ async def _sync_user(
             )
             state.state, state.detail, state.next_retry_at = SyncStateValue.PENDING.value, "", None
             db.commit()
-            if desired_action is DesiredAction.DELETE:
+            if connector_operation == "delete":
                 result = await connector.delete_user(user)
-            elif user.status == "disabled" or not state.assigned or chpw_disable or user.password_decision_kind == "expired":
+            elif connector_operation == "disable":
                 result = await connector.disable_user_for_assignment(
                     user,
                     assignment_intents.get(connector.target_id, connector.default_memberships),
@@ -252,6 +272,12 @@ async def _sync_user(
             state for state in operation_states
             if state.state in {SyncStateValue.FAILED.value, SyncStateValue.UNSUPPORTED.value}
         ]
+        failed_attempts = [
+            state for state in failures if state.state == SyncStateValue.FAILED.value
+        ]
+        unsupported = [
+            state for state in failures if state.state == SyncStateValue.UNSUPPORTED.value
+        ]
         terminal = [
             state
             for state in operation_states
@@ -276,7 +302,12 @@ async def _sync_user(
                 status,
                 completed_targets=len(terminal),
                 failed_targets=len(failures),
-                detail=f"{len(failures)} target operation(s) failed",
+                detail="; ".join(filter(None, (
+                    f"{len(failed_attempts)} target operation(s) failed"
+                    if failed_attempts else "",
+                    f"{len(unsupported)} target operation(s) unsupported"
+                    if unsupported else "",
+                ))),
             )
         elif len(terminal) == len(operation_states):
             if desired_action is DesiredAction.DELETE:

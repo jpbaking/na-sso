@@ -209,6 +209,54 @@ def test_bulk_preview_partial_outcome_and_replay_are_safe(admin_client, monkeypa
         assert db.query(AuditEvent).filter_by(action="bulk.assign").count() == 1
 
 
+def test_bulk_preview_warns_only_when_selected_operation_is_unsupported(
+    admin_client, monkeypatch,
+):
+    from types import SimpleNamespace
+
+    from na_sso.db import get_session
+
+    connector = SimpleNamespace(
+        target_id="cloud",
+        target_type="nextcloud",
+        display_name="Cloud access",
+        ensure_supported=True,
+        disable_supported=False,
+        delete_supported=True,
+    )
+    monkeypatch.setattr("na_sso.users.get_connectors", lambda: [connector])
+    with get_session() as db:
+        user = ManagedUser(username="bulk-warning", display_name="Bulk Warning")
+        db.add(user)
+        db.flush()
+        db.add(SyncState(
+            user=user,
+            target="cloud",
+            target_type="nextcloud",
+            assigned=True,
+            state="ok",
+        ))
+        db.commit()
+        user_id = user.id
+
+    unsupported = admin_client.post("/users/bulk/preview", data={
+        "user_ids": user_id,
+        "action": "unassign",
+        "target_id": "cloud",
+    })
+    assert unsupported.status_code == 200
+    assert "This target cannot disable accounts" in unsupported.text
+
+    connector.disable_supported = True
+    supported = admin_client.post("/users/bulk/preview", data={
+        "user_ids": user_id,
+        "action": "unassign",
+        "target_id": "cloud",
+    })
+    assert supported.status_code == 200
+    assert "This target cannot disable accounts" not in supported.text
+
+
 def test_bulk_offboard_disable_and_retry_actions_execute(admin_client, monkeypatch):
     from na_sso.connectors import Connector, IdentityCapabilities, SyncResult
     from na_sso.db import get_session

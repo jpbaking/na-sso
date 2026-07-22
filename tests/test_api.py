@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from na_sso.connectors import Connector, IdentityCapabilities, SyncResult
+from na_sso.connectors.base import CONNECTOR_CONTRACT_VERSION
 from na_sso.models import ManagedUser, SyncState
 from na_sso.reconciliation import (
     InspectionCapabilities,
@@ -185,6 +186,7 @@ def test_target_health_probe_is_correlated_redacted_and_idempotent(
     admin_client, monkeypatch,
 ):
     connector = ApiConnector()
+    connector.disable_supported = False
     target = SimpleNamespace(
         id="cloud", type="nextcloud", display_name="Cloud access", enabled=True,
     )
@@ -205,7 +207,16 @@ def test_target_health_probe_is_correlated_redacted_and_idempotent(
     assert targets.status_code == 200
     assert targets.json()["data"][0]["inspection_capabilities"]["memberships"] is True
     contract = targets.json()["data"][0]["connector_contract"]
-    assert contract["version"] == "1.0" and contract["inspect"] and contract["dry_run"]
+    assert contract["version"] == CONNECTOR_CONTRACT_VERSION and contract["inspect"] and contract["dry_run"]
+    assert {
+        "ensure_supported": contract["ensure_supported"],
+        "disable_supported": contract["disable_supported"],
+        "delete_supported": contract["delete_supported"],
+    } == {
+        "ensure_supported": True,
+        "disable_supported": False,
+        "delete_supported": True,
+    }
     assert contract["account_discovery"] is False
     assert "timeout" in contract["error_kinds"]
     assert "base_url" not in targets.text and "credential" not in targets.text.lower()

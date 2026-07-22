@@ -90,6 +90,34 @@ class ReconciliationReport:
         return next(item for item in self.fields if item.field == wanted)
 
 
+def mark_unsupported_operation(
+    report: ReconciliationReport, detail: str
+) -> ReconciliationReport:
+    """Replace repairable drift with an explicit pre-execution limitation."""
+    limitation = f"Repair unsupported: {detail}"
+    fields = tuple(
+        FieldComparison(
+            item.field,
+            DriftState.UNSUPPORTED,
+            item.desired,
+            item.actual,
+            limitation,
+        )
+        if item.state == DriftState.DRIFT else item
+        for item in report.fields
+    )
+    if fields == report.fields:
+        return report
+    report_detail = " ".join(part for part in (report.detail, limitation) if part)
+    return ReconciliationReport(
+        report.target_id,
+        report.target_name,
+        report.subject,
+        fields,
+        report_detail,
+    )
+
+
 def _display(value: Any) -> str:
     if isinstance(value, (set, frozenset, tuple, list)):
         return ", ".join(sorted(str(item) for item in value)) or "none"

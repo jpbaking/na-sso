@@ -13,6 +13,7 @@ class JenkinsConnector(Connector):
 
     capabilities = IdentityCapabilities(password=True)
     inspection_capabilities = InspectionCapabilities(display_name=True)
+    disable_supported = False
 
     def __init__(self, target: JenkinsTarget):
         self.target_id, self.target_type, self.display_name = target.id, target.type, target.display_name

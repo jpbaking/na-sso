@@ -119,6 +119,69 @@ def test_new_user_form_advertises_username_contract(admin_client):
     assert "generatedPassword=''" in page.text
 
 
+def test_lifecycle_forms_warn_only_for_declared_unsupported_targets(
+    admin_client, monkeypatch,
+):
+    from types import SimpleNamespace
+
+    from na_sso.db import get_session
+    from na_sso.models import ManagedUser, SyncState
+
+    unsupported = SimpleNamespace(
+        target_id="limited",
+        target_type="jenkins",
+        display_name="Limited target",
+        ensure_supported=False,
+        disable_supported=False,
+        delete_supported=False,
+    )
+    supporting = SimpleNamespace(
+        target_id="complete",
+        target_type="nextcloud",
+        display_name="Supporting target",
+        ensure_supported=True,
+        disable_supported=True,
+        delete_supported=True,
+    )
+    monkeypatch.setattr(
+        "na_sso.users.get_connectors",
+        lambda: [unsupported, supporting],
+    )
+    with get_session() as db:
+        user = ManagedUser(username="warning-user", display_name="Warning User")
+        db.add(user)
+        db.flush()
+        db.add_all([
+            SyncState(
+                user=user,
+                target=target.target_id,
+                target_type=target.target_type,
+                assigned=True,
+                state="ok",
+            )
+            for target in (unsupported, supporting)
+        ])
+        db.commit()
+        user_id = user.id
+
+    create_page = admin_client.get("/users/new")
+    assert create_page.text.count(
+        "This target cannot provision or update accounts"
+    ) == 1
+    assert "This target cannot disable accounts" not in create_page.text
+
+    edit_page = admin_client.get(f"/users/{user_id}/edit")
+    assert edit_page.text.count(
+        "This target cannot provision or update accounts"
+    ) == 1
+    assert edit_page.text.count("This target cannot disable accounts") == 1
+    assert "Limited target" in edit_page.text and "Supporting target" in edit_page.text
+
+    delete_page = admin_client.get(f"/users/{user_id}/delete")
+    assert delete_page.text.count("This target cannot delete accounts") == 1
+    assert "Target operation limits" in delete_page.text
+
+
 def test_generated_user_password_requires_confirmed_handoff(admin_client):
     data = {
         "username": "generated-gate",

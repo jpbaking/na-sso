@@ -1,6 +1,9 @@
+from dataclasses import asdict
+
 from na_sso.connectors.base import (
     CONNECTOR_CONTRACT_VERSION,
     Connector,
+    ConnectorContract,
     ConnectorErrorKind,
     SyncResult,
 )
@@ -59,15 +62,36 @@ async def test_dry_run_uses_inspection_only_and_returns_bounded_actions():
     assert connector.reads == 1 and connector.mutations == 0
 
 
+async def test_dry_run_labels_declared_unsupported_operation():
+    connector = PlanningConnector()
+    connector.disable_supported = False
+
+    plan = await connector.plan_user(
+        ManagedUser(username="jdoe", status="disabled")
+    )
+
+    assert plan.supported
+    assert plan.actions == ("set display_name",)
+    assert plan.blockers == (
+        "Planning target declares disable unsupported.",
+        "cannot observe status",
+    )
+    assert connector.reads == 1 and connector.mutations == 0
+
+
 def test_connector_contract_is_versioned_and_machine_readable():
     connector = PlanningConnector()
     contract = connector.contract_metadata()
-    assert contract.version == CONNECTOR_CONTRACT_VERSION == "1.0"
+    assert contract.version == CONNECTOR_CONTRACT_VERSION == "1.1"
+    assert contract.ensure_supported
+    assert contract.disable_supported
+    assert contract.delete_supported
     assert contract.inspect and contract.dry_run
     assert not contract.account_discovery
     assert contract.connect_timeout_seconds > 0
     assert contract.operation_timeout_seconds >= contract.connect_timeout_seconds
     assert set(contract.error_kinds) == {item.value for item in ConnectorErrorKind}
+    assert ConnectorContract(**asdict(contract)) == contract
 
 
 def test_failed_results_always_receive_error_taxonomy_and_retry_semantics():
@@ -90,45 +114,50 @@ def test_every_builtin_connector_declares_read_discovery_and_dry_run_capabilitie
     from na_sso.connectors.npm import NpmConnector
     from na_sso.connectors.opnsense import OPNsenseConnector
     from na_sso.connectors.ssh import SSHConnector
-    connectors = [
-        NextcloudConnector(NextcloudTarget(
+    connectors = {
+        "nextcloud": NextcloudConnector(NextcloudTarget(
             id="cloud", type="nextcloud", display_name="Cloud", base_url="https://cloud",
             admin_user="admin", admin_password="secret",
         )),
-        NexusConnector(NexusTarget(
+        "nexus": NexusConnector(NexusTarget(
             id="nexus", type="nexus", display_name="Nexus", base_url="https://nexus",
             admin_user="admin", admin_password="secret",
         )),
-        OPNsenseConnector(OpnsenseTarget(
+        "opnsense": OPNsenseConnector(OpnsenseTarget(
             id="firewall", type="opnsense", display_name="Firewall", base_url="https://fw",
             api_key="key", api_secret="secret",
         )),
-        SSHConnector(SshTarget(
+        "ssh": SSHConnector(SshTarget(
             id="shell", type="ssh", display_name="Shell", host="shell",
             management_user="manager", management_password="secret",
             host_key_sha256="SHA256:AAAAAAAAAAAAAAAAAAAA", platform="ubuntu",
         )),
-        GitlabConnector(GitlabTarget(
+        "gitlab": GitlabConnector(GitlabTarget(
             id="gitlab", type="gitlab", display_name="GitLab", base_url="https://gitlab", api_token="secret",
         )),
-        GiteaConnector(GiteaTarget(
+        "gitea": GiteaConnector(GiteaTarget(
             id="gitea", type="gitea", display_name="Gitea", base_url="https://gitea", api_token="secret",
         )),
-        ImmichConnector(ImmichTarget(
+        "immich": ImmichConnector(ImmichTarget(
             id="immich", type="immich", display_name="Immich", base_url="https://immich", api_token="secret",
         )),
-        JenkinsConnector(JenkinsTarget(
+        "jenkins": JenkinsConnector(JenkinsTarget(
             id="jenkins", type="jenkins", display_name="Jenkins", base_url="https://jenkins",
             admin_user="admin", api_token="secret",
         )),
-        NpmConnector(NpmTarget(
+        "npm": NpmConnector(NpmTarget(
             id="npm", type="npm", display_name="Nginx Proxy Manager",
             base_url="https://npm", admin_user="admin@example.test",
             admin_password="secret-password",
         )),
-    ]
-    for connector in connectors:
+    }
+    for connector_type, connector in connectors.items():
         contract = connector.contract_metadata()
-        assert contract.version == "1.0"
+        assert contract.version == "1.1"
+        assert contract.connector_type == connector_type
+        assert contract.ensure_supported
+        assert contract.disable_supported is (connector_type != "jenkins")
+        assert contract.delete_supported
         assert contract.inspect and contract.account_discovery and contract.dry_run
         assert not contract.public_key_last_used
+        assert ConnectorContract(**asdict(contract)) == contract

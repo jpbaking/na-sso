@@ -222,7 +222,7 @@ When the user requests a durable behavior change, record it here or in the relev
 NA-SSO: an admin console (FastAPI) that manages local user accounts across external targets (OPNsense, Nexus, Nextcloud, Jenkins, GitLab, Gitea, Immich, Nginx Proxy Manager, SSH) without an identity provider. Detail for each feature lives in `na_sso/DOX.md`.
 
 - **Managed user lifecycle** — create/edit/assign/disable/delete/restore/purge users and fan changes out to targets. Start: `na_sso/users.py`. Files: `na_sso/lifecycle.py`, `na_sso/operations.py`, `na_sso/sync.py`. Detail in ./na_sso.
-- **Target connectors** — per-target adapters behind a versioned contract (1.0). Start: `na_sso/connectors/base.py`. Detail in ./na_sso/connectors; contract guide `docs/CONNECTORS.md`.
+- **Target connectors** — per-target adapters behind a versioned contract (1.1). Start: `na_sso/connectors/base.py`. Detail in ./na_sso/connectors; contract guide `docs/CONNECTORS.md`.
 - **Automation API + CLI** — versioned, rate-limited, idempotent API v1 and the `na-ssoctl` client. Start: `na_sso/api.py`. Files: `na_sso/api_contract.py`, `na_sso/cli.py`, `na_sso/service_accounts.py`. Detail in ./na_sso.
 - **Reconciliation & unmanaged discovery** — read-only drift detection with approval-bound repair; discovery/adoption of target-local accounts. Start: `na_sso/reconciliation.py`. Files: `na_sso/reconcile.py`, `na_sso/unmanaged.py`. Detail in ./na_sso.
 - **Demo environment** — Compose-driven demo with in-process mock targets. Start: `docker-compose-demo.yaml`. Files: `na_sso/mock_targets/`, `demo-ssh.sh`, `docs/DEMO.md`.

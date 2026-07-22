@@ -203,6 +203,46 @@ def test_destructive_repair_requires_separate_confirmation(admin_client, monkeyp
         assert db.get(ManagedUser, user_id).deleted_at is not None
 
 
+def test_preview_marks_declared_unsupported_disable_without_proposing_repair(
+    admin_client, monkeypatch,
+):
+    from na_sso.db import get_session
+    from na_sso.models import ReconciliationFinding, ReconciliationRun
+
+    connector = ReconciliationConnector()
+    connector.disable_supported = False
+    connector.remote["display_name"] = "Current name"
+    _install_connector(monkeypatch, connector)
+    user_id = _assigned_user()
+    with get_session() as db:
+        db.get(ManagedUser, user_id).status = "disabled"
+        db.commit()
+
+    response = admin_client.post(
+        "/reconciliation/preview",
+        data={"user_id": user_id, "target_id": "cloud"},
+        follow_redirects=False,
+    )
+    detail = admin_client.get(response.headers["location"])
+
+    assert response.status_code == 303 and detail.status_code == 200
+    assert ">unsupported<" in detail.text
+    assert "Approve correlated repair" not in detail.text
+    assert connector.ensure_calls == connector.delete_calls == 0
+    with get_session() as db:
+        run = db.query(ReconciliationRun).one()
+        finding = db.query(ReconciliationFinding).filter_by(
+            run_id=run.id,
+            field="status",
+        ).one()
+        assert run.status == "previewed" and run.drifted_targets == 0
+        assert finding.state == "unsupported"
+        assert finding.desired == "disabled" and finding.actual == "active"
+        assert finding.detail == (
+            "Repair unsupported: Cloud access declares disable unsupported."
+        )
+
+
 async def test_scheduled_discovery_retries_unknown_reads_without_repair(
     client, tmp_path, monkeypatch,
 ):
