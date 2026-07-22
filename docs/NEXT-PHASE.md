@@ -5,6 +5,12 @@
 > The traceability matrix near the end of this document records the delivered
 > outcome for every confirmed issue and prioritised expansion.
 >
+> **Later deliveries (2026-07-18 to 2026-07-21):** five additional connectors
+> behind the same contract — Gitea, GitLab, Immich, Jenkins, and Nginx Proxy
+> Manager (see `docs/CONNECTORS.md`); a console dashboard home for non-managed
+> users plus console navigation polish; and bulk-onboarding follow-ups (CSV
+> template, target-ID picker, configurable import limits).
+>
 > **Later delivery (2026-07-23):** OpenVPN client-config self-service for
 > OPNsense targets — admin-enabled per target, user self-download of an `.ovpn`
 > with an OPNsense-issued client certificate for certificate-plus-password
@@ -427,7 +433,7 @@ federate identities, or broker target sessions.
 | P2.10 Missing My access | Managed users see assigned targets, plain propagation/retry/mode guidance, configurable support, and complete named SSH-key lifecycle metadata/actions. | `na_sso/auth.py`, `na_sso/templates/account.html`, `tests/test_security.py`, `tests/test_ssh_keys.py` |
 | P2.11 Raw audit dump | Bounded investigation adds actor/subject/target/action/outcome/time/operation filters, friendly summaries, technical detail, correlation drill-down, retention, and CSV/JSON export with explicit timezone. | `na_sso/audit_query.py`, `na_sso/templates/audit.html`, `tests/test_audit.py` |
 | P2.12 Hidden broad roles | Central capabilities expose User operator, Target operator, Auditor, and protected Root roles with root-only assignment, descriptions, audit, and last-recovery-path protection. Target ownership is enforced at the target-operator capability boundary; record-level target grants are intentionally not invented for the current single-control-plane model. | `na_sso/permissions.py`, `na_sso/users.py`, `tests/test_permissions.py` |
-| P2.13 Responsive/accessibility gaps | A distinctly iconed, capability-aware collapsible desktop and off-canvas mobile sidebar keeps destinations usable in every state; workflow ordering, the account-only header menu, cards, bounded table scrolling, persistent labels, text-equivalent states, focused errors, responsive layouts, and expanded password-change wording are covered at 390/768/1440 px. | `na_sso/static/app.css`, `na_sso/templates/base.html`, `na_sso/templates/_admin_nav.html`, browser journey gates, `tests/test_users.py`, `tests/test_security.py` |
+| P2.13 Responsive/accessibility gaps | A distinctly iconed, capability-aware collapsible desktop and off-canvas mobile sidebar keeps destinations usable in every state; workflow ordering, the account-only header menu, cards, bounded table scrolling, persistent labels, text-equivalent states, focused errors, responsive layouts, and expanded password-change wording are covered at 390/768/1440 px. | `na_sso/static/app.css`, `na_sso/templates/base.html`, `na_sso/templates/_admin_nav.html`, release-verification browser journeys (run at delivery, not kept in-tree), `tests/test_users.py`, `tests/test_security.py` |
 
 ### Prioritised expansion
 
@@ -443,6 +449,7 @@ federate identities, or broker target sessions.
 | Automation surface | Versioned redacted API, thin CLI, least-privilege service accounts, expiring/rotatable one-time Bearer credentials, request IDs, rate limits, idempotency, operation status, target health, audit export, and signed webhooks. | `na_sso/api.py`, `na_sso/cli.py`, `na_sso/service_accounts.py`, `tests/test_api.py`, `tests/test_cli.py` |
 | Unmanaged-account discovery | Built-in connectors enumerate safely without mutation; exclusions, persistent ignore, no-mutation adoption, and disabled-by-default two-step Root removal are explicit. | `na_sso/unmanaged.py`, `tests/test_unmanaged.py` |
 | Connector contract | Contract 1.0 publishes machine-readable capabilities, typed retry-aware errors, bounded timeouts, inspection-only dry-run, discovery, conformance tests, and third-party extension guidance. | `na_sso/connectors/base.py`, `docs/CONNECTORS.md`, `tests/test_connector_contract.py` |
+| Notifications and webhooks (Phase 3 plan item) | Policy-driven outbound notifications with per-endpoint event allowlists (`sync.persistent_failure`, `password.expired`, `lifecycle.completed`, `approval.completed`, `access_review.reminder`), HMAC-signed deliveries with retry/disable states, and no connector detail or secrets in payloads. | `na_sso/notifications.py`, `tests/test_notifications.py`, `.config/na-sso.yaml.example` |
 
 Self-service access requests remain outside this delivered phase. This follows
 the original sequencing recommendation rather than deferring a committed item:
