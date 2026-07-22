@@ -1,9 +1,19 @@
-# NA-SSO next phase
+# NA-SSO roadmap: delivery record and deferred work
 
 > **Delivery status (2026-07-16): implemented; release verification passed.**
 > The original audit and recommendations remain below as the decision record.
 > The traceability matrix near the end of this document records the delivered
 > outcome for every confirmed issue and prioritised expansion.
+>
+> **Later delivery (2026-07-23):** OpenVPN client-config self-service for
+> OPNsense targets — admin-enabled per target, user self-download of an `.ovpn`
+> with an OPNsense-issued client certificate for certificate-plus-password
+> servers, and CRL-authoritative revocation on offboarding. Proven end to end
+> against a real OPNsense 26.7 firewall. See `docs/CONNECTORS.md` and the
+> production notes in `docs/PRODUCTION.md`.
+>
+> This document also absorbs the former `FUTURE-WORK.md`; genuinely deferred
+> improvements are collected under **Deferred future work** at the end.
 
 ## Recommendation
 
@@ -438,3 +448,36 @@ Self-service access requests remain outside this delivered phase. This follows
 the original sequencing recommendation rather than deferring a committed item:
 operators retain final provisioning authority, and no end-user request workflow
 was included in the prioritised capability list.
+
+## Deferred future work
+
+Deliberately deferred improvements, absorbed from the former `FUTURE-WORK.md`.
+Each entry records why it was deferred so a later phase can pick it up without
+rediscovering the context.
+
+## Capability-declared unsupported operations
+
+**Context.** Some connectors cannot perform every lifecycle operation: Jenkins'
+built-in local security realm has no realm-independent disable, so the Jenkins
+connector fails disable explicitly. Today the sync layer learns this only *after*
+attempting the operation: a connector `VALIDATION` failure persists as the
+terminal `unsupported` sync state, is presented truthfully, and is never
+auto-retried.
+
+**Deferred improvement.** Declare unsupported operations up front in the
+connector contract instead of discovering them at execution time:
+
+- Extend `ConnectorContract` / `IdentityCapabilities` (`na_sso/connectors/base.py`)
+  with per-operation support flags (e.g. `disable_supported`), bumping the
+  contract version.
+- Surface the limitation *before* the operation runs: warn in the assignment and
+  unassignment/offboarding UI ("this target cannot disable accounts — delete
+  instead?"), and include it in dry-run plans and reconciliation previews.
+- Let unassignment planning skip the doomed disable and record an explicit
+  unsupported outcome without a failed operation attempt.
+
+**Why deferred.** It is a contract version bump with UI, docs, API-serializer,
+and test surface across assignment, sync, reconciliation, and dry-run planning —
+a feature in its own right. Worth doing once more connectors with partial
+operation support exist; with only Jenkins affected, the execution-time
+`unsupported` state carries the same truth at a fraction of the surface.
