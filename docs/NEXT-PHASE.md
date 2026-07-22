@@ -388,8 +388,11 @@ Prioritize these feature additions:
     conformance tests, capability discovery, and a safe dry-run mode.
 
 Consider self-service access requests only after delegated administration and
-approval exist. Keep final provisioning authority with operators and continue
-to leave authentication on each target.
+approval exist, and after notifications can reach end users directly over
+email/SMS — today's outbound notifications are operator webhooks only, and a
+request/approval workflow must be able to tell requesters and approvers what
+happened without them polling the console. Keep final provisioning authority
+with operators and continue to leave authentication on each target.
 
 ## Verification backlog
 
@@ -460,7 +463,9 @@ federate identities, or broker target sessions.
 Self-service access requests remain outside this delivered phase. This follows
 the original sequencing recommendation rather than deferring a committed item:
 operators retain final provisioning authority, and no end-user request workflow
-was included in the prioritised capability list.
+was included in the prioritised capability list. Decision 2026-07-23: direct
+end-user notification delivery (email/SMS) is an additional precondition for
+any future self-service request workflow.
 
 ## Deferred future work
 

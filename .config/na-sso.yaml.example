@@ -111,10 +111,9 @@ notification_policy:
   #   enabled: true
   #   events: [sync.persistent_failure, password.expired, lifecycle.completed, approval.completed, access_review.reminder]
 
-# Target management credentials should normally be saved in the Targets UI.
-# The commented credential fields below show the supported environment-backed
-# alternative. A ${NAME} value must be the entire YAML scalar and NAME must
-# exist in .config/.env. Never place literal production secrets in this file.
+# Target management credentials are saved in the Targets UI, where they are
+# encrypted in SQLite and never rendered back. They are not configured in this
+# file. Never place literal production secrets in this file.
 targets:
   # OPNsense Auth User API target.
   - id: firewall_primary
@@ -124,8 +123,6 @@ targets:
     base_url: https://opnsense.example.lan # Server root; no trailing API path
     verify_tls: true
     default_groups: [vpn-users]          # Existing safe group identifiers
-    # api_key: ${OPNSENSE_PRIMARY_API_KEY}
-    # api_secret: ${OPNSENSE_PRIMARY_API_SECRET}
 
   # Nexus Repository local-user Security API target.
   - id: nexus_primary
@@ -135,8 +132,6 @@ targets:
     base_url: https://nexus.example.lan
     verify_tls: true
     default_roles: [nx-anonymous]        # Existing Nexus role IDs
-    # admin_user: ${NEXUS_PRIMARY_ADMIN_USER}
-    # admin_password: ${NEXUS_PRIMARY_ADMIN_PASSWORD}
 
   # Nextcloud OCS Provisioning API target.
   - id: cloud_primary
@@ -146,8 +141,6 @@ targets:
     base_url: https://nextcloud.example.lan
     verify_tls: true
     default_groups: [employees]          # Existing safe group identifiers
-    # admin_user: ${NEXTCLOUD_PRIMARY_ADMIN_USER}
-    # admin_password: ${NEXTCLOUD_PRIMARY_ADMIN_PASSWORD}
 
   # GitLab Self-Managed administrator Users API target.
   - id: gitlab_primary
@@ -156,7 +149,6 @@ targets:
     enabled: true
     base_url: https://gitlab.example.lan
     verify_tls: true
-    # api_token: ${GITLAB_PRIMARY_API_TOKEN}
 
   # Gitea administrator Users API target.
   - id: gitea_primary
@@ -165,7 +157,6 @@ targets:
     enabled: true
     base_url: https://gitea.example.lan
     verify_tls: true
-    # api_token: ${GITEA_PRIMARY_API_TOKEN}
 
   # Immich administrator Users API target.
   - id: immich_primary
@@ -174,7 +165,6 @@ targets:
     enabled: true
     base_url: https://immich.example.lan
     verify_tls: true
-    # api_token: ${IMMICH_PRIMARY_API_TOKEN}
 
   # Nginx Proxy Manager v2.15.1 administrator Users API target.
   - id: npm_primary
@@ -183,8 +173,6 @@ targets:
     enabled: true
     base_url: https://npm.example.lan
     verify_tls: true
-    # admin_user: ${NPM_PRIMARY_ADMIN_USER}
-    # admin_password: ${NPM_PRIMARY_ADMIN_PASSWORD}
 
   # Jenkins built-in local security realm. Core Jenkins cannot disable users;
   # unassignment is reported as unsupported instead of deleting the account.
@@ -194,8 +182,6 @@ targets:
     enabled: true
     base_url: https://jenkins.example.lan
     verify_tls: true
-    # admin_user: ${JENKINS_PRIMARY_ADMIN_USER}
-    # api_token: ${JENKINS_PRIMARY_API_TOKEN}
 
   # SSH-managed Unix target. Duplicate this entry for each host.
   - id: ssh_debian
@@ -209,8 +195,6 @@ targets:
     allow_relaxed_usernames: false
     mode: password_and_key               # password, key, or password_and_key
     default_groups: [developers]         # Existing supplementary groups
-    # management_user: ${SSH_PRIMARY_MANAGEMENT_USER}
-    # Use a password, one private-key source, or a password plus one key source:
-    # management_password: ${SSH_PRIMARY_MANAGEMENT_PASSWORD}
-    # management_private_key: ${SSH_PRIMARY_MANAGEMENT_PRIVATE_KEY}
+    # Optional key file mounted into the container, used when no private key is
+    # saved in the Targets UI. All other management credentials come from there.
     # management_private_key_file: /run/secrets/ssh_management_key

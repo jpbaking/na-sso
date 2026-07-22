@@ -84,10 +84,9 @@ cp .config/na-sso.yaml.example .config/na-sso.yaml
 Replace every placeholder before starting. Compose sets
 `NA_SSO_CONFIG_FILE=/config/na-sso.yaml`; do not override it in `.config/.env`.
 
-The templates show every supported setting, constraint, target type, and
-optional environment-backed credential field. Normally, management credentials
-should instead be entered through **Targets**, where they are encrypted in
-SQLite and never rendered back.
+The templates show every supported setting, constraint, and target type.
+Management credentials are entered through **Targets**, where they are
+encrypted in SQLite and never rendered back.
 
 The password policy's `expires_after_days` value controls managed-account
 expiry. Use an integer from 1 through 3650, or `null` to disable expiry. The
