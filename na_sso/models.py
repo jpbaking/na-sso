@@ -148,6 +148,26 @@ class TargetCredential(Base):
         return self.verified_at is not None
 
 
+class TargetOpenvpnConfig(Base):
+    __tablename__ = "target_openvpn_configs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    target_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    vpnid: Mapped[str] = mapped_column(String(64), default="")
+    template: Mapped[str] = mapped_column(String(128), default="")
+    hostname: Mapped[str] = mapped_column(String(255), default="")
+    cert_lifetime_days: Mapped[int] = mapped_column(Integer, default=397)
+    auth_posture: Mapped[str] = mapped_column(String(32), default="")
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=None
+    )
+    verify_detail: Mapped[str] = mapped_column(Text, default="Not verified")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class SyncState(Base):
     __tablename__ = "sync_states"
     __table_args__ = (UniqueConstraint("user_id", "target"),)

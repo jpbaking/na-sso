@@ -1,4 +1,5 @@
 from httpx import Response
+from datetime import datetime
 import pytest
 import respx
 
@@ -186,6 +187,68 @@ def test_ssh_password_key_or_combined_credentials_are_encrypted(admin_client, tm
 def test_target_credential_routes_require_auth(client):
     assert client.post("/targets/forged/credentials", data={}, follow_redirects=False).status_code == 303
     assert client.post("/targets/forged/probe", follow_redirects=False).status_code == 303
+
+
+@respx.mock
+def test_credential_rotation_leaves_openvpn_configuration_untouched(
+    admin_client, tmp_path, monkeypatch
+):
+    _registry(tmp_path, monkeypatch, """targets:
+  - {id: firewall, type: opnsense, display_name: Firewall, base_url: https://fw.test}
+""")
+    respx.post("https://fw.test/api/auth/user/search").mock(
+        return_value=Response(200, json={"rows": []})
+    )
+    admin_client.post(
+        "/targets/firewall/credentials",
+        data={"api_key": "first-key", "api_secret": "first-secret"},
+    )
+
+    from na_sso.db import get_session
+    from na_sso.models import TargetCredential, TargetOpenvpnConfig
+
+    verified_at = datetime(2026, 7, 22, 8, 30)
+    updated_at = datetime(2026, 7, 22, 8, 31)
+    expected = {
+        "enabled": True,
+        "vpnid": "vpn-server-1",
+        "template": "PlainOpenVPN",
+        "hostname": "vpn.example.test",
+        "cert_lifetime_days": 397,
+        "auth_posture": "cert_and_password",
+        "verified_at": verified_at,
+        "verify_detail": "OpenVPN export settings verified.",
+        "updated_at": updated_at,
+    }
+    with get_session() as db:
+        db.add(TargetOpenvpnConfig(target_id="firewall", **expected))
+        db.commit()
+
+    admin_client.post(
+        "/targets/firewall/credentials",
+        data={"api_key": "rotated-key", "api_secret": "rotated-secret"},
+    )
+
+    with get_session() as db:
+        credentials = db.query(TargetCredential).filter_by(
+            target_id="firewall"
+        ).one()
+        openvpn = db.query(TargetOpenvpnConfig).filter_by(
+            target_id="firewall"
+        ).one()
+        assert credentials.revision == 2
+        assert all(
+            value not in credentials.encrypted_payload
+            for value in (
+                "vpn-server-1",
+                "PlainOpenVPN",
+                "vpn.example.test",
+                "cert_and_password",
+            )
+        )
+        assert {
+            key: getattr(openvpn, key) for key in expected
+        } == expected
 
 
 @respx.mock

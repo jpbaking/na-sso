@@ -1,0 +1,10 @@
+{
+  "": {
+    "description": "(none) Exclude certificate from export",
+    "users": []
+  },
+  "6a5fdc35d15a1": {
+    "description": "na-sso demo VPN server",
+    "users": []
+  }
+}

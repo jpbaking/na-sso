@@ -1,0 +1,8 @@
+{
+  "_decoded_preview": "dev tun\npersist-tun\npersist-key\nclient\nresolv-retry infinite\nremote vpn.demo.lan  udp\nlport 0\nverify-x509-name \"C=NL, CN=na-sso-demo-vpn-server\" subject\nremote-cert-tls server\nauth-user-pass\n<ca>\n<REDACTED>\n</ca>",
+  "changed": false,
+  "content": "ZGV2IHR1bgpwZXJzaXN0LXR1bgpwZXJzaXN0LWtleQpjbGllbnQKcmVzb2x2LXJldHJ5IGluZmluaXRlCnJlbW90ZSB2cG4uZGVtby5sYW4gIHVkcApscG9ydCAwCnZlcmlmeS14NTA5LW5hbWUgIkM9TkwsIENOPW5hLXNzby1kZW1vLXZwbi1zZXJ2ZXIiIHN1YmplY3QKcmVtb3RlLWNlcnQtdGxzIHNlcnZlcgphdXRoLXVzZXItcGFzcwo8Y2E+CjxSRURBQ1RFRD4KPC9jYT4=",
+  "filename": "na_sso_demo_VPN.ovpn",
+  "filetype": "text/ovpn",
+  "result": "ok"
+}

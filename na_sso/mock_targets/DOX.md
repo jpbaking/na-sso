@@ -19,7 +19,7 @@ Owns the mock target app only. Real adapters live in `../connectors/`; demo orch
 
 ## Feature Map
 
-- **Mock target app** — all mock targets in one FastAPI app. Start: `app.py`.
+- **Mock target app** — all mock targets in one FastAPI app, including OPNsense user, trust/certificate, lifetime-required persistent CRL rebuild with CRL-referenced delete protection, and OpenVPN client-export APIs. Start: `app.py`.
 
 ## Child DOX Index
 

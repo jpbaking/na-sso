@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 import re
+from typing import Protocol, runtime_checkable
 
 from na_sso.models import ManagedUser
 from na_sso.reconciliation import InspectionCapabilities, ReconciliationReport, unavailable_report
@@ -47,6 +48,61 @@ class SyncResult:
             self.error_kind = ConnectorErrorKind.NOT_FOUND
         else:
             self.error_kind = ConnectorErrorKind.REMOTE_REJECTED
+
+
+class OpenVpnAuthPosture(StrEnum):
+    CERT_AND_PASSWORD = "cert_and_password"
+    PASSWORD_ONLY = "password_only"
+    CERT_ONLY = "cert_only"
+
+
+@dataclass(frozen=True)
+class OpenVpnServer:
+    vpnid: str
+    name: str
+    caref: str
+    auth_posture: OpenVpnAuthPosture
+
+
+@dataclass(frozen=True)
+class OpenVpnDiscovery:
+    servers: tuple[OpenVpnServer, ...]
+    templates: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExportedConfig:
+    filename: str
+    content: bytes
+
+
+@runtime_checkable
+class OpenVpnExport(Protocol):
+    """Optional OpenVPN client-export capability, independent of Connector."""
+
+    async def discover_openvpn(self) -> OpenVpnDiscovery | SyncResult: ...
+
+    async def ensure_client_certificate(
+        self, username: str, *, caref: str
+    ) -> str | SyncResult: ...
+
+    async def revoke_client_certificate(
+        self, username: str, *, caref: str
+    ) -> SyncResult: ...
+
+    async def export_config(
+        self,
+        vpnid: str,
+        *,
+        template: str,
+        hostname: str,
+        username: str | None = None,
+        certref: str | None = None,
+    ) -> ExportedConfig | SyncResult: ...
+
+    async def validate_openvpn_export(
+        self, vpnid: str, *, template: str, hostname: str
+    ) -> SyncResult: ...
 
 
 @dataclass(frozen=True)

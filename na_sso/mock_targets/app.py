@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import os
+import re
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -9,6 +11,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -49,9 +55,141 @@ def _initial_npm_users() -> dict[int, dict[str, Any]]:
     }
 
 
+OPNSENSE_CA_REF = "6a5fdc1533f7f"
+OPNSENSE_SERVER_CERT_REF = "6a5fdc35d15a1"
+OPNSENSE_SERVER_UUID = "1c030500-62d0-4b62-b3d2-d6a953bad087"
+
+
+def _pem_private_key(key: Any) -> str:
+    return key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    ).decode()
+
+
+def _pem_certificate(cert: x509.Certificate) -> str:
+    return cert.public_bytes(serialization.Encoding.PEM).decode()
+
+
+def _certificate_record(
+    *,
+    refid: str,
+    descr: str,
+    caref: str,
+    cert_type: str,
+    commonname: str,
+    certificate: x509.Certificate,
+    private_key: Any,
+) -> dict[str, Any]:
+    return {
+        "uuid": str(uuid4()),
+        "refid": refid,
+        "descr": descr,
+        "caref": caref,
+        "cert_type": cert_type,
+        "commonname": commonname,
+        "crt_payload": _pem_certificate(certificate),
+        "prv_payload": _pem_private_key(private_key),
+        "valid_from": certificate.not_valid_before_utc.isoformat(),
+        "valid_to": certificate.not_valid_after_utc.isoformat(),
+    }
+
+
+def _seed_opnsense_openvpn(mock_state: MockState) -> None:
+    now = datetime.now(timezone.utc)
+    ca_key = ec.generate_private_key(ec.SECP256R1())
+    ca_name = x509.Name(
+        [
+            x509.NameAttribute(NameOID.COUNTRY_NAME, "NL"),
+            x509.NameAttribute(NameOID.COMMON_NAME, "na-sso demo VPN CA"),
+        ]
+    )
+    ca_cert = (
+        x509.CertificateBuilder()
+        .subject_name(ca_name)
+        .issuer_name(ca_name)
+        .public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=3650))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .sign(ca_key, hashes.SHA256())
+    )
+    mock_state.opnsense_cas[OPNSENSE_CA_REF] = {
+        "refid": OPNSENSE_CA_REF,
+        "descr": "na-sso demo VPN CA",
+        "certificate": ca_cert,
+        "private_key": ca_key,
+        "crt_payload": _pem_certificate(ca_cert),
+    }
+
+    server_key = ec.generate_private_key(ec.SECP256R1())
+    server_name = x509.Name(
+        [
+            x509.NameAttribute(NameOID.COUNTRY_NAME, "NL"),
+            x509.NameAttribute(NameOID.COMMON_NAME, "na-sso-demo-vpn-server"),
+        ]
+    )
+    server_cert = (
+        x509.CertificateBuilder()
+        .subject_name(server_name)
+        .issuer_name(ca_cert.subject)
+        .public_key(server_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=397))
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False
+        )
+        .sign(ca_key, hashes.SHA256())
+    )
+    mock_state.opnsense_certs[OPNSENSE_SERVER_CERT_REF] = _certificate_record(
+        refid=OPNSENSE_SERVER_CERT_REF,
+        descr="na-sso demo VPN server",
+        caref=OPNSENSE_CA_REF,
+        cert_type="server_cert",
+        commonname="na-sso-demo-vpn-server",
+        certificate=server_cert,
+        private_key=server_key,
+    )
+    mock_state.opnsense_openvpn_servers[OPNSENSE_SERVER_UUID] = {
+        "uuid": OPNSENSE_SERVER_UUID,
+        "vpnid": "1",
+        "description": "na-sso demo VPN",
+        "enabled": "1",
+        "role": "server",
+        "authmode": "Local Database",
+        "proto": "udp",
+        "port": "1194",
+        "caref": OPNSENSE_CA_REF,
+        "certref": OPNSENSE_SERVER_CERT_REF,
+        "hostname": "vpn.demo.lan",
+    }
+
+
 @dataclass
 class MockState:
     opnsense: dict[str, dict[str, Any]] = field(default_factory=dict)
+    opnsense_cas: dict[str, dict[str, Any]] = field(default_factory=dict)
+    opnsense_certs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    opnsense_crls: dict[str, dict[str, Any]] = field(default_factory=dict)
+    opnsense_openvpn_servers: dict[str, dict[str, Any]] = field(default_factory=dict)
     nexus: dict[str, dict[str, Any]] = field(default_factory=dict)
     nextcloud: dict[str, dict[str, Any]] = field(default_factory=dict)
     jenkins: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -65,8 +203,15 @@ class MockState:
         default_factory=lambda: {target: True for target in TARGET_LABELS}
     )
 
+    def __post_init__(self) -> None:
+        _seed_opnsense_openvpn(self)
+
     def reset(self) -> None:
         self.opnsense.clear()
+        self.opnsense_cas.clear()
+        self.opnsense_certs.clear()
+        self.opnsense_crls.clear()
+        self.opnsense_openvpn_servers.clear()
         self.nexus.clear()
         self.nextcloud.clear()
         self.jenkins.clear()
@@ -77,6 +222,7 @@ class MockState:
         self.npm_tokens.clear()
         self.fail_next.clear()
         self.available = {target: True for target in TARGET_LABELS}
+        _seed_opnsense_openvpn(self)
 
 
 state = MockState()
@@ -92,12 +238,23 @@ class NpmAPIError(Exception):
         self.message = message
 
 
+class OPNsenseAPIError(Exception):
+    def __init__(self, status_code: int, payload: dict[str, Any]) -> None:
+        self.status_code = status_code
+        self.payload = payload
+
+
 @app.exception_handler(NpmAPIError)
 async def npm_api_error(_request: Request, exc: NpmAPIError) -> JSONResponse:
     return JSONResponse(
         {"error": {"code": exc.status_code, "message": exc.message}},
         status_code=exc.status_code,
     )
+
+
+@app.exception_handler(OPNsenseAPIError)
+async def opnsense_api_error(_request: Request, exc: OPNsenseAPIError) -> JSONResponse:
+    return JSONResponse(exc.payload, status_code=exc.status_code)
 
 
 def _credentials(prefix: str, username_default: str, password_default: str) -> tuple[str, str]:
@@ -109,11 +266,26 @@ def _credentials(prefix: str, username_default: str, password_default: str) -> t
 
 def _require_basic(request: Request, credentials: tuple[str, str]) -> None:
     auth = request.headers.get("authorization", "")
-    import base64
-
     expected = "Basic " + base64.b64encode(f"{credentials[0]}:{credentials[1]}".encode()).decode()
     if auth != expected:
         raise HTTPException(status_code=401, detail="invalid demo credentials")
+
+
+def _require_opnsense_openvpn(request: Request) -> None:
+    forbidden_credentials = _credentials(
+        "OPNSENSE_FORBIDDEN", "forbidden-key", "forbidden-secret"
+    )
+    forbidden_auth = "Basic " + base64.b64encode(
+        f"{forbidden_credentials[0]}:{forbidden_credentials[1]}".encode()
+    ).decode()
+    if request.headers.get("authorization", "") == forbidden_auth:
+        raise OPNsenseAPIError(403, {"status": 403, "message": "Forbidden"})
+    _require_basic(request, _credentials("OPNSENSE", "demo-key", "demo-secret"))
+    for injection_name in ("opnsense-forbidden", "opnsense_forbidden"):
+        if injection_name in state.fail_next:
+            state.fail_next.remove(injection_name)
+            raise OPNsenseAPIError(403, {"status": 403, "message": "Forbidden"})
+    _maybe_fail("opnsense")
 
 
 def _require_header(request: Request, name: str, expected: str) -> None:
@@ -221,7 +393,10 @@ async def reset() -> dict[str, str]:
 
 @app.post("/__mock__/fail/{target}")
 async def fail_next(target: str) -> dict[str, str]:
-    if target not in state.available:
+    if target not in state.available and target not in {
+        "opnsense-forbidden",
+        "opnsense_forbidden",
+    }:
         raise HTTPException(status_code=404, detail="unknown target")
     state.fail_next.add(target)
     return {"status": "armed", "target": target}
@@ -364,6 +539,680 @@ async def npm_set_password(user_id: int, request: Request) -> bool:
         raise NpmAPIError(400, "Password must be between 8 and 64 characters")
     user["password"] = secret
     return True
+
+
+def _option_field(
+    values: list[tuple[str, str]],
+    selected: str,
+    groups: dict[str, str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for key, label in values:
+        item: dict[str, Any] = {"selected": int(key == selected), "value": label}
+        if groups is not None and key in groups:
+            item["optgroup"] = groups[key]
+        result[key] = item
+    return result
+
+
+def _option_list(values: list[str], selected: int) -> list[dict[str, Any]]:
+    return [
+        {"selected": int(index == selected), "value": value}
+        for index, value in enumerate(values)
+    ]
+
+
+def _openvpn_instance(server: dict[str, Any]) -> dict[str, Any]:
+    auth_values = [
+        ("", "OpenVPN default"),
+        ("BLAKE2b512", "BLAKE2b512 (512-bit)"),
+        ("BLAKE2s256", "BLAKE2s256 (256-bit)"),
+        ("MD4", "MD4 (128-bit)"),
+        ("MD5", "MD5 (128-bit)"),
+        ("MD5-SHA1", "MD5-SHA1 (288-bit)"),
+        ("RIPEMD160", "RIPEMD160 (160-bit)"),
+        ("SHA1", "SHA1 (160-bit)"),
+        ("SHA224", "SHA224 (224-bit)"),
+        ("SHA256", "SHA256 (256-bit)"),
+        ("SHA3-224", "SHA3-224 (224-bit)"),
+        ("SHA3-256", "SHA3-256 (256-bit)"),
+        ("SHA3-384", "SHA3-384 (384-bit)"),
+        ("SHA3-512", "SHA3-512 (512-bit)"),
+        ("SHA384", "SHA384 (384-bit)"),
+        ("SHA512", "SHA512 (512-bit)"),
+        ("SHA512-224", "SHA512-224 (224-bit)"),
+        ("SHA512-256", "SHA512-256 (256-bit)"),
+        ("SHAKE128", "SHAKE128 (128-bit)"),
+        ("SHAKE256", "SHAKE256 (256-bit)"),
+        ("none", "None (No Authentication)"),
+        ("whirlpool", "whirlpool (512-bit)"),
+    ]
+    cipher_names = [
+        "AES-128-CBC",
+        "AES-128-CFB",
+        "AES-128-CFB1",
+        "AES-128-CFB8",
+        "AES-128-GCM",
+        "AES-128-OFB",
+        "AES-192-CBC",
+        "AES-192-CFB",
+        "AES-192-CFB1",
+        "AES-192-CFB8",
+        "AES-192-GCM",
+        "AES-192-OFB",
+        "AES-256-CBC",
+        "AES-256-CFB",
+        "AES-256-CFB1",
+        "AES-256-CFB8",
+        "AES-256-GCM",
+        "AES-256-OFB",
+        "CHACHA20-POLY1305",
+    ]
+    cipher_groups = {
+        name: "Recommended" if name.endswith("-GCM") or name == "CHACHA20-POLY1305" else "Legacy"
+        for name in cipher_names
+    }
+    cipher_values = [(name, name) for name in cipher_names]
+    ca = state.opnsense_cas[server["caref"]]
+    server_cert = state.opnsense_certs[server["certref"]]
+    blank = {"": {"selected": 1, "value": ""}}
+    return {
+        "auth": _option_field(auth_values, ""),
+        "auth-gen-token": "",
+        "auth-gen-token-renewal": "",
+        "auth-gen-token-secret": "",
+        "authmode": _option_field([("Local Database", "Local Database")], server["authmode"]),
+        "bridge_gateway": "",
+        "bridge_pool": "",
+        "ca": _option_field(
+            [("", " - Use from certificate"), (ca["refid"], ca["descr"])],
+            ca["refid"],
+        ),
+        "carp_depend_on": _option_field([("", "None")], ""),
+        "cert": _option_field(
+            [
+                ("", "None"),
+                ("6a5b3e90e61c2", "Web GUI TLS certificate"),
+                (server_cert["refid"], server_cert["descr"]),
+            ],
+            server_cert["refid"],
+        ),
+        "cert_depth": _option_field(
+            [
+                ("", "Do Not Check"),
+                ("1", "One (Client+Server)"),
+                ("2", "Two (Client+Intermediate+Server)"),
+                ("3", "Three (Client+2xIntermediate+Server)"),
+                ("4", "Four (Client+3xIntermediate+Server)"),
+                ("5", "Five (Client+4xIntermediate+Server)"),
+            ],
+            "",
+        ),
+        "compress_migrate": "0",
+        "crl": _option_field([("", "None")], ""),
+        "data-ciphers": _option_field(cipher_values, "", cipher_groups),
+        "data-ciphers-fallback": _option_field(
+            [("", "None"), *cipher_values], "", cipher_groups
+        ),
+        "description": server["description"],
+        "dev_type": _option_field([("ovpn", "DCO"), ("tap", "TAP"), ("tun", "TUN")], "tun"),
+        "dns_domain": deepcopy(blank),
+        "dns_domain_search": deepcopy(blank),
+        "dns_servers": deepcopy(blank),
+        "enabled": server["enabled"],
+        "fragment": "",
+        "http-proxy": "",
+        "ifconfig-pool-persist": "0",
+        "keepalive_interval": "",
+        "keepalive_timeout": "",
+        "local": "",
+        "local_group": _option_field([("", "None"), ("1999", "admins")], ""),
+        "maxclients": "",
+        "mssfix": "0",
+        "nopool": "0",
+        "ntp_servers": deepcopy(blank),
+        "password": "",
+        "port": server["port"],
+        "port-share": "",
+        "proto": _option_field(
+            [
+                ("tcp", "TCP"),
+                ("tcp4", "TCP (IPv4)"),
+                ("tcp6", "TCP (IPv6)"),
+                ("udp", "UDP"),
+                ("udp4", "UDP (IPv4)"),
+                ("udp6", "UDP (IPv6)"),
+            ],
+            server["proto"],
+        ),
+        "provision_exclusive": "0",
+        "push_excluded_routes": deepcopy(blank),
+        "push_inactive": "",
+        "push_route": deepcopy(blank),
+        "redirect_gateway": _option_field(
+            [
+                ("!ipv4", "not ipv4 (default)"),
+                ("autolocal", "autolocal"),
+                ("block-local", "block-local"),
+                ("bypass-dhcp", "bypass-dhcp"),
+                ("bypass-dns", "bypass-dns"),
+                ("def1", "default"),
+                ("ipv6", "ipv6 (default)"),
+                ("local", "local"),
+            ],
+            "",
+        ),
+        "register_dns": "0",
+        "remote": deepcopy(blank),
+        "remote_cert_tls": "0",
+        "reneg-sec": "",
+        "role": _option_field([("client", "Client"), ("server", "Server")], server["role"]),
+        "route": deepcopy(blank),
+        "route_metric": "",
+        "server": "10.19.47.0/24",
+        "server_ipv6": "",
+        "strictusercn": _option_list(["No", "Yes", "Yes (case insensitive)"], 0),
+        "tls_key": _option_field([("", "None")], ""),
+        "topology": _option_field([("net30", "net30"), ("p2p", "p2p"), ("subnet", "subnet")], "subnet"),
+        "tun_mtu": "",
+        "use_ocsp": "0",
+        "username": "",
+        "username_as_common_name": "0",
+        "various_flags": _option_field(
+            [(name, name) for name in [
+                "block-ipv6", "client-to-client", "duplicate-cn", "explicit-exit-notify",
+                "fast-io", "float", "passtos", "persist-remote-ip", "remote-random",
+                "route-noexec", "route-nopull",
+            ]],
+            "",
+        ),
+        "various_push_flags": _option_field(
+            [(name, name) for name in [
+                "block-ipv6", "block-outside-dns", "explicit-exit-notify", "register-dns",
+            ]],
+            "",
+        ),
+        "verb": _option_list(
+            [
+                "0 (No output except fatal errors.)",
+                "1 (Normal)",
+                "2 (Normal)",
+                "3 (Normal)",
+                "4 (Normal)",
+                "5 (log packets)",
+                "6 (debug)",
+                "7 (debug)",
+                "8 (debug)",
+                "9 (debug)",
+                "10 (debug)",
+                "11 (debug)",
+            ],
+            3,
+        ),
+        "verify-x509-name": "",
+        "verify_client_cert": _option_field([("none", "none"), ("require", "require")], "require"),
+        "vpnid": server["vpnid"],
+    }
+
+
+def _new_certificate_key(key_type: str) -> Any:
+    if key_type in {"prime256v1", "secp384r1", "secp521r1"}:
+        curve = {
+            "prime256v1": ec.SECP256R1(),
+            "secp384r1": ec.SECP384R1(),
+            "secp521r1": ec.SECP521R1(),
+        }[key_type]
+        return ec.generate_private_key(curve)
+    match = re.search(r"(\d+)$", key_type)
+    key_size = int(match.group(1)) if match else 2048
+    return rsa.generate_private_key(public_exponent=65537, key_size=max(1024, key_size))
+
+
+def _certificate_subject(cert_data: dict[str, Any]) -> x509.Name:
+    attributes: list[x509.NameAttribute] = []
+    for field_name, oid in (
+        ("country", NameOID.COUNTRY_NAME),
+        ("state", NameOID.STATE_OR_PROVINCE_NAME),
+        ("city", NameOID.LOCALITY_NAME),
+        ("organization", NameOID.ORGANIZATION_NAME),
+        ("organizationalunit", NameOID.ORGANIZATIONAL_UNIT_NAME),
+        ("email", NameOID.EMAIL_ADDRESS),
+        ("commonname", NameOID.COMMON_NAME),
+    ):
+        value = str(cert_data.get(field_name, "")).strip()
+        if value:
+            attributes.append(x509.NameAttribute(oid, value))
+    return x509.Name(attributes)
+
+
+def _certificate_search_row(cert: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: cert[key]
+        for key in (
+            "uuid",
+            "refid",
+            "descr",
+            "caref",
+            "cert_type",
+            "commonname",
+            "valid_from",
+            "valid_to",
+        )
+    }
+
+
+# OPNsense Trust and OpenVPN APIs
+@app.post("/api/trust/cert/add")
+async def opnsense_cert_add(request: Request) -> dict[str, Any]:
+    _require_opnsense_openvpn(request)
+    cert_data = dict((await request.json()).get("cert", {}))
+    caref = str(cert_data.get("caref", ""))
+    commonname = str(cert_data.get("commonname", "")).strip()
+    descr = str(cert_data.get("descr", "")).strip()
+    if caref not in state.opnsense_cas or not commonname or not descr:
+        return {"result": "failed"}
+
+    ca = state.opnsense_cas[caref]
+    key = _new_certificate_key(str(cert_data.get("key_type", "2048")))
+    now = datetime.now(timezone.utc)
+    cert_type = str(cert_data.get("cert_type", "usr_cert"))
+    usages = []
+    if cert_type in {"usr_cert", "combined_server_client"}:
+        usages.append(ExtendedKeyUsageOID.CLIENT_AUTH)
+    if cert_type in {"server_cert", "combined_server_client"}:
+        usages.append(ExtendedKeyUsageOID.SERVER_AUTH)
+    builder = (
+        x509.CertificateBuilder()
+        .subject_name(_certificate_subject(cert_data))
+        .issuer_name(ca["certificate"].subject)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(minutes=1))
+        .not_valid_after(now + timedelta(days=int(cert_data.get("lifetime", 397))))
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+    )
+    if usages:
+        builder = builder.add_extension(x509.ExtendedKeyUsage(usages), critical=False)
+    digest = {
+        "sha1": hashes.SHA1(),
+        "sha224": hashes.SHA224(),
+        "sha256": hashes.SHA256(),
+        "sha384": hashes.SHA384(),
+        "sha512": hashes.SHA512(),
+    }.get(str(cert_data.get("digest", "sha256")), hashes.SHA256())
+    certificate = builder.sign(ca["private_key"], digest)
+    refid = uuid4().hex[:13]
+    record = _certificate_record(
+        refid=refid,
+        descr=descr,
+        caref=caref,
+        cert_type=cert_type,
+        commonname=commonname,
+        certificate=certificate,
+        private_key=key,
+    )
+    state.opnsense_certs[refid] = record
+    response: dict[str, Any] = {"result": "saved", "uuid": record["uuid"]}
+    if cert_data.get("private_key_location") == "local":
+        response["private_key"] = record["prv_payload"]
+        record["prv_payload"] = ""
+    return response
+
+
+@app.post("/api/trust/cert/del/{cert_uuid}")
+async def opnsense_cert_delete(cert_uuid: str, request: Request) -> dict[str, str]:
+    _require_opnsense_openvpn(request)
+    if "opnsense-cert-delete" in state.fail_next:
+        state.fail_next.remove("opnsense-cert-delete")
+        raise OPNsenseAPIError(500, {"message": "injected certificate delete failure"})
+    refid = next(
+        (
+            key
+            for key, cert in state.opnsense_certs.items()
+            if cert["uuid"] == cert_uuid or key == cert_uuid
+        ),
+        None,
+    )
+    if refid is None:
+        return {"result": "failed"}
+    cert = state.opnsense_certs[refid]
+    crl_state = state.opnsense_crls.get(cert["caref"])
+    if crl_state and any(
+        refid in revoked_for_reason
+        for revoked_for_reason in crl_state["revoked"].values()
+    ):
+        raise OPNsenseAPIError(
+            500,
+            {"errorMessage": "Unexpected error, check log for details"},
+        )
+    del state.opnsense_certs[refid]
+    return {"result": "deleted"}
+
+
+@app.get("/api/trust/cert/search")
+async def opnsense_cert_search(request: Request) -> dict[str, Any]:
+    _require_opnsense_openvpn(request)
+    carefs = {
+        caref
+        for value in request.query_params.getlist("carefs")
+        for caref in value.split(",")
+        if caref
+    }
+    users = {
+        user
+        for value in request.query_params.getlist("user")
+        for user in value.split(",")
+        if user
+    }
+    rows = [
+        _certificate_search_row(cert)
+        for cert in state.opnsense_certs.values()
+        if (not carefs or cert["caref"] in carefs)
+        and (not users or cert["commonname"] in users)
+    ]
+    return {"rows": rows, "rowCount": len(rows), "total": len(rows)}
+
+
+def _opnsense_crl_state(caref: str) -> dict[str, Any]:
+    return state.opnsense_crls.setdefault(
+        caref,
+        {
+            "descr": f"na-sso CRL {caref}",
+            "lifetime": "9999",
+            "serial": "0",
+            "revoked": {reason: {} for reason in range(11)},
+        },
+    )
+
+
+@app.get("/api/trust/crl/get/{caref}")
+async def opnsense_crl_get(caref: str, request: Request) -> dict[str, Any]:
+    _require_opnsense_openvpn(request)
+    crl_state = _opnsense_crl_state(caref)
+    revoked = crl_state["revoked"]
+    candidates = {
+        cert["refid"]: cert["descr"]
+        for cert in state.opnsense_certs.values()
+        if cert["caref"] == caref
+    }
+    for revoked_for_reason in revoked.values():
+        candidates.update(revoked_for_reason)
+    return {
+        "crl": {
+            "crlmethod": "internal",
+            "descr": crl_state["descr"],
+            "lifetime": crl_state["lifetime"],
+            "serial": crl_state["serial"],
+            **{
+                f"revoked_reason_{reason}": {
+                    refid: {
+                        "value": descr,
+                        "selected": "1" if refid in revoked[reason] else "0",
+                    }
+                    for refid, descr in candidates.items()
+                }
+                for reason in range(11)
+            },
+        }
+    }
+
+
+@app.post("/api/trust/crl/set/{caref}")
+async def opnsense_crl_set(caref: str, request: Request) -> dict[str, str]:
+    _require_opnsense_openvpn(request)
+    if "opnsense-crl-set" in state.fail_next:
+        state.fail_next.remove("opnsense-crl-set")
+        raise OPNsenseAPIError(500, {"message": "injected CRL update failure"})
+    if caref not in state.opnsense_cas:
+        return {"result": "failed"}
+    body = await request.json()
+    crl = body.get("crl") if isinstance(body, dict) else None
+    if not isinstance(crl, dict) or crl.get("crlmethod") != "internal":
+        return {"result": "failed"}
+    lifetime = str(crl.get("lifetime", "")).strip()
+    if not lifetime:
+        raise OPNsenseAPIError(
+            500,
+            {"errorMessage": "Unexpected error, check log for details"},
+        )
+
+    previous = _opnsense_crl_state(caref)
+    descriptions = {
+        cert["refid"]: cert["descr"]
+        for cert in state.opnsense_certs.values()
+        if cert["caref"] == caref
+    }
+    for revoked_for_reason in previous["revoked"].values():
+        descriptions.update(revoked_for_reason)
+    rebuilt: dict[int, dict[str, str]] = {}
+    for reason in range(11):
+        raw_refids = crl.get(f"revoked_reason_{reason}", "")
+        if not isinstance(raw_refids, str):
+            return {"result": "failed"}
+        refids = {
+            item.strip() for item in raw_refids.split(",") if item.strip()
+        }
+        rebuilt[reason] = {
+            refid: descriptions.get(refid, refid) for refid in refids
+        }
+    state.opnsense_crls[caref] = {
+        "descr": str(crl.get("descr", "")),
+        "lifetime": lifetime,
+        "serial": str(crl.get("serial", previous["serial"])),
+        "revoked": rebuilt,
+    }
+    return {"result": "saved"}
+
+
+@app.get("/api/trust/ca/ca_list")
+async def opnsense_ca_list(request: Request) -> dict[str, Any]:
+    _require_opnsense_openvpn(request)
+    rows = [
+        {"caref": ca["refid"], "descr": ca["descr"]}
+        for ca in state.opnsense_cas.values()
+    ]
+    return {"rows": rows, "count": len(rows)}
+
+
+@app.get("/api/openvpn/export/providers")
+async def opnsense_openvpn_providers(request: Request) -> Any:
+    _require_opnsense_openvpn(request)
+    providers = {
+        server_uuid: {
+            "auth_nocache": None,
+            "cryptoapi": None,
+            "hostname": None,
+            "local_port": server["port"],
+            "mode": "server_tls_user" if server["authmode"] else "",
+            "name": f'{server["description"]} {server["proto"]}:{server["port"]}',
+            "plain_config": None,
+            "random_local_port": "1",
+            "static_challenge": None,
+            "template": None,
+            "validate_server_cn": "1",
+            "vpnid": server_uuid,
+        }
+        for server_uuid, server in state.opnsense_openvpn_servers.items()
+        if server["enabled"] == "1" and server["role"] == "server"
+    }
+    return providers if providers else []
+
+
+@app.get("/api/openvpn/export/templates")
+async def opnsense_openvpn_templates(request: Request) -> dict[str, Any]:
+    _require_opnsense_openvpn(request)
+    common = [
+        "plain_config",
+        "p12_password",
+        "random_local_port",
+        "auth_nocache",
+        "cryptoapi",
+        "static_challenge",
+    ]
+    return {
+        "ArchiveOpenVPN": {"name": "Archive", "supportedOptions": common},
+        "PlainOpenVPN": {
+            "name": "File Only",
+            "supportedOptions": [item for item in common if item != "p12_password"],
+        },
+        "ViscosityVisz": {"name": "Viscosity (visz)", "supportedOptions": common},
+    }
+
+
+@app.post("/api/openvpn/export/validate_presets/{vpnid}")
+async def opnsense_openvpn_validate_presets(
+    vpnid: str, request: Request
+) -> dict[str, Any]:
+    _require_opnsense_openvpn(request)
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    export_options = body.get("openvpn_export") if isinstance(body, dict) else None
+    templates = {"ArchiveOpenVPN", "PlainOpenVPN", "ViscosityVisz"}
+    if (
+        vpnid not in state.opnsense_openvpn_servers
+        or not isinstance(export_options, dict)
+        or export_options.get("template") not in templates
+        or not str(export_options.get("hostname", "")).strip()
+    ):
+        return {"result": "failed"}
+    return {"result": "ok", "changed": False}
+
+
+@app.get("/api/openvpn/export/accounts/{vpnid}")
+async def opnsense_openvpn_accounts(vpnid: str, request: Request) -> dict[str, Any]:
+    _require_opnsense_openvpn(request)
+    result: dict[str, Any] = {
+        "": {"description": "(none) Exclude certificate from export", "users": []}
+    }
+    server = state.opnsense_openvpn_servers.get(vpnid)
+    if server is None:
+        return result
+    for cert in state.opnsense_certs.values():
+        if cert["caref"] != server["caref"]:
+            continue
+        users: list[str] = []
+        if (
+            cert["cert_type"] in {"usr_cert", "combined_server_client"}
+            and cert["commonname"] in state.opnsense
+        ):
+            users.append(cert["commonname"])
+        result[cert["refid"]] = {"description": cert["descr"], "users": users}
+    return result
+
+
+@app.get("/api/openvpn/instances/get/{instance_uuid}")
+async def opnsense_openvpn_instance(instance_uuid: str, request: Request) -> dict[str, Any]:
+    _require_opnsense_openvpn(request)
+    server = state.opnsense_openvpn_servers.get(instance_uuid)
+    return {"instance": _openvpn_instance(server)} if server is not None else {"instance": {}}
+
+
+def _openvpn_filename(value: str) -> str:
+    return re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9]+", "_", value)).strip("_")
+
+
+async def _opnsense_openvpn_download(
+    vpnid: str, request: Request, certref: str | None = None
+) -> dict[str, Any]:
+    _require_opnsense_openvpn(request)
+    try:
+        body = await request.json()
+    except ValueError:
+        body = {}
+    if not isinstance(body, dict) or "openvpn_export" not in body:
+        return {"result": "failed"}
+    server = state.opnsense_openvpn_servers.get(vpnid)
+    if server is None:
+        return {"result": "failed"}
+
+    client_cert = None
+    if certref:
+        client_cert = state.opnsense_certs.get(certref)
+        if client_cert is None:
+            raise OPNsenseAPIError(
+                500,
+                {
+                    "errorMessage": "Client certificate not found",
+                    "errorTitle": "OpenVPN export",
+                },
+            )
+        if (
+            client_cert["caref"] != server["caref"]
+            or client_cert["cert_type"] not in {"usr_cert", "combined_server_client"}
+        ):
+            raise OPNsenseAPIError(
+                500,
+                {
+                    "errorMessage": "Certificate does not belong to server CA",
+                    "errorTitle": "OpenVPN export",
+                },
+            )
+        if not client_cert["prv_payload"]:
+            raise OPNsenseAPIError(
+                500,
+                {
+                    "errorMessage": "Client certificate not found",
+                    "errorTitle": "OpenVPN export",
+                },
+            )
+
+    export_options = body.get("openvpn_export")
+    if not isinstance(export_options, dict):
+        export_options = {}
+    hostname = str(export_options.get("hostname") or server["hostname"])
+    ca = state.opnsense_cas[server["caref"]]
+    server_cert = state.opnsense_certs[server["certref"]]
+    lines = [
+        "dev tun",
+        "persist-tun",
+        "persist-key",
+        "client",
+        "resolv-retry infinite",
+        f'remote {hostname}  {server["proto"]}',
+        "lport 0",
+        f'verify-x509-name "C=NL, CN={server_cert["commonname"]}" subject',
+        "remote-cert-tls server",
+        "auth-user-pass",
+        "<ca>",
+        ca["crt_payload"].strip(),
+        "</ca>",
+    ]
+    filename = _openvpn_filename(server["description"])
+    if client_cert is not None:
+        lines.extend(
+            [
+                "<cert>",
+                client_cert["crt_payload"].strip(),
+                "</cert>",
+                "<key>",
+                client_cert["prv_payload"].strip(),
+                "</key>",
+            ]
+        )
+        filename += f'_{_openvpn_filename(client_cert["commonname"])}'
+    content = "\n".join(lines).encode()
+    return {
+        "result": "ok",
+        "changed": False,
+        "filename": f"{filename}.ovpn",
+        "filetype": "text/ovpn",
+        "content": base64.b64encode(content).decode(),
+    }
+
+
+@app.post("/api/openvpn/export/download/{vpnid}")
+@app.post("/api/openvpn/export/download/{vpnid}/", include_in_schema=False)
+async def opnsense_openvpn_download_no_cert(vpnid: str, request: Request) -> dict[str, Any]:
+    return await _opnsense_openvpn_download(vpnid, request)
+
+
+@app.post("/api/openvpn/export/download/{vpnid}/{certref}")
+async def opnsense_openvpn_download_with_cert(
+    vpnid: str, certref: str, request: Request
+) -> dict[str, Any]:
+    return await _opnsense_openvpn_download(vpnid, request, certref)
 
 
 # OPNsense Auth User API

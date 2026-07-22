@@ -32,6 +32,34 @@ Never include password hashes, tokens, private/public key material, raw response
 bodies, or secret-bearing URLs. `plan_user` uses inspection only and returns
 bounded field actions/blockers; it must never invoke ensure, disable, or delete.
 
+## Optional OpenVPN capability
+
+`OpenVpnExport` is independent of the identity connector contract. OPNsense
+implements server discovery, export-preset validation, client-certificate
+issuance and revocation, and `.ovpn` export. A managed client certificate uses
+the invariant `CN == username` and must match the selected server CA. Issuance
+excludes every certificate currently selected under any reason code on that
+CA's CRL, so re-onboarding creates a fresh certificate instead of reusing a
+revoked one.
+
+A profile download is not a read-only firewall operation: it can issue the
+user's client certificate and write certificate/export state to OPNsense
+configuration. NA-SSO streams the resulting profile without persisting it or
+its key material.
+
+For a verified, OpenVPN-enabled OPNsense target, user disable, assignment
+disable, and delete also revoke the matching client certificate. Revocation
+first GETs and merges all selected entries in the CA CRL, adds the certificate
+under reason code 0, and POSTs the rebuilt CRL while the certificate still
+exists, carrying forward the required CRL lifetime. A successful CRL update is
+authoritative and the revoked certificate remains stored because OPNsense will
+not delete a CRL-referenced certificate. If CRL update fails, the connector
+logs the sanitized failure and falls back to certificate deletion by UUID;
+deletion can remove firewall configuration but cannot invalidate an already
+distributed profile. If both operations fail, offboarding fails after the
+identity mutation has already run. Targets without enabled, verified OpenVPN
+configuration remain identity-only and make no trust or CRL calls.
+
 ## Errors and timeouts
 
 Failed results use authentication, validation, not found, conflict, rate

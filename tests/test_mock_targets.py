@@ -1,10 +1,16 @@
+import base64
+from copy import deepcopy
+import json
 import socket
 import threading
 import time
+from pathlib import Path
 
 import httpx
 import pytest
 import uvicorn
+from cryptography import x509
+from cryptography.hazmat.primitives import serialization
 from fastapi.testclient import TestClient
 
 from na_sso.config import GiteaTarget, GitlabTarget, ImmichTarget, JenkinsTarget, NpmTarget, Settings
@@ -16,7 +22,13 @@ from na_sso.connectors.nextcloud import NextcloudConnector
 from na_sso.connectors.nexus import NexusConnector
 from na_sso.connectors.npm import NpmConnector
 from na_sso.connectors.opnsense import OPNsenseConnector
-from na_sso.mock_targets.app import app
+from na_sso.mock_targets.app import (
+    OPNSENSE_CA_REF,
+    OPNSENSE_SERVER_CERT_REF,
+    OPNSENSE_SERVER_UUID,
+    app,
+    state,
+)
 from na_sso.models import ManagedUser
 from na_sso.reconciliation import ReconciliationStatus
 
@@ -57,6 +69,53 @@ def _npm_headers(client: TestClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {response.json()['token']}"}
 
 
+def _opnsense_fixture(name: str):
+    fixture = Path(__file__).parent / "fixtures" / "opnsense_openvpn" / name
+    return json.loads(fixture.read_text())
+
+
+def _issue_opnsense_client_cert(
+    client: TestClient, username: str = "j-baking"
+) -> str:
+    auth = ("demo-key", "demo-secret")
+    user = {
+        "user": {
+            "name": username,
+            "descr": username,
+            "email": f"{username}@example.test",
+            "disabled": "0",
+            "password": "demo-password",
+        }
+    }
+    assert client.post("/api/auth/user/add", auth=auth, json=user).json()["result"] == "saved"
+    response = client.post(
+        "/api/trust/cert/add",
+        auth=auth,
+        json={
+            "cert": {
+                "action": "internal",
+                "caref": OPNSENSE_CA_REF,
+                "cert_type": "usr_cert",
+                "commonname": username,
+                "country": "NL",
+                "descr": f"na-sso {username} demo",
+                "digest": "sha256",
+                "key_type": "2048",
+                "lifetime": "397",
+                "private_key_location": "firewall",
+            }
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["result"] == "saved"
+    rows = client.get(
+        "/api/trust/cert/search",
+        auth=auth,
+        params={"carefs": OPNSENSE_CA_REF, "user": username},
+    ).json()["rows"]
+    return next(row["refid"] for row in rows if row["commonname"] == username)
+
+
 def test_opnsense_mock_user_lifecycle():
     client = _client()
     auth = ("demo-key", "demo-secret")
@@ -88,6 +147,313 @@ def test_opnsense_mock_user_lifecycle():
     assert client.post(
         "/api/auth/user/search", auth=auth, json={"searchPhrase": "alice"}
     ).json()["rows"] == []
+
+
+def test_opnsense_openvpn_seeded_get_responses_and_empty_provider_shape():
+    client = _client()
+    auth = ("demo-key", "demo-secret")
+    assert client.get("/api/openvpn/export/providers", auth=auth).json() == _opnsense_fixture(
+        "export_providers.json"
+    )
+    assert client.get("/api/openvpn/export/templates", auth=auth).json() == _opnsense_fixture(
+        "export_templates.json"
+    )
+    assert client.get(
+        f"/api/openvpn/export/accounts/{OPNSENSE_SERVER_UUID}", auth=auth
+    ).json() == _opnsense_fixture("export_accounts_empty.json")
+    assert client.get(
+        f"/api/openvpn/instances/get/{OPNSENSE_SERVER_UUID}", auth=auth
+    ).json() == _opnsense_fixture("instances_get.json")
+
+    state.opnsense_openvpn_servers.clear()
+    try:
+        response = client.get("/api/openvpn/export/providers", auth=auth)
+        assert response.status_code == 200
+        assert response.json() == []
+    finally:
+        client.post("/__mock__/reset")
+
+
+def test_opnsense_mock_issues_searches_lists_and_deletes_client_certificate():
+    client = _client()
+    auth = ("demo-key", "demo-secret")
+    certref = _issue_opnsense_client_cert(client)
+
+    record = state.opnsense_certs[certref]
+    certificate = x509.load_pem_x509_certificate(record["crt_payload"].encode())
+    private_key = serialization.load_pem_private_key(
+        record["prv_payload"].encode(), password=None
+    )
+    assert certificate.public_key().public_numbers() == private_key.public_key().public_numbers()
+    certificate.verify_directly_issued_by(state.opnsense_cas[OPNSENSE_CA_REF]["certificate"])
+
+    ca_list = client.get("/api/trust/ca/ca_list", auth=auth).json()
+    assert ca_list == {
+        "rows": [{"caref": OPNSENSE_CA_REF, "descr": "na-sso demo VPN CA"}],
+        "count": 1,
+    }
+    accounts = client.get(
+        f"/api/openvpn/export/accounts/{OPNSENSE_SERVER_UUID}", auth=auth
+    ).json()
+    assert accounts[""] == {
+        "description": "(none) Exclude certificate from export",
+        "users": [],
+    }
+    assert accounts[OPNSENSE_SERVER_CERT_REF] == {
+        "description": "na-sso demo VPN server",
+        "users": [],
+    }
+    assert accounts[certref] == {
+        "description": "na-sso j-baking demo",
+        "users": ["j-baking"],
+    }
+
+    cert_uuid = state.opnsense_certs[certref]["uuid"]
+    assert client.post(f"/api/trust/cert/del/{cert_uuid}", auth=auth).json() == {
+        "result": "deleted"
+    }
+    assert certref not in {
+        row["refid"]
+        for row in client.get("/api/trust/cert/search", auth=auth).json()["rows"]
+    }
+
+
+def test_opnsense_mock_crl_set_rebuilds_and_reset_clears_revocations():
+    client = _client()
+    auth = ("demo-key", "demo-secret")
+    first_ref = _issue_opnsense_client_cert(client, "first-user")
+    second_ref = _issue_opnsense_client_cert(client, "second-user")
+
+    initial = client.get(
+        f"/api/trust/crl/get/{OPNSENSE_CA_REF}", auth=auth
+    ).json()["crl"]
+    assert initial["revoked_reason_0"][first_ref]["selected"] == "0"
+    missing_lifetime = client.post(
+        f"/api/trust/crl/set/{OPNSENSE_CA_REF}",
+        auth=auth,
+        json={"crl": {"crlmethod": "internal", "descr": "missing lifetime"}},
+    )
+    assert missing_lifetime.status_code == 500
+    assert missing_lifetime.json() == {
+        "errorMessage": "Unexpected error, check log for details"
+    }
+    first_payload = {
+        "crl": {
+            "crlmethod": "internal",
+            "descr": "na-sso test CRL",
+            "lifetime": initial["lifetime"],
+            **{
+                f"revoked_reason_{reason}": first_ref if reason == 0 else ""
+                for reason in range(11)
+            },
+        }
+    }
+    assert client.post(
+        f"/api/trust/crl/set/{OPNSENSE_CA_REF}",
+        auth=auth,
+        json=first_payload,
+    ).json() == {"result": "saved"}
+    first_uuid = state.opnsense_certs[first_ref]["uuid"]
+    crl_referenced_delete = client.post(
+        f"/api/trust/cert/del/{first_uuid}", auth=auth, json={}
+    )
+    assert crl_referenced_delete.status_code == 500
+    assert crl_referenced_delete.json() == {
+        "errorMessage": "Unexpected error, check log for details"
+    }
+    assert first_ref in state.opnsense_certs
+
+    merged_payload = deepcopy(first_payload)
+    merged_payload["crl"]["revoked_reason_0"] = f"{first_ref},{second_ref}"
+    assert client.post(
+        f"/api/trust/crl/set/{OPNSENSE_CA_REF}",
+        auth=auth,
+        json=merged_payload,
+    ).json() == {"result": "saved"}
+    merged = client.get(
+        f"/api/trust/crl/get/{OPNSENSE_CA_REF}", auth=auth
+    ).json()["crl"]
+    assert {
+        refid
+        for refid, option in merged["revoked_reason_0"].items()
+        if option["selected"] == "1"
+    } == {first_ref, second_ref}
+
+    assert client.post("/__mock__/reset").status_code == 200
+    assert state.opnsense_crls == {}
+
+
+def test_opnsense_openvpn_download_with_and_without_client_certificate():
+    client = _client()
+    auth = ("demo-key", "demo-secret")
+    certref = _issue_opnsense_client_cert(client)
+    body = {"openvpn_export": {"template": "PlainOpenVPN"}}
+
+    with_cert = client.post(
+        f"/api/openvpn/export/download/{OPNSENSE_SERVER_UUID}/{certref}",
+        auth=auth,
+        json=body,
+    )
+    assert with_cert.status_code == 200
+    with_payload = with_cert.json()
+    assert {key: with_payload[key] for key in ("result", "changed", "filename", "filetype")} == {
+        "result": "ok",
+        "changed": False,
+        "filename": "na_sso_demo_VPN_j_baking.ovpn",
+        "filetype": "text/ovpn",
+    }
+    with_content = base64.b64decode(with_payload["content"]).decode()
+    assert "auth-user-pass" in with_content
+    assert all(tag in with_content for tag in ("<ca>", "<cert>", "<key>"))
+    x509.load_pem_x509_certificate(
+        with_content.split("<cert>\n", 1)[1].split("\n</cert>", 1)[0].encode()
+    )
+    serialization.load_pem_private_key(
+        with_content.split("<key>\n", 1)[1].split("\n</key>", 1)[0].encode(),
+        password=None,
+    )
+
+    no_cert = client.post(
+        f"/api/openvpn/export/download/{OPNSENSE_SERVER_UUID}", auth=auth, json=body
+    )
+    trailing_empty = client.post(
+        f"/api/openvpn/export/download/{OPNSENSE_SERVER_UUID}/", auth=auth, json=body
+    )
+    assert no_cert.status_code == trailing_empty.status_code == 200
+    assert no_cert.json() == trailing_empty.json()
+    no_cert_content = base64.b64decode(no_cert.json()["content"]).decode()
+    assert "auth-user-pass" in no_cert_content and "<ca>" in no_cert_content
+    assert "<cert>" not in no_cert_content and "<key>" not in no_cert_content
+    assert no_cert.json()["filename"] == "na_sso_demo_VPN.ovpn"
+
+
+def test_opnsense_openvpn_download_unknown_cert_and_missing_body_failures():
+    client = _client()
+    auth = ("demo-key", "demo-secret")
+    unknown = client.post(
+        f"/api/openvpn/export/download/{OPNSENSE_SERVER_UUID}/unknown-cert",
+        auth=auth,
+        json={"openvpn_export": {"template": "PlainOpenVPN"}},
+    )
+    assert unknown.status_code == 500
+    assert unknown.json() == {
+        "errorMessage": "Client certificate not found",
+        "errorTitle": "OpenVPN export",
+    }
+    missing = client.post(
+        f"/api/openvpn/export/download/{OPNSENSE_SERVER_UUID}", auth=auth, json={}
+    )
+    assert missing.status_code == 200
+    assert missing.json() == _opnsense_fixture("export_download_missing_body.json")
+    empty_request = client.post(
+        f"/api/openvpn/export/download/{OPNSENSE_SERVER_UUID}", auth=auth
+    )
+    assert empty_request.status_code == 200
+    assert empty_request.json() == {"result": "failed"}
+
+
+def test_opnsense_openvpn_validate_presets_is_non_mutating():
+    client = _client()
+    auth = ("demo-key", "demo-secret")
+    before = deepcopy(
+        (
+            state.opnsense_openvpn_servers,
+            state.opnsense_cas,
+            state.opnsense_certs,
+            state.opnsense,
+        )
+    )
+
+    valid = client.post(
+        f"/api/openvpn/export/validate_presets/{OPNSENSE_SERVER_UUID}",
+        auth=auth,
+        json={
+            "openvpn_export": {
+                "template": "PlainOpenVPN",
+                "hostname": "vpn.example.test",
+            }
+        },
+    )
+    missing = client.post(
+        f"/api/openvpn/export/validate_presets/{OPNSENSE_SERVER_UUID}",
+        auth=auth,
+        json={},
+    )
+    invalid = client.post(
+        f"/api/openvpn/export/validate_presets/{OPNSENSE_SERVER_UUID}",
+        auth=auth,
+        json={
+            "openvpn_export": {
+                "template": "UnknownTemplate",
+                "hostname": "vpn.example.test",
+            }
+        },
+    )
+
+    assert valid.status_code == 200
+    assert valid.json() == {"result": "ok", "changed": False}
+    assert missing.json() == invalid.json() == {"result": "failed"}
+    assert (
+        state.opnsense_openvpn_servers,
+        state.opnsense_cas,
+        state.opnsense_certs,
+        state.opnsense,
+    ) == before
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", "/api/openvpn/export/providers", None),
+        ("GET", "/api/openvpn/export/templates", None),
+        ("GET", f"/api/openvpn/export/accounts/{OPNSENSE_SERVER_UUID}", None),
+        ("GET", f"/api/openvpn/instances/get/{OPNSENSE_SERVER_UUID}", None),
+        ("POST", "/api/trust/cert/add", {"cert": {}}),
+        ("POST", "/api/trust/cert/del/unknown", {}),
+        ("GET", "/api/trust/cert/search", None),
+        ("GET", "/api/trust/ca/ca_list", None),
+        ("GET", f"/api/trust/crl/get/{OPNSENSE_CA_REF}", None),
+        ("POST", f"/api/trust/crl/set/{OPNSENSE_CA_REF}", {"crl": {}}),
+        (
+            "POST",
+            f"/api/openvpn/export/download/{OPNSENSE_SERVER_UUID}",
+            {"openvpn_export": {}},
+        ),
+        (
+            "POST",
+            f"/api/openvpn/export/validate_presets/{OPNSENSE_SERVER_UUID}",
+            {"openvpn_export": {}},
+        ),
+        (
+            "POST",
+            f"/api/openvpn/export/download/{OPNSENSE_SERVER_UUID}/unknown",
+            {"openvpn_export": {}},
+        ),
+    ],
+)
+def test_opnsense_openvpn_endpoints_forbid_unprivileged_api_key(method, path, body):
+    client = _client()
+    response = client.request(
+        method,
+        path,
+        auth=("forbidden-key", "forbidden-secret"),
+        json=body,
+    )
+    assert response.status_code == 403
+    assert response.json() == {"status": 403, "message": "Forbidden"}
+
+
+def test_opnsense_forbidden_failure_injection_is_one_shot():
+    client = _client()
+    auth = ("demo-key", "demo-secret")
+    assert client.post("/__mock__/fail/opnsense-forbidden").json() == {
+        "status": "armed",
+        "target": "opnsense-forbidden",
+    }
+    forbidden = client.get("/api/openvpn/export/providers", auth=auth)
+    assert forbidden.status_code == 403
+    assert forbidden.json() == {"status": 403, "message": "Forbidden"}
+    assert client.get("/api/openvpn/export/providers", auth=auth).status_code == 200
 
 
 def test_nexus_mock_user_lifecycle():
@@ -613,8 +979,6 @@ def test_application_demo_workflow_with_failure_and_retry(
     import na_sso.db as db
 
     config.get_settings.cache_clear()
-
-
     db._engine = None
     db._session_factory = None
     httpx.post(f"{live_mock_url}/__mock__/reset").raise_for_status()
@@ -744,6 +1108,392 @@ def test_application_demo_workflow_with_failure_and_retry(
             for event in ("user.create", "user.update", "auto-retry", "user.delete")
         )
 
+    config.get_settings.cache_clear()
+
+
+def test_openvpn_account_download_is_gated_idempotent_and_never_audits_keys(
+    live_mock_url, tmp_path, monkeypatch
+):
+    config_path = tmp_path / "opnsense-self-service.yaml"
+    config_path.write_text(f"""version: 1
+targets:
+  - id: firewall
+    type: opnsense
+    display_name: Firewall
+    base_url: {live_mock_url}
+    verify_tls: false
+""")
+    settings = {
+        "NA_SSO_CONFIG_FILE": str(config_path),
+        "NA_SSO_DATABASE_PATH": str(tmp_path / "opnsense-self-service.db"),
+        "NA_SSO_SECRET_KEY": "opnsense-self-service-test-secret",
+        "NA_SSO_ADMIN_USERNAME": "admin",
+        "NA_SSO_ADMIN_BOOTSTRAP_PASSWORD": "demo-password",
+    }
+    for key, value in settings.items():
+        monkeypatch.setenv(key, value)
+
+    import na_sso.config as config
+    import na_sso.db as db
+
+    config.get_settings.cache_clear()
+    db._engine = db._session_factory = None
+    httpx.post(f"{live_mock_url}/__mock__/reset").raise_for_status()
+
+    from na_sso.main import app as na_sso_app
+    from na_sso.models import (
+        AuditEvent,
+        ManagedUser,
+        SyncState,
+        TargetOpenvpnConfig,
+        utcnow,
+    )
+    from na_sso.security import hash_password
+
+    user_password = "V4lid!OpenVPN-Profile-2026"
+    with TestClient(na_sso_app) as client:
+        assert client.post(
+            "/login",
+            data={"username": "admin", "password": "demo-password"},
+            follow_redirects=False,
+        ).status_code == 303
+        assert client.post(
+            "/targets/firewall/credentials",
+            data={"api_key": "demo-key", "api_secret": "demo-secret"},
+            follow_redirects=False,
+        ).status_code == 303
+        assert client.post(
+            "/targets/firewall/openvpn",
+            data={
+                "enabled": "true",
+                "vpnid": OPNSENSE_SERVER_UUID,
+                "template": "PlainOpenVPN",
+                "hostname": "vpn.example.test",
+                "cert_lifetime_days": "397",
+            },
+            follow_redirects=False,
+        ).status_code == 303
+
+        with db.get_session() as session:
+            assigned_user = ManagedUser(
+                username="vpn-user",
+                display_name="VPN User",
+                password_hash=hash_password(user_password),
+                password_changed_at=utcnow(),
+                role="user",
+                status="active",
+                desired_action="ensure",
+            )
+            unassigned_user = ManagedUser(
+                username="local-user",
+                display_name="Local User",
+                password_hash=hash_password(user_password),
+                password_changed_at=utcnow(),
+                role="user",
+                status="active",
+                desired_action="ensure",
+            )
+            session.add_all([assigned_user, unassigned_user])
+            session.flush()
+            session.add_all([
+                SyncState(
+                    user_id=assigned_user.id,
+                    target="firewall",
+                    target_type="opnsense",
+                    assigned=True,
+                    state="ok",
+                ),
+                SyncState(
+                    user_id=unassigned_user.id,
+                    target="firewall",
+                    target_type="opnsense",
+                    assigned=False,
+                    state="unassigned",
+                ),
+            ])
+            session.commit()
+
+        client.post("/logout")
+        assert client.post(
+            "/login",
+            data={"username": "vpn-user", "password": user_password},
+            follow_redirects=False,
+        ).headers["location"] == "/account"
+        account = client.get("/account")
+        assert "OpenVPN profiles" in account.text
+        assert 'action="/account/openvpn/firewall"' in account.text
+
+        with db.get_session() as session:
+            openvpn = session.query(TargetOpenvpnConfig).filter_by(
+                target_id="firewall"
+            ).one()
+            openvpn.enabled = False
+            session.commit()
+        assert client.post("/account/openvpn/firewall").status_code == 403
+        with db.get_session() as session:
+            openvpn = session.query(TargetOpenvpnConfig).filter_by(
+                target_id="firewall"
+            ).one()
+            openvpn.enabled = True
+            openvpn.verified_at = None
+            session.commit()
+        assert client.post("/account/openvpn/firewall").status_code == 403
+        with db.get_session() as session:
+            openvpn = session.query(TargetOpenvpnConfig).filter_by(
+                target_id="firewall"
+            ).one()
+            openvpn.verified_at = utcnow()
+            session.commit()
+
+        first = client.post("/account/openvpn/firewall")
+        second = client.post("/account/openvpn/firewall")
+        for response in (first, second):
+            assert response.status_code == 200
+            assert response.headers["cache-control"] == "no-store"
+            assert response.headers["pragma"] == "no-cache"
+            assert response.headers["content-type"].startswith(
+                "application/x-openvpn-profile"
+            )
+            assert response.headers["content-disposition"].startswith(
+                'attachment; filename="'
+            )
+            assert response.headers["content-disposition"].endswith('.ovpn"')
+            assert b"<cert>" in response.content
+            assert b"<key>" in response.content
+            assert b"auth-user-pass" in response.content
+
+        matching_certificates = [
+            certificate
+            for certificate in state.opnsense_certs.values()
+            if certificate["commonname"] == "vpn-user"
+            and certificate["caref"] == OPNSENSE_CA_REF
+        ]
+        assert len(matching_certificates) == 1
+
+        with db.get_session() as session:
+            downloads = session.query(AuditEvent).filter_by(
+                action="openvpn.config_downloaded",
+                subject="vpn-user",
+            ).all()
+            assert len(downloads) == 2
+            audit_detail = " ".join(event.detail for event in downloads)
+            encoded_profile = base64.b64encode(first.content).decode()
+            assert "target=firewall" in audit_detail
+            assert "mode=cert_and_password" in audit_detail
+            assert "PRIVATE KEY" not in audit_detail
+            assert encoded_profile not in audit_detail
+
+            openvpn = session.query(TargetOpenvpnConfig).filter_by(
+                target_id="firewall"
+            ).one()
+            openvpn.auth_posture = "password_only"
+            session.commit()
+
+        password_only = client.post("/account/openvpn/firewall")
+        assert password_only.status_code == 200
+        assert b"auth-user-pass" in password_only.content
+        assert b"<cert>" not in password_only.content
+        assert b"<key>" not in password_only.content
+
+        with db.get_session() as session:
+            password_audit = session.query(AuditEvent).filter_by(
+                action="openvpn.config_downloaded",
+                subject="vpn-user",
+                detail="target=firewall; mode=password_only",
+            ).one()
+            assert "PRIVATE KEY" not in password_audit.detail
+            assert base64.b64encode(password_only.content).decode() not in (
+                password_audit.detail
+            )
+
+        client.post("/logout")
+        assert client.post(
+            "/login",
+            data={"username": "local-user", "password": user_password},
+            follow_redirects=False,
+        ).headers["location"] == "/account"
+        unassigned_account = client.get("/account")
+        assert "OpenVPN profiles" not in unassigned_account.text
+        denied = client.post("/account/openvpn/firewall")
+        missing = client.post("/account/openvpn/not-a-target")
+        assert denied.status_code == missing.status_code == 403
+        assert denied.text == missing.text == "Forbidden"
+
+    db._engine = db._session_factory = None
+    config.get_settings.cache_clear()
+
+
+def test_openvpn_admin_discovery_save_verify_and_failures_against_live_mock(
+    live_mock_url, tmp_path, monkeypatch
+):
+    config_path = tmp_path / "opnsense-target.yaml"
+    config_path.write_text(f"""version: 1
+targets:
+  - id: firewall
+    type: opnsense
+    display_name: Firewall
+    base_url: {live_mock_url}
+    verify_tls: false
+""")
+    settings = {
+        "NA_SSO_CONFIG_FILE": str(config_path),
+        "NA_SSO_DATABASE_PATH": str(tmp_path / "opnsense-openvpn-app.db"),
+        "NA_SSO_SECRET_KEY": "opnsense-openvpn-test-secret",
+        "NA_SSO_ADMIN_USERNAME": "admin",
+        "NA_SSO_ADMIN_BOOTSTRAP_PASSWORD": "demo-password",
+    }
+    for key, value in settings.items():
+        monkeypatch.setenv(key, value)
+
+    import na_sso.config as config
+    import na_sso.db as db
+
+    config.get_settings.cache_clear()
+    db._engine = db._session_factory = None
+    httpx.post(f"{live_mock_url}/__mock__/reset").raise_for_status()
+
+    from na_sso.main import app as na_sso_app
+    from na_sso.models import ManagedUser, TargetOpenvpnConfig, utcnow
+    from na_sso.security import hash_password
+
+    with TestClient(na_sso_app) as client:
+        assert client.post(
+            "/login",
+            data={"username": "admin", "password": "demo-password"},
+            follow_redirects=False,
+        ).status_code == 303
+        httpx.post(
+            f"{live_mock_url}/__mock__/fail/opnsense-forbidden"
+        ).raise_for_status()
+        unavailable = client.get("/targets/firewall/openvpn/discover")
+        assert unavailable.status_code == 409
+        assert unavailable.json() == {
+            "error": "OpenVPN discovery requires verified target credentials."
+        }
+        assert "opnsense-forbidden" in state.fail_next
+        httpx.post(f"{live_mock_url}/__mock__/reset").raise_for_status()
+        assert client.post(
+            "/targets/firewall/credentials",
+            data={"api_key": "demo-key", "api_secret": "demo-secret"},
+            follow_redirects=False,
+        ).status_code == 303
+
+        discovery = client.get("/targets/firewall/openvpn/discover")
+        assert discovery.status_code == 200
+        assert discovery.json() == {
+            "servers": [
+                {
+                    "vpnid": OPNSENSE_SERVER_UUID,
+                    "name": "na-sso demo VPN udp:1194",
+                    "caref": OPNSENSE_CA_REF,
+                    "posture": "cert_and_password",
+                }
+            ],
+            "templates": [
+                "ArchiveOpenVPN",
+                "PlainOpenVPN",
+                "ViscosityVisz",
+            ],
+        }
+        status_page = client.get("/status")
+        assert "OpenVPN self-service" in status_page.text
+        assert "Save and verify OpenVPN" in status_page.text
+        assert "Each user download will write" in status_page.text
+
+        with db.get_session() as session:
+            session.add(
+                ManagedUser(
+                    username="users-only",
+                    display_name="Users only",
+                    password_hash=hash_password("V4lid!Users-Only-2026"),
+                    password_changed_at=utcnow(),
+                    role="user_operator",
+                    status="active",
+                    desired_action="ensure",
+                )
+            )
+            session.commit()
+        client.post("/logout")
+        assert client.post(
+            "/login",
+            data={
+                "username": "users-only",
+                "password": "V4lid!Users-Only-2026",
+            },
+            follow_redirects=False,
+        ).status_code == 303
+        assert (
+            client.get("/targets/firewall/openvpn/discover").status_code
+            == 403
+        )
+        client.post("/logout")
+        client.post(
+            "/login",
+            data={"username": "admin", "password": "demo-password"},
+        )
+
+        hostname_required = client.post(
+            "/targets/firewall/openvpn",
+            data={
+                "enabled": "true",
+                "vpnid": OPNSENSE_SERVER_UUID,
+                "template": "PlainOpenVPN",
+                "hostname": "",
+                "cert_lifetime_days": "397",
+            },
+        )
+        assert "hostname field is required" in hostname_required.text
+        with db.get_session() as session:
+            assert session.query(TargetOpenvpnConfig).count() == 0
+
+        verified = client.post(
+            "/targets/firewall/openvpn",
+            data={
+                "enabled": "true",
+                "vpnid": OPNSENSE_SERVER_UUID,
+                "template": "PlainOpenVPN",
+                "hostname": "vpn.example.test",
+                "cert_lifetime_days": "397",
+            },
+        )
+        assert "OpenVPN settings verified" in verified.text
+        assert "without changing firewall configuration" in verified.text
+        with db.get_session() as session:
+            row = session.query(TargetOpenvpnConfig).filter_by(
+                target_id="firewall"
+            ).one()
+            assert row.enabled is True
+            assert row.vpnid == OPNSENSE_SERVER_UUID
+            assert row.template == "PlainOpenVPN"
+            assert row.hostname == "vpn.example.test"
+            assert row.cert_lifetime_days == 397
+            assert row.verified_at is not None
+            assert row.auth_posture == "cert_and_password"
+            assert row.verify_detail == "OpenVPN export settings verified."
+
+        httpx.post(
+            f"{live_mock_url}/__mock__/fail/opnsense-forbidden"
+        ).raise_for_status()
+        forbidden = client.post(
+            "/targets/firewall/openvpn",
+            data={
+                "enabled": "true",
+                "vpnid": OPNSENSE_SERVER_UUID,
+                "template": "PlainOpenVPN",
+                "hostname": "vpn.example.test",
+                "cert_lifetime_days": "397",
+            },
+        )
+        assert "VPN: OpenVPN: Client Export" in forbidden.text
+        with db.get_session() as session:
+            row = session.query(TargetOpenvpnConfig).filter_by(
+                target_id="firewall"
+            ).one()
+            assert row.verified_at is None
+            assert row.auth_posture == ""
+            assert "VPN: OpenVPN: Client Export" in row.verify_detail
+
+    db._engine = db._session_factory = None
     config.get_settings.cache_clear()
 
 

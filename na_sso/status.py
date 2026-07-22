@@ -2,14 +2,14 @@ import asyncio
 import json
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from na_sso.auth import current_user, permission_guard
 from na_sso.connectors import get_connectors
 from na_sso.config import get_settings
 from na_sso.db import get_session
 from na_sso.feedback import redirect_with_feedback, template_response
-from na_sso.models import ManagedUser
+from na_sso.models import ManagedUser, TargetOpenvpnConfig, utcnow
 from na_sso.lifecycle import LifecycleCommand, sync_state_payload
 from na_sso.operations import get_latest_operation, operation_payload
 from na_sso.permissions import (
@@ -136,9 +136,14 @@ async def status_page(request: Request):
     admin = principal["username"]
     readiness = readiness_map()
     definitions = target_definitions()
+    with get_session() as db:
+        openvpn_rows = {
+            row.target_id: row for row in db.query(TargetOpenvpnConfig).all()
+        }
     probes = []
     for target in definitions:
         item = readiness[target.id]
+        openvpn = openvpn_rows.get(target.id)
         probes.append({
             "id": target.id,
             "name": target.display_name,
@@ -162,6 +167,20 @@ async def status_page(request: Request):
                 detail=item.detail,
                 reachable=item.reachable,
             ),
+            "openvpn": {
+                "enabled": openvpn.enabled if openvpn else False,
+                "vpnid": openvpn.vpnid if openvpn else "",
+                "template": openvpn.template if openvpn else "",
+                "hostname": openvpn.hostname if openvpn else "",
+                "cert_lifetime_days": (
+                    openvpn.cert_lifetime_days if openvpn else 397
+                ),
+                "auth_posture": openvpn.auth_posture if openvpn else "",
+                "verified_at": openvpn.verified_at if openvpn else None,
+                "verify_detail": (
+                    openvpn.verify_detail if openvpn else "Not configured"
+                ),
+            },
         })
     if not get_settings().config_file:
         probes = []
@@ -190,6 +209,238 @@ async def status_page(request: Request):
             "probes": probes,
             "expanded_target": request.query_params.get("target", ""),
         },
+    )
+
+
+def _openvpn_json_error(detail: str, status_code: int) -> JSONResponse:
+    return JSONResponse(
+        {"error": sanitise_probe_detail(detail)}, status_code=status_code
+    )
+
+
+@router.get("/targets/{target_id}/openvpn/discover")
+async def discover_target_openvpn(request: Request, target_id: str):
+    principal = permission_guard(request, MANAGE_TARGETS)
+    if isinstance(principal, Response):
+        return principal
+    target = next(
+        (item for item in target_definitions() if item.id == target_id), None
+    )
+    if target is None or target.type != "opnsense":
+        return _openvpn_json_error("OPNsense target not found.", 404)
+    readiness = readiness_map().get(target_id)
+    if readiness is None or not readiness.verified:
+        return _openvpn_json_error(
+            "OpenVPN discovery requires verified target credentials.", 409
+        )
+
+    from na_sso.connectors.base import OpenVpnDiscovery, build_unverified_connector
+
+    try:
+        result = await build_unverified_connector(target_id).discover_openvpn()
+    except ValueError as error:
+        return _openvpn_json_error(str(error), 409)
+    if not isinstance(result, OpenVpnDiscovery):
+        status_code = 403 if result.error_kind == "authentication" else 502
+        return _openvpn_json_error(result.detail, status_code)
+    return {
+        "servers": [
+            {
+                "vpnid": server.vpnid,
+                "name": server.name,
+                "caref": server.caref,
+                "posture": server.auth_posture.value,
+            }
+            for server in result.servers
+        ],
+        "templates": list(result.templates),
+    }
+
+
+def _record_openvpn_audit(
+    admin: str, target_id: str, outcome: str, detail: str
+) -> None:
+    with get_session() as db:
+        record_audit(
+            db,
+            admin,
+            "target.openvpn.updated",
+            target_id,
+            f"{outcome} — {sanitise_probe_detail(detail)}",
+        )
+        db.commit()
+
+
+@router.post("/targets/{target_id}/openvpn")
+async def configure_target_openvpn(
+    request: Request,
+    target_id: str,
+    enabled: bool = Form(False),
+    vpnid: str = Form(""),
+    template: str = Form(""),
+    hostname: str = Form(""),
+    cert_lifetime_days: int = Form(397),
+):
+    principal = permission_guard(request, MANAGE_TARGETS)
+    if isinstance(principal, Response):
+        return principal
+    admin = principal["username"]
+    target = next(
+        (item for item in target_definitions() if item.id == target_id), None
+    )
+    if target is None or target.type != "opnsense":
+        return redirect_with_feedback(
+            "/status",
+            title="Target not found",
+            message="OpenVPN settings are available only for configured OPNsense targets.",
+            level="danger",
+        )
+
+    vpnid = vpnid.strip()
+    template = template.strip()
+    hostname = hostname.strip()
+    if enabled and not hostname:
+        detail = "The hostname field is required before OpenVPN can be enabled."
+        _record_openvpn_audit(admin, target_id, "rejected", detail)
+        return redirect_with_feedback(
+            f"/status?target={target_id}",
+            title="OpenVPN settings not saved",
+            message=detail,
+            level="danger",
+        )
+    if enabled and (not vpnid or not template):
+        detail = "The server and template fields are required before OpenVPN can be enabled."
+        _record_openvpn_audit(admin, target_id, "rejected", detail)
+        return redirect_with_feedback(
+            f"/status?target={target_id}",
+            title="OpenVPN settings not saved",
+            message=detail,
+            level="danger",
+        )
+    if cert_lifetime_days < 1:
+        detail = "Certificate lifetime must be at least one day."
+        _record_openvpn_audit(admin, target_id, "rejected", detail)
+        return redirect_with_feedback(
+            f"/status?target={target_id}",
+            title="OpenVPN settings not saved",
+            message=detail,
+            level="danger",
+        )
+    readiness = readiness_map().get(target_id)
+    if readiness is None or not readiness.verified:
+        detail = "Verify the target credentials before saving OpenVPN settings."
+        _record_openvpn_audit(admin, target_id, "rejected", detail)
+        return redirect_with_feedback(
+            f"/status?target={target_id}",
+            title="OpenVPN verification unavailable",
+            message=detail,
+            level="danger",
+        )
+
+    with get_session() as db:
+        row = db.query(TargetOpenvpnConfig).filter_by(
+            target_id=target_id
+        ).one_or_none()
+        if row is None:
+            row = TargetOpenvpnConfig(target_id=target_id)
+            db.add(row)
+        row.enabled = enabled
+        row.vpnid = vpnid
+        row.template = template
+        row.hostname = hostname
+        row.cert_lifetime_days = cert_lifetime_days
+        row.auth_posture = ""
+        row.verified_at = None
+        row.verify_detail = (
+            "Verification pending"
+            if enabled
+            else "OpenVPN self-service is disabled."
+        )
+        db.commit()
+
+    if not enabled:
+        _record_openvpn_audit(
+            admin, target_id, "saved", "OpenVPN self-service disabled"
+        )
+        return redirect_with_feedback(
+            f"/status?target={target_id}",
+            title="OpenVPN settings saved",
+            message="OpenVPN self-service is disabled for this target.",
+            level="success",
+        )
+
+    from na_sso.connectors.base import (
+        ConnectorErrorKind,
+        OpenVpnDiscovery,
+        SyncResult,
+        build_unverified_connector,
+    )
+
+    try:
+        connector = build_unverified_connector(target_id)
+        discovery = await connector.discover_openvpn()
+    except ValueError as error:
+        discovery = SyncResult(
+            False, str(error), ConnectorErrorKind.VALIDATION
+        )
+
+    server = None
+    if isinstance(discovery, OpenVpnDiscovery):
+        server = next(
+            (item for item in discovery.servers if item.vpnid == vpnid), None
+        )
+        if server is None:
+            result = SyncResult(
+                False,
+                "The selected OpenVPN server was not returned by discovery.",
+                ConnectorErrorKind.VALIDATION,
+            )
+        elif template not in discovery.templates:
+            result = SyncResult(
+                False,
+                "The selected OpenVPN export template was not returned by discovery.",
+                ConnectorErrorKind.VALIDATION,
+            )
+        else:
+            result = await connector.validate_openvpn_export(
+                vpnid, template=template, hostname=hostname
+            )
+    else:
+        result = discovery
+
+    safe_detail = sanitise_probe_detail(result.detail)
+    with get_session() as db:
+        row = db.query(TargetOpenvpnConfig).filter_by(target_id=target_id).one()
+        row.verify_detail = (
+            "OpenVPN export settings verified." if result.ok else safe_detail
+        )
+        if result.ok and server is not None:
+            row.verified_at = utcnow()
+            row.auth_posture = server.auth_posture.value
+        else:
+            row.verified_at = None
+            row.auth_posture = ""
+        record_audit(
+            db,
+            admin,
+            "target.openvpn.updated",
+            target_id,
+            f"{'verified' if result.ok else 'failed'} — {safe_detail}",
+        )
+        db.commit()
+    return redirect_with_feedback(
+        f"/status?target={target_id}",
+        title=(
+            "OpenVPN settings verified"
+            if result.ok
+            else "OpenVPN verification failed"
+        ),
+        message=(
+            "The OpenVPN settings were saved and verified without changing firewall configuration."
+            if result.ok
+            else f"The OpenVPN settings were saved, but verification failed: {safe_detail}"
+        ),
+        level="success" if result.ok else "danger",
     )
 
 

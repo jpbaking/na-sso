@@ -1,0 +1,16 @@
+{
+  "1c030500-62d0-4b62-b3d2-d6a953bad087": {
+    "auth_nocache": null,
+    "cryptoapi": null,
+    "hostname": null,
+    "local_port": "1194",
+    "mode": "server_tls_user",
+    "name": "na-sso demo VPN udp:1194",
+    "plain_config": null,
+    "random_local_port": "1",
+    "static_challenge": null,
+    "template": null,
+    "validate_server_cn": "1",
+    "vpnid": "1c030500-62d0-4b62-b3d2-d6a953bad087"
+  }
+}

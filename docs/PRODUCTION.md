@@ -119,6 +119,29 @@ optional `https://`, `http://`, or `mailto:` URL. Keep the guidance free of
 management endpoints and instruct users never to send passwords or private
 keys.
 
+## OPNsense OpenVPN self-service
+
+OpenVPN client-config self-service is configured per OPNsense target in the UI,
+not in the YAML registry. Enabling it stores non-secret settings (server,
+export template, hostname, certificate lifetime) alongside the target and
+verifies them with a non-mutating check. Operational notes:
+
+- The target's management API key needs, in addition to user management, the
+  **VPN: OpenVPN: Client Export** privilege plus certificate and revocation-list
+  management. Enable verification uses discovery and preset validation only and
+  writes no firewall configuration.
+- Each user download issues (or reuses) an OPNsense client certificate whose
+  common name equals the username and writes the export presets to the
+  firewall's `config.xml`, which the firewall records in its own audit log. The
+  `.ovpn` — including its private key for certificate targets — is streamed
+  once with `no-store` headers and never persisted by NA-SSO.
+- Offboarding revokes the certificate by adding it to the certificate
+  authority's revocation list, which invalidates already-distributed profiles.
+  For the OpenVPN server to enforce this, the CA's CRL must be attached to the
+  OpenVPN instance. Deletion is used only as a fallback where the revocation
+  list cannot be updated, and that fallback does not invalidate profiles a user
+  has already downloaded.
+
 ## Bootstrap and recovery settings
 
 | Variable | Purpose |

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import re
 from time import time
 
 from fastapi import APIRouter, Form, Request
@@ -13,6 +14,64 @@ COOKIE = "na-sso-session"
 MAX_AGE = 12 * 3600
 
 router = APIRouter()
+
+
+def _assigned_sync_states(user) -> list:
+    from na_sso.lifecycle import SyncStateValue
+
+    return [
+        state
+        for state in user.sync_states
+        if state.assigned
+        and not state.retired
+        and state.state != SyncStateValue.UNASSIGNED.value
+    ]
+
+
+def _eligible_openvpn_targets(db, user) -> list[dict[str, str]]:
+    from na_sso.models import TargetOpenvpnConfig
+
+    assigned_target_ids = {
+        state.target for state in _assigned_sync_states(user)
+    }
+    if not assigned_target_ids:
+        return []
+    rows = db.query(TargetOpenvpnConfig).filter(
+        TargetOpenvpnConfig.target_id.in_(assigned_target_ids),
+        TargetOpenvpnConfig.enabled.is_(True),
+        TargetOpenvpnConfig.verified_at.is_not(None),
+    ).all()
+    definitions = {target.id: target for target in get_settings().file.targets}
+    return [
+        {
+            "id": row.target_id,
+            "name": (
+                definitions[row.target_id].display_name
+                if row.target_id in definitions
+                else row.target_id
+            ),
+            "mode": row.auth_posture,
+            "mode_label": row.auth_posture.replace("_", " "),
+        }
+        for row in sorted(rows, key=lambda item: item.target_id)
+    ]
+
+
+def _openvpn_filename(filename: str) -> str:
+    leaf = filename.replace("\\", "/").rsplit("/", 1)[-1]
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", leaf).strip("._")
+    if not safe:
+        safe = "openvpn-profile.ovpn"
+    elif not safe.lower().endswith(".ovpn"):
+        safe = f"{safe}.ovpn"
+    return safe
+
+
+def _openvpn_unavailable(*, status_code: int = 502) -> Response:
+    return Response(
+        "OpenVPN configuration is temporarily unavailable.",
+        status_code=status_code,
+    )
 
 
 def _serializer() -> URLSafeTimedSerializer:
@@ -233,9 +292,8 @@ async def account_page(request: Request):
     settings = get_settings()
     with get_session() as db:
         stored = db.get(ManagedUser, account["id"])
-        assigned_states = [
-            state for state in stored.sync_states if state.assigned and not state.retired
-        ]
+        assigned_states = _assigned_sync_states(stored)
+        openvpn_targets = _eligible_openvpn_targets(db, stored)
         now = utcnow()
         ssh_keys = [{
             "id": key.id,
@@ -301,7 +359,123 @@ async def account_page(request: Request):
         "ssh_keys": ssh_keys,
         "active_ssh_keys": active_ssh_keys,
         "ssh_key_policy": settings.file.ssh_key_policy,
+        "openvpn_targets": openvpn_targets,
     })
+
+
+@router.post("/account/openvpn/{target_id}")
+async def download_openvpn_config(request: Request, target_id: str):
+    account = current_user(request)
+    if not account:
+        return RedirectResponse("/login", status_code=303)
+    if account["restricted"]:
+        return Response("Forbidden", status_code=403)
+
+    from na_sso.db import get_session
+    from na_sso.models import ManagedUser, TargetOpenvpnConfig
+
+    with get_session() as db:
+        user = db.get(ManagedUser, account["id"])
+        assigned = bool(
+            user
+            and user.status == "active"
+            and any(
+                state.target == target_id
+                for state in _assigned_sync_states(user)
+            )
+        )
+        if not assigned:
+            return Response("Forbidden", status_code=403)
+        openvpn = db.query(TargetOpenvpnConfig).filter_by(
+            target_id=target_id
+        ).one_or_none()
+        if not openvpn or not openvpn.enabled or openvpn.verified_at is None:
+            return Response("Forbidden", status_code=403)
+        saved = {
+            "vpnid": openvpn.vpnid,
+            "template": openvpn.template,
+            "hostname": openvpn.hostname,
+            "mode": openvpn.auth_posture,
+        }
+        username = user.username
+
+    from na_sso.connectors.base import (
+        ExportedConfig,
+        OpenVpnDiscovery,
+        OpenVpnExport,
+        build_unverified_connector,
+    )
+
+    try:
+        connector = build_unverified_connector(target_id)
+    except ValueError:
+        return _openvpn_unavailable()
+    if not isinstance(connector, OpenVpnExport):
+        return _openvpn_unavailable()
+
+    discovery = await connector.discover_openvpn()
+    if not isinstance(discovery, OpenVpnDiscovery):
+        return _openvpn_unavailable()
+    server = next(
+        (item for item in discovery.servers if item.vpnid == saved["vpnid"]),
+        None,
+    )
+    if server is None or saved["template"] not in discovery.templates:
+        return _openvpn_unavailable(status_code=409)
+
+    certref = None
+    mode = saved["mode"]
+    if mode in {"cert_and_password", "cert_only"}:
+        if not server.caref:
+            return _openvpn_unavailable(status_code=409)
+        certificate = await connector.ensure_client_certificate(
+            username, caref=server.caref
+        )
+        if not isinstance(certificate, str):
+            return _openvpn_unavailable()
+        certref = certificate
+    elif mode != "password_only":
+        return _openvpn_unavailable(status_code=409)
+
+    if certref is None:
+        exported = await connector.export_config(
+            saved["vpnid"],
+            template=saved["template"],
+            hostname=saved["hostname"],
+        )
+    else:
+        exported = await connector.export_config(
+            saved["vpnid"],
+            template=saved["template"],
+            hostname=saved["hostname"],
+            username=username,
+            certref=certref,
+        )
+    if not isinstance(exported, ExportedConfig):
+        return _openvpn_unavailable()
+
+    from na_sso.audit import record_audit
+
+    with get_session() as db:
+        record_audit(
+            db,
+            username,
+            "openvpn.config_downloaded",
+            username,
+            f"target={target_id}; mode={mode}",
+        )
+        db.commit()
+    return Response(
+        exported.content,
+        media_type="application/x-openvpn-profile",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{_openvpn_filename(exported.filename)}"'
+            ),
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 @router.get("/account/password-decision")

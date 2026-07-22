@@ -1,0 +1,34 @@
+{
+  "ArchiveOpenVPN": {
+    "name": "Archive",
+    "supportedOptions": [
+      "plain_config",
+      "p12_password",
+      "random_local_port",
+      "auth_nocache",
+      "cryptoapi",
+      "static_challenge"
+    ]
+  },
+  "PlainOpenVPN": {
+    "name": "File Only",
+    "supportedOptions": [
+      "plain_config",
+      "random_local_port",
+      "auth_nocache",
+      "cryptoapi",
+      "static_challenge"
+    ]
+  },
+  "ViscosityVisz": {
+    "name": "Viscosity (visz)",
+    "supportedOptions": [
+      "plain_config",
+      "p12_password",
+      "random_local_port",
+      "auth_nocache",
+      "cryptoapi",
+      "static_challenge"
+    ]
+  }
+}

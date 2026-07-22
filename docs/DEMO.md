@@ -43,6 +43,12 @@ Configure both OPNsense mock targets identically:
 
 Select **SAVE** on each firewall separately.
 
+Once a firewall's credentials verify, its expanded target row also offers
+**OpenVPN self-service**: enabling it discovers the mock OpenVPN server and
+export templates, after which an assigned user can download their own `.ovpn`
+from their account page. See [CONNECTORS.md](CONNECTORS.md) for the capability
+and its firewall-side behavior.
+
 ### Nexus Repository
 
 | UI field | Value |

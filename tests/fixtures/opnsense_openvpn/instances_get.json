@@ -1,0 +1,694 @@
+{
+  "instance": {
+    "auth": {
+      "": {
+        "selected": 1,
+        "value": "OpenVPN default"
+      },
+      "BLAKE2b512": {
+        "selected": 0,
+        "value": "BLAKE2b512 (512-bit)"
+      },
+      "BLAKE2s256": {
+        "selected": 0,
+        "value": "BLAKE2s256 (256-bit)"
+      },
+      "MD4": {
+        "selected": 0,
+        "value": "MD4 (128-bit)"
+      },
+      "MD5": {
+        "selected": 0,
+        "value": "MD5 (128-bit)"
+      },
+      "MD5-SHA1": {
+        "selected": 0,
+        "value": "MD5-SHA1 (288-bit)"
+      },
+      "RIPEMD160": {
+        "selected": 0,
+        "value": "RIPEMD160 (160-bit)"
+      },
+      "SHA1": {
+        "selected": 0,
+        "value": "SHA1 (160-bit)"
+      },
+      "SHA224": {
+        "selected": 0,
+        "value": "SHA224 (224-bit)"
+      },
+      "SHA256": {
+        "selected": 0,
+        "value": "SHA256 (256-bit)"
+      },
+      "SHA3-224": {
+        "selected": 0,
+        "value": "SHA3-224 (224-bit)"
+      },
+      "SHA3-256": {
+        "selected": 0,
+        "value": "SHA3-256 (256-bit)"
+      },
+      "SHA3-384": {
+        "selected": 0,
+        "value": "SHA3-384 (384-bit)"
+      },
+      "SHA3-512": {
+        "selected": 0,
+        "value": "SHA3-512 (512-bit)"
+      },
+      "SHA384": {
+        "selected": 0,
+        "value": "SHA384 (384-bit)"
+      },
+      "SHA512": {
+        "selected": 0,
+        "value": "SHA512 (512-bit)"
+      },
+      "SHA512-224": {
+        "selected": 0,
+        "value": "SHA512-224 (224-bit)"
+      },
+      "SHA512-256": {
+        "selected": 0,
+        "value": "SHA512-256 (256-bit)"
+      },
+      "SHAKE128": {
+        "selected": 0,
+        "value": "SHAKE128 (128-bit)"
+      },
+      "SHAKE256": {
+        "selected": 0,
+        "value": "SHAKE256 (256-bit)"
+      },
+      "none": {
+        "selected": 0,
+        "value": "None (No Authentication)"
+      },
+      "whirlpool": {
+        "selected": 0,
+        "value": "whirlpool (512-bit)"
+      }
+    },
+    "auth-gen-token": "",
+    "auth-gen-token-renewal": "",
+    "auth-gen-token-secret": "",
+    "authmode": {
+      "Local Database": {
+        "selected": 1,
+        "value": "Local Database"
+      }
+    },
+    "bridge_gateway": "",
+    "bridge_pool": "",
+    "ca": {
+      "": {
+        "selected": 0,
+        "value": " - Use from certificate"
+      },
+      "6a5fdc1533f7f": {
+        "selected": 1,
+        "value": "na-sso demo VPN CA"
+      }
+    },
+    "carp_depend_on": {
+      "": {
+        "selected": 1,
+        "value": "None"
+      }
+    },
+    "cert": {
+      "": {
+        "selected": 0,
+        "value": "None"
+      },
+      "6a5b3e90e61c2": {
+        "selected": 0,
+        "value": "Web GUI TLS certificate"
+      },
+      "6a5fdc35d15a1": {
+        "selected": 1,
+        "value": "na-sso demo VPN server"
+      }
+    },
+    "cert_depth": {
+      "": {
+        "selected": 1,
+        "value": "Do Not Check"
+      },
+      "1": {
+        "selected": 0,
+        "value": "One (Client+Server)"
+      },
+      "2": {
+        "selected": 0,
+        "value": "Two (Client+Intermediate+Server)"
+      },
+      "3": {
+        "selected": 0,
+        "value": "Three (Client+2xIntermediate+Server)"
+      },
+      "4": {
+        "selected": 0,
+        "value": "Four (Client+3xIntermediate+Server)"
+      },
+      "5": {
+        "selected": 0,
+        "value": "Five (Client+4xIntermediate+Server)"
+      }
+    },
+    "compress_migrate": "0",
+    "crl": {
+      "": {
+        "selected": 1,
+        "value": "None"
+      }
+    },
+    "data-ciphers": {
+      "AES-128-CBC": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-128-CBC"
+      },
+      "AES-128-CFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-128-CFB"
+      },
+      "AES-128-CFB1": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-128-CFB1"
+      },
+      "AES-128-CFB8": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-128-CFB8"
+      },
+      "AES-128-GCM": {
+        "optgroup": "Recommended",
+        "selected": 0,
+        "value": "AES-128-GCM"
+      },
+      "AES-128-OFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-128-OFB"
+      },
+      "AES-192-CBC": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-192-CBC"
+      },
+      "AES-192-CFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-192-CFB"
+      },
+      "AES-192-CFB1": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-192-CFB1"
+      },
+      "AES-192-CFB8": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-192-CFB8"
+      },
+      "AES-192-GCM": {
+        "optgroup": "Recommended",
+        "selected": 0,
+        "value": "AES-192-GCM"
+      },
+      "AES-192-OFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-192-OFB"
+      },
+      "AES-256-CBC": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-256-CBC"
+      },
+      "AES-256-CFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-256-CFB"
+      },
+      "AES-256-CFB1": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-256-CFB1"
+      },
+      "AES-256-CFB8": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-256-CFB8"
+      },
+      "AES-256-GCM": {
+        "optgroup": "Recommended",
+        "selected": 0,
+        "value": "AES-256-GCM"
+      },
+      "AES-256-OFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-256-OFB"
+      },
+      "CHACHA20-POLY1305": {
+        "optgroup": "Recommended",
+        "selected": 0,
+        "value": "CHACHA20-POLY1305"
+      }
+    },
+    "data-ciphers-fallback": {
+      "": {
+        "selected": 1,
+        "value": "None"
+      },
+      "AES-128-CBC": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-128-CBC"
+      },
+      "AES-128-CFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-128-CFB"
+      },
+      "AES-128-CFB1": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-128-CFB1"
+      },
+      "AES-128-CFB8": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-128-CFB8"
+      },
+      "AES-128-GCM": {
+        "optgroup": "Recommended",
+        "selected": 0,
+        "value": "AES-128-GCM"
+      },
+      "AES-128-OFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-128-OFB"
+      },
+      "AES-192-CBC": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-192-CBC"
+      },
+      "AES-192-CFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-192-CFB"
+      },
+      "AES-192-CFB1": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-192-CFB1"
+      },
+      "AES-192-CFB8": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-192-CFB8"
+      },
+      "AES-192-GCM": {
+        "optgroup": "Recommended",
+        "selected": 0,
+        "value": "AES-192-GCM"
+      },
+      "AES-192-OFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-192-OFB"
+      },
+      "AES-256-CBC": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-256-CBC"
+      },
+      "AES-256-CFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-256-CFB"
+      },
+      "AES-256-CFB1": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-256-CFB1"
+      },
+      "AES-256-CFB8": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-256-CFB8"
+      },
+      "AES-256-GCM": {
+        "optgroup": "Recommended",
+        "selected": 0,
+        "value": "AES-256-GCM"
+      },
+      "AES-256-OFB": {
+        "optgroup": "Legacy",
+        "selected": 0,
+        "value": "AES-256-OFB"
+      },
+      "CHACHA20-POLY1305": {
+        "optgroup": "Recommended",
+        "selected": 0,
+        "value": "CHACHA20-POLY1305"
+      }
+    },
+    "description": "na-sso demo VPN",
+    "dev_type": {
+      "ovpn": {
+        "selected": 0,
+        "value": "DCO"
+      },
+      "tap": {
+        "selected": 0,
+        "value": "TAP"
+      },
+      "tun": {
+        "selected": 1,
+        "value": "TUN"
+      }
+    },
+    "dns_domain": {
+      "": {
+        "selected": 1,
+        "value": ""
+      }
+    },
+    "dns_domain_search": {
+      "": {
+        "selected": 1,
+        "value": ""
+      }
+    },
+    "dns_servers": {
+      "": {
+        "selected": 1,
+        "value": ""
+      }
+    },
+    "enabled": "1",
+    "fragment": "",
+    "http-proxy": "",
+    "ifconfig-pool-persist": "0",
+    "keepalive_interval": "",
+    "keepalive_timeout": "",
+    "local": "",
+    "local_group": {
+      "": {
+        "selected": 1,
+        "value": "None"
+      },
+      "1999": {
+        "selected": 0,
+        "value": "admins"
+      }
+    },
+    "maxclients": "",
+    "mssfix": "0",
+    "nopool": "0",
+    "ntp_servers": {
+      "": {
+        "selected": 1,
+        "value": ""
+      }
+    },
+    "password": "",
+    "port": "1194",
+    "port-share": "",
+    "proto": {
+      "tcp": {
+        "selected": 0,
+        "value": "TCP"
+      },
+      "tcp4": {
+        "selected": 0,
+        "value": "TCP (IPv4)"
+      },
+      "tcp6": {
+        "selected": 0,
+        "value": "TCP (IPv6)"
+      },
+      "udp": {
+        "selected": 1,
+        "value": "UDP"
+      },
+      "udp4": {
+        "selected": 0,
+        "value": "UDP (IPv4)"
+      },
+      "udp6": {
+        "selected": 0,
+        "value": "UDP (IPv6)"
+      }
+    },
+    "provision_exclusive": "0",
+    "push_excluded_routes": {
+      "": {
+        "selected": 1,
+        "value": ""
+      }
+    },
+    "push_inactive": "",
+    "push_route": {
+      "": {
+        "selected": 1,
+        "value": ""
+      }
+    },
+    "redirect_gateway": {
+      "!ipv4": {
+        "selected": 0,
+        "value": "not ipv4 (default)"
+      },
+      "autolocal": {
+        "selected": 0,
+        "value": "autolocal"
+      },
+      "block-local": {
+        "selected": 0,
+        "value": "block-local"
+      },
+      "bypass-dhcp": {
+        "selected": 0,
+        "value": "bypass-dhcp"
+      },
+      "bypass-dns": {
+        "selected": 0,
+        "value": "bypass-dns"
+      },
+      "def1": {
+        "selected": 0,
+        "value": "default"
+      },
+      "ipv6": {
+        "selected": 0,
+        "value": "ipv6 (default)"
+      },
+      "local": {
+        "selected": 0,
+        "value": "local"
+      }
+    },
+    "register_dns": "0",
+    "remote": {
+      "": {
+        "selected": 1,
+        "value": ""
+      }
+    },
+    "remote_cert_tls": "0",
+    "reneg-sec": "",
+    "role": {
+      "client": {
+        "selected": 0,
+        "value": "Client"
+      },
+      "server": {
+        "selected": 1,
+        "value": "Server"
+      }
+    },
+    "route": {
+      "": {
+        "selected": 1,
+        "value": ""
+      }
+    },
+    "route_metric": "",
+    "server": "10.19.47.0/24",
+    "server_ipv6": "",
+    "strictusercn": [
+      {
+        "selected": 1,
+        "value": "No"
+      },
+      {
+        "selected": 0,
+        "value": "Yes"
+      },
+      {
+        "selected": 0,
+        "value": "Yes (case insensitive)"
+      }
+    ],
+    "tls_key": {
+      "": {
+        "selected": 1,
+        "value": "None"
+      }
+    },
+    "topology": {
+      "net30": {
+        "selected": 0,
+        "value": "net30"
+      },
+      "p2p": {
+        "selected": 0,
+        "value": "p2p"
+      },
+      "subnet": {
+        "selected": 1,
+        "value": "subnet"
+      }
+    },
+    "tun_mtu": "",
+    "use_ocsp": "0",
+    "username": "",
+    "username_as_common_name": "0",
+    "various_flags": {
+      "block-ipv6": {
+        "selected": 0,
+        "value": "block-ipv6"
+      },
+      "client-to-client": {
+        "selected": 0,
+        "value": "client-to-client"
+      },
+      "duplicate-cn": {
+        "selected": 0,
+        "value": "duplicate-cn"
+      },
+      "explicit-exit-notify": {
+        "selected": 0,
+        "value": "explicit-exit-notify"
+      },
+      "fast-io": {
+        "selected": 0,
+        "value": "fast-io"
+      },
+      "float": {
+        "selected": 0,
+        "value": "float"
+      },
+      "passtos": {
+        "selected": 0,
+        "value": "passtos"
+      },
+      "persist-remote-ip": {
+        "selected": 0,
+        "value": "persist-remote-ip"
+      },
+      "remote-random": {
+        "selected": 0,
+        "value": "remote-random"
+      },
+      "route-noexec": {
+        "selected": 0,
+        "value": "route-noexec"
+      },
+      "route-nopull": {
+        "selected": 0,
+        "value": "route-nopull"
+      }
+    },
+    "various_push_flags": {
+      "block-ipv6": {
+        "selected": 0,
+        "value": "block-ipv6"
+      },
+      "block-outside-dns": {
+        "selected": 0,
+        "value": "block-outside-dns"
+      },
+      "explicit-exit-notify": {
+        "selected": 0,
+        "value": "explicit-exit-notify"
+      },
+      "register-dns": {
+        "selected": 0,
+        "value": "register-dns"
+      }
+    },
+    "verb": [
+      {
+        "selected": 0,
+        "value": "0 (No output except fatal errors.)"
+      },
+      {
+        "selected": 0,
+        "value": "1 (Normal)"
+      },
+      {
+        "selected": 0,
+        "value": "2 (Normal)"
+      },
+      {
+        "selected": 1,
+        "value": "3 (Normal)"
+      },
+      {
+        "selected": 0,
+        "value": "4 (Normal)"
+      },
+      {
+        "selected": 0,
+        "value": "5 (log packets)"
+      },
+      {
+        "selected": 0,
+        "value": "6 (debug)"
+      },
+      {
+        "selected": 0,
+        "value": "7 (debug)"
+      },
+      {
+        "selected": 0,
+        "value": "8 (debug)"
+      },
+      {
+        "selected": 0,
+        "value": "9 (debug)"
+      },
+      {
+        "selected": 0,
+        "value": "10 (debug)"
+      },
+      {
+        "selected": 0,
+        "value": "11 (debug)"
+      }
+    ],
+    "verify-x509-name": "",
+    "verify_client_cert": {
+      "none": {
+        "selected": 0,
+        "value": "none"
+      },
+      "require": {
+        "selected": 1,
+        "value": "require"
+      }
+    },
+    "vpnid": "1"
+  }
+}

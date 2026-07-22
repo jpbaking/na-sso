@@ -58,8 +58,42 @@ def test_legacy_database_gets_retry_and_soft_delete_columns(tmp_path, monkeypatc
             "api_idempotency_records",
             "service_accounts", "service_account_credentials",
             "user_ssh_keys", "unmanaged_account_findings",
+            "target_openvpn_configs",
         } <= tables
         assert connection.execute("SELECT username FROM managed_users").fetchone() == ("legacy",)
+    db._engine = db._session_factory = None
+    config.get_settings.cache_clear()
+
+
+def test_legacy_database_gains_target_openvpn_configs_table(tmp_path, monkeypatch):
+    path = tmp_path / "legacy-openvpn.db"
+    _legacy_db(path)
+    monkeypatch.setenv("NA_SSO_DATABASE_PATH", str(path))
+    import na_sso.config as config
+    import na_sso.db as db
+
+    config.get_settings.cache_clear()
+    db._engine = db._session_factory = None
+    db.init_db()
+
+    with sqlite3.connect(path) as connection:
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(target_openvpn_configs)")
+        }
+        assert {
+            "target_id",
+            "enabled",
+            "vpnid",
+            "template",
+            "hostname",
+            "cert_lifetime_days",
+            "auth_posture",
+            "verified_at",
+            "verify_detail",
+            "updated_at",
+        } <= columns
+
     db._engine = db._session_factory = None
     config.get_settings.cache_clear()
 

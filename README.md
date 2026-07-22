@@ -25,6 +25,10 @@ tracked independently, so a partial outage stays visible and recoverable.
   fingerprints with read-only target state, then explicitly approve repair.
 - Manage separate named SSH keys per device with add-before-revoke rotation,
   expiry, individual revocation, and password-confirmed emergency removal.
+- Let assigned users download their own OpenVPN client configuration from an
+  OPNsense target — bundled with an OPNsense-issued client certificate when the
+  server requires certificate plus password — and revoke it on offboarding
+  through the certificate authority's revocation list.
 - Reuse immutable assignment-profile versions while preserving visible
   per-user target and membership exceptions.
 - Preview and replay-safe execute CSV/API onboarding and offboarding with

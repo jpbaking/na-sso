@@ -60,6 +60,32 @@
     </section>
     {% endif %}
 
+    {% if openvpn_targets %}
+    <section class="card">
+      <div class="card-meta">OpenVPN access</div>
+      <h2 class="card-title">OpenVPN profiles</h2>
+      <p class="card-desc">Download a profile for an assigned VPN target. Treat the file as a private credential.</p>
+      <div class="stack-3">
+        {% for target in openvpn_targets %}
+        <div class="data-list">
+          <div class="data-row">
+            <div class="data-key">{{ target.name }}</div>
+            <div class="data-value">
+              <form method="post" action="/account/openvpn/{{ target.id }}">
+                <button class="btn btn-primary btn-sm" type="submit">Download .ovpn</button>
+              </form>
+            </div>
+          </div>
+          <div class="data-row">
+            <div class="data-key">Authentication</div>
+            <div class="data-value">{{ target.mode_label }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
     {% if account.role != 'root' %}
     <section class="card">
       <div class="card-meta">SSH access</div>

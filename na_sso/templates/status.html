@@ -59,6 +59,57 @@
         </form>
         {% endif %}
       </div>
+      {% if p.type == 'opnsense' and p.verified and p.openvpn is defined %}
+      <form method="post" action="/targets/{{ p.id }}/openvpn" class="disclosure-body stack-2" data-openvpn-config data-discover-url="/targets/{{ p.id }}/openvpn/discover">
+        <div class="label">OpenVPN self-service</div>
+        <label class="checkbox"><input type="checkbox" name="enabled" value="true" data-openvpn-enabled{% if p.openvpn.enabled %} checked{% endif %}> Enable user OpenVPN configuration</label>
+        <p class="field-hint">Verification reads server metadata and validates the export preset. It does not change the firewall configuration.</p>
+        <div class="alert alert-info" role="note">
+          <div class="alert-title">Firewall write warning</div>
+          Each user download will write certificate or export state to the firewall configuration and its audit log.
+        </div>
+        <div class="field">
+          <label class="label" for="openvpn-server-{{ p.id }}">Server</label>
+          <select class="select" id="openvpn-server-{{ p.id }}" name="vpnid" data-openvpn-server data-selected="{{ p.openvpn.vpnid }}"{% if p.openvpn.enabled %} required{% endif %}>
+            <option value="">Loading available servers…</option>
+            {% if p.openvpn.vpnid %}<option value="{{ p.openvpn.vpnid }}" selected>Saved server ({{ p.openvpn.vpnid }})</option>{% endif %}
+          </select>
+        </div>
+        <div class="field">
+          <label class="label" for="openvpn-template-{{ p.id }}">Export template</label>
+          <select class="select" id="openvpn-template-{{ p.id }}" name="template" data-openvpn-template data-selected="{{ p.openvpn.template }}"{% if p.openvpn.enabled %} required{% endif %}>
+            <option value="">Loading available templates…</option>
+            {% if p.openvpn.template %}<option value="{{ p.openvpn.template }}" selected>{{ p.openvpn.template }}</option>{% endif %}
+          </select>
+        </div>
+        <div class="field">
+          <label class="label" for="openvpn-hostname-{{ p.id }}">Hostname</label>
+          <input class="input" id="openvpn-hostname-{{ p.id }}" name="hostname" value="{{ p.openvpn.hostname }}" data-openvpn-hostname{% if p.openvpn.enabled %} required{% endif %}>
+          <p class="field-hint">Required when enabled. Use the reachable hostname clients should place in the <code>remote</code> directive.</p>
+        </div>
+        <div class="field">
+          <label class="label" for="openvpn-cert-lifetime-{{ p.id }}">Client certificate lifetime (days)</label>
+          <input class="input" id="openvpn-cert-lifetime-{{ p.id }}" name="cert_lifetime_days" type="number" min="1" value="{{ p.openvpn.cert_lifetime_days }}" required>
+        </div>
+        <div class="field">
+          <label class="label" for="openvpn-posture-{{ p.id }}">Detected authentication posture</label>
+          <input class="input" id="openvpn-posture-{{ p.id }}" value="{{ p.openvpn.auth_posture | replace('_', ' ') if p.openvpn.auth_posture else 'Not verified' }}" data-openvpn-posture readonly>
+        </div>
+        <div class="data-list">
+          <div class="data-row">
+            <div class="data-key">OpenVPN verification</div>
+            <div class="data-value">{{ p.openvpn.verified_at.strftime('%Y-%m-%d %H:%M:%S') ~ ' UTC' if p.openvpn.verified_at else 'Not verified' }}</div>
+          </div>
+          <div class="data-row">
+            <div class="data-key">Detail</div>
+            <div class="data-value">{{ p.openvpn.verify_detail }}</div>
+          </div>
+        </div>
+        <div class="alert alert-info" data-openvpn-discovery-status hidden></div>
+        <noscript><div class="alert alert-info">JavaScript is unavailable. Saved selections remain usable; enable JavaScript to refresh servers and templates from the firewall.</div></noscript>
+        <button class="btn btn-primary btn-sm" type="submit">Save and verify OpenVPN</button>
+      </form>
+      {% endif %}
       <form method="post" action="/targets/{{ p.id }}/credentials" enctype="multipart/form-data" class="disclosure-body stack-1"{% if p.type == 'ssh' %} data-ssh-credentials{% endif %}>
         {% if p.type in ['gitlab', 'gitea', 'immich', 'jenkins'] %}<input type="hidden" name="auth_mode" value="token">{% endif %}
         {% if p.type == 'opnsense' %}
@@ -118,6 +169,59 @@ document.querySelectorAll('[data-ssh-credentials]').forEach(form => {
   };
   mode.addEventListener('change', syncAuthenticationFields);
   syncAuthenticationFields();
+});
+document.querySelectorAll('[data-openvpn-config]').forEach(form => {
+  const enabled = form.querySelector('[data-openvpn-enabled]');
+  const server = form.querySelector('[data-openvpn-server]');
+  const template = form.querySelector('[data-openvpn-template]');
+  const hostname = form.querySelector('[data-openvpn-hostname]');
+  const posture = form.querySelector('[data-openvpn-posture]');
+  const status = form.querySelector('[data-openvpn-discovery-status]');
+  let servers = [];
+  const readablePosture = value => value ? value.replaceAll('_', ' ') : 'Not verified';
+  const syncRequiredFields = () => {
+    [server, template, hostname].forEach(field => { field.required = enabled.checked; });
+  };
+  const syncPosture = () => {
+    const selected = servers.find(item => item.vpnid === server.value);
+    posture.value = selected ? readablePosture(selected.posture) : 'Not verified';
+  };
+  enabled.addEventListener('change', syncRequiredFields);
+  server.addEventListener('change', syncPosture);
+  syncRequiredFields();
+  fetch(form.dataset.discoverUrl, { headers: { 'Accept': 'application/json' } })
+    .then(async response => {
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'OpenVPN discovery failed.');
+      return payload;
+    })
+    .then(payload => {
+      servers = payload.servers || [];
+      const savedServer = server.dataset.selected;
+      const serverOptions = [new Option('Select a server', '')];
+      servers.forEach(item => {
+        const label = `${item.name || item.vpnid} — ${readablePosture(item.posture)}`;
+        serverOptions.push(new Option(label, item.vpnid, false, item.vpnid === savedServer));
+      });
+      if (savedServer && !servers.some(item => item.vpnid === savedServer)) {
+        serverOptions.push(new Option(`Saved server unavailable (${savedServer})`, savedServer, false, true));
+      }
+      server.replaceChildren(...serverOptions);
+      const savedTemplate = template.dataset.selected;
+      const templateOptions = [new Option('Select a template', '')];
+      (payload.templates || []).forEach(item => {
+        templateOptions.push(new Option(item, item, false, item === savedTemplate));
+      });
+      if (savedTemplate && !(payload.templates || []).includes(savedTemplate)) {
+        templateOptions.push(new Option(`Saved template unavailable (${savedTemplate})`, savedTemplate, false, true));
+      }
+      template.replaceChildren(...templateOptions);
+      syncPosture();
+    })
+    .catch(error => {
+      status.hidden = false;
+      status.textContent = error.message;
+    });
 });
 </script>
 {% endblock %}

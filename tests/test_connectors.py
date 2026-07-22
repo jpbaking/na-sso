@@ -3,7 +3,15 @@ import pytest
 import respx
 from httpx import Response
 
-from na_sso.connectors.base import Connector, SyncResult
+from na_sso.connectors.base import (
+    Connector,
+    ConnectorErrorKind,
+    ExportedConfig,
+    OpenVpnAuthPosture,
+    OpenVpnDiscovery,
+    OpenVpnExport,
+    SyncResult,
+)
 from na_sso.models import ManagedUser
 from na_sso.reconciliation import DriftState, ReconciliationField, ReconciliationStatus
 
@@ -444,6 +452,517 @@ def opnsense(monkeypatch):
 
     yield OPNsenseConnector(config.get_settings())
     config.get_settings.cache_clear()
+
+
+class _RecordingAsgiTransport(httpx.AsyncBaseTransport):
+    def __init__(self, app, requests):
+        self._transport = httpx.ASGITransport(app=app)
+        self._requests = requests
+
+    async def handle_async_request(self, request):
+        self._requests.append(
+            (
+                request.method,
+                request.url.path,
+                request.url.query,
+                bytes(request.content),
+            )
+        )
+        return await self._transport.handle_async_request(request)
+
+    async def aclose(self):
+        await self._transport.aclose()
+
+
+@pytest.fixture()
+def opnsense_openvpn_mock(monkeypatch, tmp_path):
+    import na_sso.config as config
+    import na_sso.db as database
+    from na_sso.config import OpnsenseTarget
+    from na_sso.connectors.opnsense import OPNsenseConnector
+    from na_sso.mock_targets.app import app, state
+
+    monkeypatch.setenv("NA_SSO_DATABASE_PATH", str(tmp_path / "openvpn.db"))
+    config.get_settings.cache_clear()
+    database._engine = database._session_factory = None
+    database.init_db()
+    state.reset()
+    requests = []
+    connector = OPNsenseConnector(OpnsenseTarget(
+        id="firewall", type="opnsense", display_name="Firewall",
+        base_url="http://opnsense.mock", api_key="demo-key",
+        api_secret="demo-secret", verify_tls=False,
+    ))
+
+    def mock_client():
+        return httpx.AsyncClient(
+            transport=_RecordingAsgiTransport(app, requests),
+            base_url="http://opnsense.mock/api",
+            auth=("demo-key", "demo-secret"),
+        )
+
+    monkeypatch.setattr(connector, "_client", mock_client)
+    try:
+        yield connector, requests
+    finally:
+        state.reset()
+        database._engine = database._session_factory = None
+        config.get_settings.cache_clear()
+
+
+def _configure_openvpn_offboarding(*, enabled: bool = True) -> None:
+    from na_sso.db import get_session
+    from na_sso.mock_targets.app import OPNSENSE_SERVER_UUID
+    from na_sso.models import TargetOpenvpnConfig, utcnow
+
+    with get_session() as db:
+        db.add(TargetOpenvpnConfig(
+            target_id="firewall",
+            enabled=enabled,
+            vpnid=OPNSENSE_SERVER_UUID,
+            template="PlainOpenVPN",
+            hostname="vpn.example.test",
+            auth_posture="cert_and_password",
+            verified_at=utcnow(),
+            verify_detail="verified",
+        ))
+        db.commit()
+
+
+async def test_opnsense_discovers_openvpn_posture_and_templates_from_mock(
+    opnsense_openvpn_mock,
+):
+    from na_sso.mock_targets.app import OPNSENSE_CA_REF, OPNSENSE_SERVER_UUID
+
+    connector, requests = opnsense_openvpn_mock
+
+    discovery = await connector.discover_openvpn()
+
+    assert isinstance(connector, OpenVpnExport)
+    assert "discover_openvpn" not in Connector.__abstractmethods__
+    assert isinstance(discovery, OpenVpnDiscovery)
+    assert discovery.servers == (
+        discovery.servers[0].__class__(
+            vpnid=OPNSENSE_SERVER_UUID,
+            name="na-sso demo VPN udp:1194",
+            caref=OPNSENSE_CA_REF,
+            auth_posture=OpenVpnAuthPosture.CERT_AND_PASSWORD,
+        ),
+    )
+    assert discovery.templates == (
+        "ArchiveOpenVPN",
+        "PlainOpenVPN",
+        "ViscosityVisz",
+    )
+    assert [path for _, path, _, _ in requests] == [
+        "/api/openvpn/export/providers",
+        "/api/openvpn/export/templates",
+        f"/api/openvpn/instances/get/{OPNSENSE_SERVER_UUID}",
+    ]
+
+
+async def test_opnsense_ensures_client_certificate_idempotently_with_exact_payload(
+    opnsense_openvpn_mock,
+):
+    import json
+
+    from na_sso.mock_targets.app import OPNSENSE_CA_REF, state
+
+    connector, requests = opnsense_openvpn_mock
+
+    first = await connector.ensure_client_certificate("jdoe", caref=OPNSENSE_CA_REF)
+    second = await connector.ensure_client_certificate("jdoe", caref=OPNSENSE_CA_REF)
+
+    assert isinstance(first, str) and second == first
+    matching = [
+        cert for cert in state.opnsense_certs.values()
+        if cert["commonname"] == "jdoe"
+        and cert["caref"] == OPNSENSE_CA_REF
+        and cert["cert_type"] == "usr_cert"
+    ]
+    assert len(matching) == 1 and matching[0]["refid"] == first
+    add_requests = [item for item in requests if item[1] == "/api/trust/cert/add"]
+    search_requests = [
+        item for item in requests if item[1] == "/api/trust/cert/search"
+    ]
+    assert len(add_requests) == 1
+    assert len(search_requests) == 3
+    assert all(not query for _, _, query, _ in search_requests)
+    assert json.loads(add_requests[0][3]) == {
+        "cert": {
+            "action": "internal",
+            "caref": OPNSENSE_CA_REF,
+            "cert_type": "usr_cert",
+            "commonname": "jdoe",
+            "descr": "na-sso jdoe firewall",
+            "key_type": "2048",
+            "digest": "sha256",
+            "lifetime": 397,
+            "private_key_location": "firewall",
+            "country": "NL",
+        }
+    }
+
+
+async def test_opnsense_revokes_client_certificate_idempotently(
+    opnsense_openvpn_mock,
+):
+    import json
+
+    from na_sso.mock_targets.app import OPNSENSE_CA_REF, state
+
+    connector, requests = opnsense_openvpn_mock
+    certref = await connector.ensure_client_certificate(
+        "jdoe", caref=OPNSENSE_CA_REF
+    )
+    assert isinstance(certref, str)
+
+    first = await connector.revoke_client_certificate(
+        "jdoe", caref=OPNSENSE_CA_REF
+    )
+    request_count = len(requests)
+    second = await connector.revoke_client_certificate(
+        "jdoe", caref=OPNSENSE_CA_REF
+    )
+
+    assert first.ok and first.detail == "revoked via CRL"
+    assert second.ok and second.detail == "revoked via CRL"
+    assert certref in state.opnsense_certs
+    assert certref in state.opnsense_crls[OPNSENSE_CA_REF]["revoked"][0]
+    assert certref not in connector._openvpn_client_certificates
+    crl_set_requests = [
+        item for item in requests if item[1] == f"/api/trust/crl/set/{OPNSENSE_CA_REF}"
+    ]
+    assert len(crl_set_requests) == 2
+    assert json.loads(crl_set_requests[0][3])["crl"]["lifetime"] == "9999"
+    assert [path for _, path, _, _ in requests[request_count:]] == [
+        "/api/trust/cert/search",
+        f"/api/trust/crl/get/{OPNSENSE_CA_REF}",
+        f"/api/trust/crl/set/{OPNSENSE_CA_REF}",
+    ]
+    assert not any("/api/trust/cert/del/" in path for _, path, _, _ in requests)
+
+
+async def test_opnsense_issues_fresh_certificate_instead_of_reusing_revoked_one(
+    opnsense_openvpn_mock,
+):
+    from na_sso.mock_targets.app import OPNSENSE_CA_REF, state
+
+    connector, _ = opnsense_openvpn_mock
+    revoked_ref = await connector.ensure_client_certificate(
+        "jdoe", caref=OPNSENSE_CA_REF
+    )
+    assert isinstance(revoked_ref, str)
+    assert (
+        await connector.revoke_client_certificate(
+            "jdoe", caref=OPNSENSE_CA_REF
+        )
+    ).ok
+
+    fresh_ref = await connector.ensure_client_certificate(
+        "jdoe", caref=OPNSENSE_CA_REF
+    )
+
+    assert isinstance(fresh_ref, str) and fresh_ref != revoked_ref
+    assert revoked_ref in state.opnsense_crls[OPNSENSE_CA_REF]["revoked"][0]
+    assert fresh_ref not in state.opnsense_crls[OPNSENSE_CA_REF]["revoked"][0]
+    assert {
+        cert["refid"]
+        for cert in state.opnsense_certs.values()
+        if cert["commonname"] == "jdoe" and cert["caref"] == OPNSENSE_CA_REF
+    } == {revoked_ref, fresh_ref}
+
+
+async def test_opnsense_crl_merge_preserves_an_earlier_revocation(
+    opnsense_openvpn_mock,
+):
+    from na_sso.mock_targets.app import OPNSENSE_CA_REF, state
+
+    connector, _ = opnsense_openvpn_mock
+    first_ref = await connector.ensure_client_certificate(
+        "first-user", caref=OPNSENSE_CA_REF
+    )
+    second_ref = await connector.ensure_client_certificate(
+        "second-user", caref=OPNSENSE_CA_REF
+    )
+    assert isinstance(first_ref, str) and isinstance(second_ref, str)
+
+    first = await connector.revoke_client_certificate(
+        "first-user", caref=OPNSENSE_CA_REF
+    )
+    second = await connector.revoke_client_certificate(
+        "second-user", caref=OPNSENSE_CA_REF
+    )
+
+    assert first.ok and second.ok
+    assert set(state.opnsense_crls[OPNSENSE_CA_REF]["revoked"][0]) == {
+        first_ref,
+        second_ref,
+    }
+
+
+@pytest.mark.parametrize("identity_action", ["disable", "delete"])
+async def test_opnsense_crl_and_delete_failure_fails_offboarding_after_identity(
+    opnsense_openvpn_mock,
+    identity_action,
+):
+    from na_sso.mock_targets.app import OPNSENSE_CA_REF, state
+
+    connector, _ = opnsense_openvpn_mock
+    _configure_openvpn_offboarding()
+    user = _user(status="active")
+    assert (await connector.ensure_user(user, "temporary-password")).ok
+    certref = await connector.ensure_client_certificate(
+        user.username, caref=OPNSENSE_CA_REF
+    )
+    assert isinstance(certref, str)
+    state.fail_next.update({"opnsense-crl-set", "opnsense-cert-delete"})
+
+    if identity_action == "disable":
+        user.status = "disabled"
+        result = await connector.disable_user(user)
+    else:
+        result = await connector.delete_user(user)
+
+    assert not result.ok
+    assert "client certificate for jdoe" in result.detail
+    assert certref in state.opnsense_certs
+    if identity_action == "disable":
+        assert state.opnsense[user.username]["disabled"] == "1"
+    else:
+        assert user.username not in state.opnsense
+
+
+async def test_opnsense_crl_failure_is_logged_but_delete_and_offboarding_succeed(
+    opnsense_openvpn_mock,
+    caplog,
+):
+    from na_sso.mock_targets.app import OPNSENSE_CA_REF, state
+
+    connector, _ = opnsense_openvpn_mock
+    _configure_openvpn_offboarding()
+    user = _user(status="active")
+    assert (await connector.ensure_user(user, "temporary-password")).ok
+    certref = await connector.ensure_client_certificate(
+        user.username, caref=OPNSENSE_CA_REF
+    )
+    assert isinstance(certref, str)
+    state.fail_next.add("opnsense-crl-set")
+    user.status = "disabled"
+
+    with caplog.at_level("WARNING", logger="na_sso.connectors.opnsense"):
+        result = await connector.disable_user(user)
+
+    assert result.ok
+    assert "CRL unavailable; revoked by deletion" in result.detail
+    assert "already-distributed profiles may remain valid" in result.detail
+    assert certref not in state.opnsense_certs
+    assert state.opnsense[user.username]["disabled"] == "1"
+    assert "falling back to delete" in caplog.text
+
+
+async def test_opnsense_disable_audits_successful_certificate_revocation(
+    opnsense_openvpn_mock,
+):
+    from na_sso.db import get_session
+    from na_sso.mock_targets.app import OPNSENSE_CA_REF
+    from na_sso.models import AuditEvent
+
+    connector, requests = opnsense_openvpn_mock
+    _configure_openvpn_offboarding()
+    user = _user(status="active")
+    assert (await connector.ensure_user(user, "temporary-password")).ok
+    assert isinstance(
+        await connector.ensure_client_certificate(
+            user.username, caref=OPNSENSE_CA_REF
+        ),
+        str,
+    )
+    user.status = "disabled"
+    requests.clear()
+
+    result = await connector.disable_user(user)
+
+    assert result.ok
+    assert not any("/api/trust/cert/del/" in path for _, path, _, _ in requests)
+    with get_session() as db:
+        event = db.query(AuditEvent).filter_by(
+            action="openvpn.certificate_revoked",
+            subject=user.username,
+        ).one()
+        assert event.actor == "system"
+        assert "target=firewall" in event.detail
+        assert "PRIVATE KEY" not in event.detail
+
+
+@pytest.mark.parametrize("identity_action", ["disable", "delete"])
+@pytest.mark.parametrize("configuration", ["absent", "disabled"])
+async def test_opnsense_identity_only_offboarding_makes_no_openvpn_trust_calls_or_audit(
+    opnsense_openvpn_mock,
+    identity_action,
+    configuration,
+):
+    from na_sso.db import get_session
+    from na_sso.models import AuditEvent
+
+    connector, requests = opnsense_openvpn_mock
+    if configuration == "disabled":
+        _configure_openvpn_offboarding(enabled=False)
+    user = _user(status="active")
+    assert (await connector.ensure_user(user, "temporary-password")).ok
+    requests.clear()
+
+    if identity_action == "disable":
+        user.status = "disabled"
+        result = await connector.disable_user(user)
+    else:
+        result = await connector.delete_user(user)
+
+    assert result.ok
+    paths = [path for _, path, _, _ in requests]
+    assert paths
+    assert all("/trust/" not in path and "/openvpn/" not in path for path in paths)
+    with get_session() as db:
+        assert db.query(AuditEvent).filter_by(
+            action="openvpn.certificate_revoked"
+        ).count() == 0
+
+
+async def test_opnsense_exports_password_only_and_connector_issued_certificate_modes(
+    opnsense_openvpn_mock,
+):
+    from na_sso.mock_targets.app import OPNSENSE_CA_REF, OPNSENSE_SERVER_UUID
+
+    connector, requests = opnsense_openvpn_mock
+
+    password_only = await connector.export_config(
+        OPNSENSE_SERVER_UUID,
+        template="PlainOpenVPN",
+        hostname="vpn.example.test",
+    )
+    certref = await connector.ensure_client_certificate("jdoe", caref=OPNSENSE_CA_REF)
+    assert isinstance(certref, str)
+    with_certificate = await connector.export_config(
+        OPNSENSE_SERVER_UUID,
+        template="PlainOpenVPN",
+        hostname="vpn.example.test",
+        username="jdoe",
+        certref=certref,
+    )
+
+    assert isinstance(password_only, ExportedConfig)
+    assert password_only.filename == "na_sso_demo_VPN.ovpn"
+    assert b"auth-user-pass" in password_only.content
+    assert b"<cert>" not in password_only.content and b"<key>" not in password_only.content
+    assert isinstance(with_certificate, ExportedConfig)
+    assert with_certificate.filename == "na_sso_demo_VPN_jdoe.ovpn"
+    assert b"<cert>" in with_certificate.content and b"<key>" in with_certificate.content
+    download_paths = [
+        path
+        for method, path, _, _ in requests
+        if method == "POST" and "/download/" in path
+    ]
+    assert download_paths == [
+        f"/api/openvpn/export/download/{OPNSENSE_SERVER_UUID}",
+        f"/api/openvpn/export/download/{OPNSENSE_SERVER_UUID}/{certref}",
+    ]
+
+
+async def test_opnsense_rejects_untrusted_client_certref_before_export(
+    opnsense_openvpn_mock,
+):
+    from na_sso.mock_targets.app import OPNSENSE_SERVER_CERT_REF, OPNSENSE_SERVER_UUID
+
+    connector, requests = opnsense_openvpn_mock
+
+    result = await connector.export_config(
+        OPNSENSE_SERVER_UUID,
+        template="PlainOpenVPN",
+        hostname="vpn.example.test",
+        username="jdoe",
+        certref=OPNSENSE_SERVER_CERT_REF,
+    )
+
+    assert isinstance(result, SyncResult)
+    assert not result.ok and result.error_kind is ConnectorErrorKind.VALIDATION
+    assert not any("/download/" in path for _, path, _, _ in requests)
+
+
+async def test_opnsense_openvpn_403_names_required_privilege_and_is_sanitised(monkeypatch):
+    from na_sso.config import OpnsenseTarget
+    from na_sso.connectors.opnsense import OPNsenseConnector
+    from na_sso.mock_targets.app import app, state
+
+    state.reset()
+    connector = OPNsenseConnector(OpnsenseTarget(
+        id="firewall", type="opnsense", display_name="Firewall",
+        base_url="http://opnsense.mock", api_key="forbidden-key",
+        api_secret="forbidden-secret", verify_tls=False,
+    ))
+
+    def mock_client():
+        return httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://opnsense.mock/api",
+            auth=("forbidden-key", "forbidden-secret"),
+        )
+
+    monkeypatch.setattr(connector, "_client", mock_client)
+
+    result = await connector.discover_openvpn()
+
+    assert isinstance(result, SyncResult)
+    assert not result.ok and result.error_kind is ConnectorErrorKind.AUTHENTICATION
+    assert "VPN: OpenVPN: Client Export" in result.detail
+    assert all(
+        marker not in result.detail
+        for marker in ("forbidden-secret", "BEGIN PRIVATE KEY", "content")
+    )
+
+
+@respx.mock
+async def test_opnsense_openvpn_validation_is_non_mutating(opnsense):
+    import json
+
+    validate = respx.post(
+        "https://fw.test/api/openvpn/export/validate_presets/vpn-1"
+    ).mock(return_value=Response(200, json={"result": "ok", "changed": False}))
+
+    result = await opnsense.validate_openvpn_export(
+        "vpn-1", template="PlainOpenVPN", hostname="vpn.example.test"
+    )
+
+    assert result.ok and result.detail == "valid"
+    assert json.loads(validate.calls[0].request.content) == {
+        "openvpn_export": {
+            "template": "PlainOpenVPN",
+            "hostname": "vpn.example.test",
+        }
+    }
+
+
+@respx.mock
+async def test_opnsense_openvpn_ca_error_maps_to_sanitised_validation(opnsense):
+    sensitive_marker = "private-key-material-sentinel"
+    opnsense._openvpn_client_certificates["issued-ref"] = ("jdoe", "other-ca")
+    respx.post(
+        "https://fw.test/api/openvpn/export/download/vpn-1/issued-ref"
+    ).mock(return_value=Response(500, json={
+        "errorMessage": "Certificate does not belong to server CA",
+        "content": sensitive_marker,
+    }))
+
+    result = await opnsense.export_config(
+        "vpn-1",
+        template="PlainOpenVPN",
+        hostname="vpn.example.test",
+        username="jdoe",
+        certref="issued-ref",
+    )
+
+    assert isinstance(result, SyncResult)
+    assert not result.ok and result.error_kind is ConnectorErrorKind.VALIDATION
+    assert sensitive_marker not in result.detail
 
 
 @respx.mock
