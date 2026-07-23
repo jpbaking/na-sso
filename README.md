@@ -102,24 +102,30 @@ Targets keep authenticating their users locally. NA-SSO coordinates those
 accounts; it does not sit in the login path and does not become an SSO
 dependency.
 
-## See it or deploy it
+## Who it's for
 
-Try the complete application against protocol-faithful mock APIs and isolated
-OpenSSH targets:
+If you run a handful of self-hosted systems that each keep their **own** local
+accounts — a firewall, a couple of Git servers, a CI server, an artifact
+repository, file sync, photos, a reverse proxy, some Linux boxes — you already
+know the tax: onboarding means logging into eight admin panels, offboarding is a
+checklist you hope you finished, and nobody can say with confidence who has
+access to what. Standing up a full identity provider and rewiring every system's
+login is more than you want. NA-SSO is the middle path: one console that keeps
+those local accounts consistent, observable, and recoverable, without touching
+how anyone signs in.
 
-**[Run the demo](docs/DEMO.md)**
+## Guides
 
-Prepare configuration, target permissions, backups, and normal operations:
+Start where you fit:
 
-**[Production guide](docs/PRODUCTION.md)**
-
-Understand the implementation, synchronization model, and engineering workflow:
-
-**[Developer guide](docs/DEVELOPER.md)**
-
-Extend target support against the versioned capability and conformance rules:
-
-**[Connector contract](docs/CONNECTORS.md)**
+| You are… | Read |
+| --- | --- |
+| **Evaluating it** | [Demo guide](docs/DEMO.md) — the whole app against protocol-faithful mock APIs and isolated OpenSSH targets, no real systems touched. |
+| **Deploying it** | [Build & deployment guide](docs/PRODUCTION.md) — build, secrets, target permissions, TLS/ingress, MFA, notifications, backups. |
+| **Operating it** | [Administrator guide](docs/ADMIN.md) — targets, users, CHPW, reconciliation, imports, access reviews, audit, and automation. |
+| **A managed user** | [User guide](docs/USER.md) — sign-in, taking over your password, SSH keys, and OpenVPN. |
+| **Extending it** | [Connector contract](docs/CONNECTORS.md) — add a target against the versioned capability and conformance rules. |
+| **Hacking on it** | [Developer guide](docs/DEVELOPER.md) — internals, the synchronization model, and the engineering workflow. |
 
 NA-SSO is intentionally not SSO. It is a practical control plane for
 environments where important systems still own local users and those accounts

@@ -1,16 +1,26 @@
-# Production guide
+# Build & deployment guide
 
-This guide covers the normal, demo-free Compose model in
-`docker-compose.yaml`. The file is production-focused, but a production rollout
-still requires deployment-managed secrets, immutable image distribution,
-ingress/TLS, monitoring, backups, and environment-specific hardening.
+This is the guide for **deployers**: how to build the image, supply
+configuration and secrets, register targets, wire up TLS/ingress, MFA,
+notifications, backups, and bring NA-SSO up for real. It covers the normal,
+demo-free Compose model in `docker-compose.yaml`. The file is
+production-focused, but a production rollout still requires deployment-managed
+secrets, immutable image distribution, ingress/TLS, monitoring, backups, and
+environment-specific hardening.
+
+Once NA-SSO is running, the other guides take over by audience:
+
+- **[Administrator guide](ADMIN.md)** — running the console: targets, users,
+  reconciliation, imports, access reviews, audit, and automation.
+- **[User guide](USER.md)** — what to hand an end user: sign-in, password,
+  SSH keys, and OpenVPN.
+- **[Demo guide](DEMO.md)** — evaluate everything against mock targets first.
+- **[Developer guide](DEVELOPER.md)** — internals, synchronization state, and
+  local engineering setup.
 
 `compose-helper.sh` is designed for local administration and explicitly is not
 a complete production orchestrator. Review its behavior before using it in an
 automated or privileged environment.
-
-For internal architecture, synchronization state, and local engineering setup,
-see the [developer guide](DEVELOPER.md).
 
 Configure `ssh_key_policy.default_expiry_days` and `max_expiry_days` to match
 device-credential policy. Users may keep separate named keys per device.
