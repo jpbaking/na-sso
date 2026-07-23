@@ -37,3 +37,4 @@
 - delegation directive (standing): codex strong-tier implements slices; orchestrator keeps ledger bookkeeping, diff review, gate runs, commits; live CI confirmation is orchestrator-owned
 - findings source: docs/NEXT-PHASE.md "Future product review observations" (recorded 2026-07-23 by the browser-verification goal)
 - user accepted 2026-07-23; squash preconditions verified (11/11 Goal-ID, no merges, branch unpublished); squashed to one snapshot, ff-merged to main, branch deleted, pushed; .goal-ledger retained; the deferred phase-0005 live-CI check is recorded below by a follow-up commit once the run finishes (it cannot precede the push that triggers it)
+- deferred phase-0005 check SATISFIED 2026-07-23: first live CI run 30000944445 on main GREEN — Unit 4m28s, Browser 1m47s (https://github.com/jpbaking/na-sso/actions/runs/30000944445); pinned action majors proven
