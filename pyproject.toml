@@ -24,8 +24,10 @@ na-ssoctl = "na_sso.cli:main"
 
 [project.optional-dependencies]
 dev = [
+    "playwright>=1.49",
     "pytest>=8",
     "pytest-asyncio>=0.23",
+    "pytest-playwright>=0.6",
     "respx>=0.21",
     "httpx2>=2.7,<3",
     "ruff>=0.15,<1",
@@ -42,5 +44,9 @@ include = ["na_sso*"]
 na_sso = ["templates/*", "static/*", "static/design/**/*"]
 
 [tool.pytest.ini_options]
+addopts = "-m 'not browser'"
 asyncio_mode = "auto"
+markers = [
+    "browser: headless browser end-to-end tests (excluded by default)",
+]
 testpaths = ["tests"]

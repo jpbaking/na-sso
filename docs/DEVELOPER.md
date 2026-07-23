@@ -11,8 +11,10 @@ Python 3.12 or newer is required:
 
 ```sh
 python -m venv .venv
-.venv/bin/pip install -e '.[dev]'
-.venv/bin/pytest -q
+. .venv/bin/activate
+pip install -e '.[dev]'
+playwright install chromium
+pytest -q
 ```
 
 The application can run directly with a valid local `.config/.env` and
@@ -405,3 +407,49 @@ Tests use temporary SQLite databases, mocked HTTP responses, or loopback mock
 servers and do not contact real targets by default. Container-affecting changes
 also require an image build and bounded log inspection through
 `compose-helper.sh`.
+
+### Browser verification
+
+The Playwright suite is part of the `dev` extra. From a clean checkout, the
+**Local setup** commands above install both its Python dependencies and the
+headless Chromium binary; run the suite separately with:
+
+```sh
+pytest -m browser tests/browser/
+```
+
+The normal `pytest` or `pytest -q` run excludes tests marked `browser`, keeping
+the default behavioral suite fast. The 19 current Chromium cases cover these
+11 verification contracts:
+
+1. protected root affordances and access to My account;
+2. preserved form values, focused validation summaries, and visible errors;
+3. server-rendered and SSE-updated target-state parity;
+4. invalid target-credential recovery;
+5. forced target outage, retry timing, manual recovery, and operation
+   correlation;
+6. deletion from CHPW, restore gating, and terminal-only purge;
+7. generated-password and browser-SSH handoff gating;
+8. temporary, normal-change, administrator-reset, expired-change, and
+   expired-keep password journeys;
+9. managed-user My access assignment and state truth;
+10. core workflows at 390, 768, and 1440 px; and
+11. keyboard navigation, modal focus, accessible names, and automated
+    document-level accessibility checks.
+
+The session-scoped harness serves the real application over an ephemeral
+loopback HTTP port and runs protocol-faithful mock targets in process. Test data
+and failure controls stay local, making the suite deterministic and offline.
+
+No offline axe-core distribution was available when the accessibility journey
+was added, so it runs a focused document-level fallback covering landmarks,
+heading order, image alternatives, form labels, icon-button names, and document
+language, failing serious findings. A locally vendored axe-core distribution
+can replace that scanner later without changing the covered routes or browser
+journeys.
+
+In CI, install the project with `pip install -e '.[dev]'`, run
+`playwright install chromium`, and execute
+`pytest -m browser tests/browser/` in a separate browser-verification job. Keep
+the default test job unmarked so it continues to exercise the non-browser suite
+without downloading or launching Chromium.

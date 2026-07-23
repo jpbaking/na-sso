@@ -23,7 +23,7 @@
       <h3 class="card-title">{{ target.display_name }}</h3>
       <p class="card-desc">{{ view.presentation.description }}</p>
       <div class="data-list">
-        <div class="data-row"><div class="data-key">State</div><div class="data-value"><span class="badge {{ view.presentation.badge_class }}" aria-label="{{ view.presentation.label }}. {{ view.detail or view.presentation.description }}">{{ view.presentation.label }}</span></div></div>
+        <div class="data-row"><div class="data-key">State</div><div class="data-value" data-sync-cell data-user-id="{{ user.id }}" data-target="{{ target.target_id }}"><span class="badge {{ view.presentation.badge_class }}" aria-label="{{ view.presentation.label }}. {{ view.detail or view.presentation.description }}">{{ view.presentation.label }}</span></div></div>
         {% if view.detail %}<div class="data-row"><div class="data-key">Detail</div><div class="data-value">{{ view.detail }}</div></div>{% endif %}
         {% if view.next_retry_at %}<div class="data-row"><div class="data-key">Retry</div><div class="data-value">Attempt {{ view.attempt_count }} is scheduled</div></div>{% endif %}
       </div>

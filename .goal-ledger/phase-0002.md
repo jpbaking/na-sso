@@ -1,19 +1,22 @@
-# phase-0002 — Planning/sync honors declared-unsupported operations
+# phase-0002 — Lifecycle and state-truth journeys
 
 - Status: done
 - Depends on: phase-0001
-- Goal: Make unassignment/offboarding planning consult the contract flags, skip declared-unsupported operations, and record an explicit terminal `unsupported` outcome without a failed operation attempt; include the limitation in dry-run plans and reconciliation previews.
-- Done when: a unit test proves that a declared-unsupported disable is never attempted against the connector yet lands in the terminal `unsupported` sync state; dry-run plans and reconciliation previews label the operation unsupported before execution; the execution-time unsupported path still works for undeclared cases.
+- Goal: Cover the state-truth contracts: static/SSE render parity for every server state, forced-outage retry/recovery under one correlated operation, and the delete/restore/purge race rules.
+- Done when: browser tests prove (a) every server state renders identically before and after an event update; (b) a forced target outage shows retry timing, manual retry, recovery, and one correlated operation; (c) delete during CHPW completes, restore cannot race deletion, and purge appears only after a terminal delete.
 
 ## Sub-tasks
-1. [done] Sync/unassignment planning consults contract flags and records terminal `unsupported` without calling the connector (delegate: codex) — done when: a test asserts no connector call occurs and the sync state is `unsupported`.
-2. [done] Dry-run plans include declared-unsupported outcomes — done when: dry-run plan output labels the operation unsupported before execution, with a test.
-3. [done] Reconciliation previews include the limitation — done when: a reconciliation preview test shows the unsupported marker.
-4. [done] Regression: execution-time unsupported handling still covers undeclared cases — done when: existing sync tests pass unchanged or with justified adaptations.
+1. [done] State render parity journey (delegate: codex) — done when: for a representative matrix of sync states, the label/description after an SSE update equals the server-rendered HTML.
+2. [done] Forced outage/retry/recovery journey — done when: mock-target failure toggling shows retry state, manual retry works, recovery lands, and the audit trail shows one operation correlation.
+3. [done] Delete/restore/purge contract journey — done when: delete during CHPW reaches terminal, restore is unavailable mid-delete, purge appears only after terminal delete.
+
+## Sub-tasks (amended 2026-07-23, user-approved)
+4. [done] Product fix: restore the orphaned SSE per-target live-update path — done when: user_detail.html carries the data-sync-cell markers the base.html renderer targets, the parity test asserts real product DOM without test-time marker injection, and gates pass.
 
 ## Log
-- codex (same session) implemented: shared Connector.lifecycle_operation_for()/supports_operation()/unsupported_operation_detail(); sync branches to terminal unsupported BEFORE start_target_attempt (no attempt row, no retry, audit action sync.<op>.unsupported); dry-run plan_user() prepends an unsupported blocker; reconcile.py selects the same operation (incl. pending-disable variants) and mark_unsupported_operation() converts repairable drift to DriftState.UNSUPPORTED so previews never offer a doomed repair
-- execution branches now consume the same selected operation string, so selection and execution cannot diverge; execution-time VALIDATION fallback untouched (test_validation_failure_is_terminal_unsupported_without_retry still passes)
-- operation summary distinguishes "N failed" from "N unsupported"; unsupported still counts toward failed_targets (requested outcome not achieved) — deliberate, documented in delegate report
-- orchestrator reviewed full production+test diff; gate run: test_sync + test_reconciliation + test_connector_contract + test_lifecycle = 34 passed
-- phase check: full suite 292 passed (orchestrator run, 231s)
+- (append-only, one line per event)
+- PRODUCT FINDING (via the new parity journey): commit 639c37d (2026-07-16 inventory redesign) removed the only data-sync-cell emitter; base.html's SSE sync-state renderer has been orphaned since — no page live-updates per-target state. 294 unit tests never caught it. User decision 2026-07-23: fix in this goal (option a) — re-attach markers on user_detail.html's canonical State badge and drop the test's marker-injection workaround.
+- codex delivered three journeys (SSE parity across 6-state matrix; nexus outage via /__mock__/availability with manual retry correlated under one operation; CHPW delete → restore hidden until terminal → purge) + fixture refactor (BrowserServers, mock_server_url, autouse mock reset, tests/browser/__init__.py to avoid module-name collision)
+- fix round (same session): user_detail.html data-value wrapper now carries data-sync-cell/data-user-id/data-target (matching the pre-639c37d contract); parity test asserts real product DOM, aborting /events/sync only on the fresh-render comparison page
+- orchestrator verification: browser suite 4 passed twice consecutively (19.1s/18.5s); test_users + test_sync 52 passed
+- phase check: full unit suite 294 passed, 4 deselected (orchestrator run)

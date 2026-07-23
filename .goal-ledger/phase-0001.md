@@ -1,20 +1,19 @@
-# phase-0001 — Contract 1.1: per-operation support flags, Jenkins declaration, conformance tests
+# phase-0001 — Playwright harness: dependency, live-server fixture, browser marker, smoke journey
 
 - Status: done
 - Depends on: none
-- Goal: Extend `ConnectorContract` with per-operation support flags (supported by default), bump the contract version to 1.1, have Jenkins declare disable unsupported, and update conformance tests.
-- Done when: `na_sso/connectors/base.py` publishes contract 1.1 with per-operation support flags; the Jenkins connector declares disable unsupported while retaining its execution-time refusal as defense in depth; `tests/test_connector_contract.py` asserts the flags for all nine connectors; the connector-contract test module passes.
+- Goal: Add pytest-playwright with headless Chromium, a live uvicorn app-server fixture backed by the in-process mock targets, and a `browser` pytest marker that keeps the default unit run unchanged; prove it with one smoke journey.
+- Done when: `pytest -m browser tests/browser/` runs a root sign-in smoke journey green against a live app on an ephemeral port with mock targets; `pytest -q` (default) collects zero browser tests and stays as fast as before; chromium installs reproducibly (documented command); the dependency is declared in pyproject.
 
 ## Sub-tasks
-1. [done] Inventory every consumer of `ConnectorContract` / `contract_metadata()` (delegate: agy, read-only) — done when: a report lists each consumer file:line so later phases know the full serializer/UI surface.
-2. [done] Extend `ConnectorContract` with per-operation support flags and bump the version to 1.1 (delegate: codex) — done when: base.py exposes the flags with supported-by-default semantics and `contract_metadata()` serializes them.
-3. [done] Jenkins declares disable unsupported — done when: the Jenkins contract carries the flag and the existing execution-time failure message remains.
-4. [done] Update conformance tests for 1.1 — done when: `pytest tests/test_connector_contract.py` passes with per-connector flag assertions.
+1. [done] Inventory existing fixtures/mock-target boot path relevant to a live-server fixture (delegate: agy, read-only) — done when: a report shows how conftest.py boots the app/mocks today and what a uvicorn-based fixture must reuse.
+2. [done] Add pytest-playwright dependency + chromium install path (delegate: codex) — done when: pyproject declares it and the install command is verified locally.
+3. [done] Live-server + mock-targets fixture and `browser` marker (delegate: codex, same task) — done when: browser tests get a base URL to a live app seeded like the unit fixtures; default runs deselect them.
+4. [done] Root sign-in smoke journey — done when: `pytest -m browser` passes the smoke test headlessly.
 
 ## Log
-- agy inventory delivered and orchestrator-verified by independent grep: sole production consumer is na_sso/api.py:291 (asdict into /api/v1/targets response); report at scratchpad/agy-contract-consumers.md
-- codex (session 019f8b0c-4b3f-7362-a973-17ea5a6e33ce) implemented flags as class-attribute booleans (ensure_supported/disable_supported/delete_supported, default True on Connector), version 1.1, Jenkins override, strengthened conformance tests keyed by connector_type with asdict round-trip
-- orchestrator gate run caught a miss outside codex's gates: tests/test_api.py:208 hardcoded contract version "1.0"; finding sent back to the same codex session, fixed by asserting CONNECTOR_CONTRACT_VERSION
-- note: `codex exec resume` rejects -C; resume without it (session keeps its cwd)
-- orchestrator-verified gates: test_connector_contract + test_sync + test_api = 23 passed
-- phase check: full suite 289 passed (230s); repo-wide grep confirms no remaining "1.0" contract-version hardcodes
+- agy inventory verified by spot-check: per-test env/DB reset (tests/conftest.py:8-20), threaded-uvicorn precedent (tests/test_mock_targets.py:36-50), no custom markers before this phase; key tension identified: per-test tmp DBs vs long-lived server — later phases must seed/reset against the session server
+- codex (session 019f8c3a-78a3-7772-b36b-b155677efbb5) delivered: playwright>=1.49 + pytest-playwright>=0.6 in dev extras; addopts "-m 'not browser'" + registered marker; _UvicornThread with pre-bound sockets; session-scoped live_server_url running real app + mock targets on loopback; root sign-in smoke with role/label selectors; install commands: pip install -e '.[dev]' && playwright install chromium
+- fixture uses the LEGACY env-connector path (NA_SSO_OPNSENSE_ENABLED etc.), not YAML targets + UI credentials — fine for smoke; phases 0002/0003 need the modern target path (flagged for those prompts)
+- orchestrator gates: smoke 1 passed (6.2s); collect-only exactly 294/295 (1 deselected)
+- phase check: full default suite 294 passed, 1 deselected (233s, orchestrator run) — default run unaffected

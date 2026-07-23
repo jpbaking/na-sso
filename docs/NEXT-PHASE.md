@@ -418,6 +418,43 @@ Keep connector unit tests, but add model-based state-transition tests. The
 browser audit found defects that isolated happy-path connector tests could not
 detect.
 
+### Verification backlog delivery
+
+Delivered 2026-07-23 as an in-tree, headless Playwright suite. The historical
+contract list above remains the acceptance statement; its browser evidence is:
+
+| Contract (in list order) | Browser evidence |
+| --- | --- |
+| 1. Protected root affordances and My account access | `tests/browser/test_safety.py` |
+| 2. Preserved form values and focused errors | `tests/browser/test_safety.py` |
+| 3. Server-rendered and SSE-updated state parity | `tests/browser/test_lifecycle.py` |
+| 4. Invalid target-credential recovery | `tests/browser/test_safety.py` |
+| 5. Forced outage, retry, recovery, and operation correlation | `tests/browser/test_lifecycle.py` |
+| 6. CHPW deletion, restore gating, and terminal-only purge | `tests/browser/test_lifecycle.py` |
+| 7. Generated-secret and SSH-key handoff confirmation | `tests/browser/test_safety.py` |
+| 8. Temporary, normal, reset, expired-change, and expired-keep password journeys | `tests/browser/test_passwords.py` |
+| 9. Managed-user account access truth | `tests/browser/test_passwords.py` |
+| 10. Core tasks at 390, 768, and 1440 px | `tests/browser/test_responsive_a11y.py` |
+| 11. Keyboard, focus, accessible-name, and automated accessibility checks | `tests/browser/test_responsive_a11y.py` |
+
+`tests/browser/test_smoke.py` supplies the harness baseline by proving that the
+bootstrapped root administrator can sign in and reach the admin landing page.
+The parity journey also forced a product fix: markers `data-sync-cell`,
+`data-user-id`, and `data-target` were reattached to the state wrapper in
+`na_sso/templates/user_detail.html`, restoring the production SSE update path
+lost in regression commit `639c37d`.
+
+Future product review observations, not delivery commitments:
+
+- P1.5 server-side password errors are focused in the summary but are not yet
+  programmatically associated with a beside-field error;
+- the administrator-reset completion notice is generic and does not name the
+  temporary-password/CHPW handoff;
+- legacy environment-connector mode can show raw target IDs as My access
+  headings; and
+- opening the mobile Dashboard drawer at 390 px can increase document
+  `scrollWidth` to 429 px, although the required core surfaces fit.
+
 ## Delivery traceability
 
 All confirmed P0–P2 findings have shipped. The implementation preserves the
