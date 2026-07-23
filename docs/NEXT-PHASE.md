@@ -521,7 +521,85 @@ and was demo-verified through the self-contained Mailpit inbox. SMS is explicitl
 deferred because no local-mock equivalent exists and a live demonstration would
 require an external provider, conflicting with the demo's no-external-dependency
 constraint. Self-service access requests are therefore no longer blocked on
-end-user reachability.
+end-user reachability. Its proposed implementation design is recorded in the
+next section.
+
+## Proposed design: self-service access requests
+
+Status: proposed, not yet built. Design recorded 2026-07-24. All three
+preconditions now exist — delegated administration, approval workflows, and
+end-user reachability (SMTP email). The feature adds an intake-and-decision
+layer over machinery that already exists; it introduces no new provisioning
+path and preserves the product boundary — operators keep final provisioning
+authority, and NA-SSO never proxies login, issues tokens, or lets users
+self-assign access.
+
+### Flow
+
+1. **Request** — an authenticated managed user (role `user`) on **My access**
+   sees the enabled targets they are not assigned to and requests one with an
+   optional reason. This writes a `pending` access request and mutates no
+   target.
+2. **Review** — an operator holding `users.manage` (the capability that already
+   gates assignment) sees a pending-request queue and approves or denies with a
+   reason, behind the same preview/confirm pattern used by reconciliation and
+   bulk actions.
+3. **Fulfil** — approval calls the existing assignment path (`assignments.py` →
+   lifecycle operation → `sync.py` fan-out) as one correlated operation; the
+   operator sets the exact groups/roles (the target's `default_groups` apply).
+   Denial performs no target action.
+4. **Notify** — on completion the existing `approval.completed` event emails the
+   requester ("your access request was approved"); denial sends a parallel
+   end-user email so requesters never poll the console.
+
+### Reused machinery (no reimplementation)
+
+| Need | Existing component |
+| --- | --- |
+| Provisioning | `assignments.py` assignment intents → operations → `sync.py` |
+| Approver authority | `permissions.py` `MANAGE_USERS` — the capability that gates assignment today |
+| Approval/preview safety | one-use approval + preview/confirm from reconciliation and bulk |
+| Requester notification | `approval.completed` end-user email (delivered 2026-07-24) |
+| Audit trail | `record_audit` (`request.created` / `approved` / `denied` / `withdrawn`) |
+| Schema change | additive table/column migration pattern in `db.py` |
+
+### Net-new components
+
+- An `AccessRequest` model (user, target, reason, status
+  `pending`/`approved`/`denied`/`withdrawn`, `decided_by`, `decided_at`,
+  `decision_reason`, linked operation id) with an additive migration; one
+  pending request per (user, target).
+- A **Request access** affordance and pending-status view on the managed user's
+  **My access** page.
+- An operator **Access requests** queue page with approve/deny plus reason,
+  reusing the preview/confirm and signed-feedback patterns.
+- A denial end-user email template alongside the existing approval one.
+- The wiring from an approval decision into the existing assignment operation.
+
+### Design decisions (v1)
+
+- **Request granularity** — a user requests access to a *target* only; the
+  operator chooses the exact groups/roles at approval (the target's
+  `default_groups` apply). Users never self-select privileges. A later option is
+  an operator-defined allowlist of requestable groups.
+- **Requestable targets** — a per-target `self_service` policy,
+  `disabled | approval_required`, defaulting to `disabled` (opt-in). No target
+  is requestable until an operator marks it so. An `auto` mode (immediate
+  assignment without approval) is intentionally excluded from v1 because it
+  bypasses operator provisioning authority.
+- **Approver** — any `users.manage` holder (`user_operator` / `superadmin`).
+  Scoping approval to a target's `target_operator` owner is a later refinement
+  under delegated administration.
+- **Approver notification** — an in-console queue with a pending count
+  (operators need not have a managed-user email), plus existing ops webhooks
+  when configured; the requester always receives email on the decision.
+
+### Non-goals and safety
+
+- No auto-provisioning: only an operator approval triggers a target mutation.
+- No privilege self-selection: users cannot choose groups or roles.
+- Requests are inert until approved; denial and withdrawal touch no target.
+- Preserves the boundary: no login proxy, no token issuance, no federation.
 
 ## Deferred future work
 
