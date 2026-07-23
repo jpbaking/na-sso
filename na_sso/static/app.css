@@ -661,6 +661,18 @@ details.collapse-card[open] > summary {
   width: 100%;
 }
 
+/* Native table layout can override the 1px .sr-only box used by charts.js.
+   Keep the accessible data available without letting its intrinsic columns
+   widen the dashboard. */
+.chart table.sr-only {
+  max-width: 1px;
+  table-layout: fixed;
+}
+
+.chart table.sr-only :is(th, td) {
+  overflow: hidden;
+}
+
 /* Dashboard "More insights": a quiet centred divider that discloses the
    lazy-loaded chart grid. */
 .insights > summary {

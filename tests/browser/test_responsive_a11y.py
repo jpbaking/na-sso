@@ -1,10 +1,11 @@
 import json
+from datetime import timedelta
 
 import pytest
 from playwright.sync_api import Locator, Page, expect
 
 from na_sso.db import get_session
-from na_sso.models import ManagedUser, utcnow
+from na_sso.models import LifecycleOperation, ManagedUser, SyncState, utcnow
 from na_sso.security import hash_password
 
 
@@ -32,6 +33,75 @@ def _seed_user(username: str) -> int:
         return user.id
 
 
+def _seed_dashboard(username: str) -> int:
+    with get_session() as db:
+        active = ManagedUser(
+            username=username,
+            display_name=username.replace("-", " ").title(),
+            email=f"{username}@example.test",
+            password_hash=hash_password(_PASSWORD),
+            password_changed_at=utcnow(),
+        )
+        disabled = ManagedUser(
+            username=f"{username}-disabled",
+            display_name="Responsive Disabled",
+            email=f"{username}-disabled@example.test",
+            status="disabled",
+        )
+        awaiting = ManagedUser(
+            username=f"{username}-awaiting",
+            display_name="Responsive Awaiting Credentials",
+            email=f"{username}-awaiting@example.test",
+        )
+        unsupported = ManagedUser(
+            username=f"{username}-unsupported",
+            display_name="Responsive Unsupported",
+            email=f"{username}-unsupported@example.test",
+        )
+        ok = ManagedUser(
+            username=f"{username}-ok",
+            display_name="Responsive In Sync",
+            email=f"{username}-ok@example.test",
+            password_changed_at=utcnow() - timedelta(days=80),
+        )
+        failed = ManagedUser(
+            username=f"{username}-failed",
+            display_name="Responsive Failed",
+            email=f"{username}-failed@example.test",
+        )
+        db.add_all([active, disabled, awaiting, unsupported, ok, failed])
+        db.flush()
+        db.add_all(
+            [
+                SyncState(user_id=ok.id, target="opnsense", state="ok"),
+                SyncState(user_id=failed.id, target="nexus", state="failed"),
+                SyncState(user_id=disabled.id, target="nextcloud", state="pending"),
+                SyncState(
+                    user_id=awaiting.id,
+                    target="opnsense",
+                    state="awaiting_credentials",
+                ),
+                SyncState(
+                    user_id=unsupported.id,
+                    target="nexus",
+                    state="unsupported",
+                ),
+                *[
+                    LifecycleOperation(
+                        command="create",
+                        status=status,
+                        actor="admin",
+                        subject=active.username,
+                    )
+                    for status in ("succeeded", "failed")
+                    for _ in range(2)
+                ],
+            ]
+        )
+        db.commit()
+        return active.id
+
+
 def _sign_in(
     page: Page,
     base_url: str,
@@ -55,6 +125,25 @@ def _assert_no_page_overflow(page: Page, surface: str) -> None:
                 internalOverflow: [...document.querySelectorAll(
                     '.table-wrap, .prose pre'
                 )].filter(node => node.scrollWidth > node.clientWidth).length,
+                overflowers: [...document.querySelectorAll('body *')]
+                    .map(node => {
+                        const rect = node.getBoundingClientRect();
+                        return {
+                            tag: node.tagName.toLowerCase(),
+                            id: node.id,
+                            className: typeof node.className === 'string'
+                                ? node.className : '',
+                            chart: node.closest('.chart')
+                                ?.querySelector('.chart-title')?.textContent || '',
+                            left: Math.round(rect.left),
+                            right: Math.round(rect.right),
+                            width: Math.round(rect.width),
+                            scrollWidth: node.scrollWidth,
+                            clientWidth: node.clientWidth,
+                        };
+                    })
+                    .filter(item => item.right > innerWidth + 0.5)
+                    .slice(0, 12),
             };
         }"""
     )
@@ -97,7 +186,7 @@ def test_core_surfaces_fit_and_keep_navigation_and_actions_reachable(
 ) -> None:
     page.set_viewport_size(viewport)
     username = f"responsive-{viewport['width']}"
-    user_id = _seed_user(username)
+    user_id = _seed_dashboard(username)
 
     page.goto(f"{live_server_url}/login")
     expect(page.get_by_role("heading", name="Sign in", exact=True)).to_be_visible()
@@ -111,6 +200,31 @@ def test_core_surfaces_fit_and_keep_navigation_and_actions_reachable(
     page.get_by_label("Password", exact=True).fill("admin-pass")
     page.get_by_role("button", name="Sign in", exact=True).click()
     expect(page).to_have_url(f"{live_server_url}/dashboard")
+
+    expect(page.locator("#spark-users svg")).to_be_visible()
+    expect(page.locator("#chart-sync svg")).to_be_visible()
+    expect(page.locator("#chart-operations svg")).to_be_visible()
+    _assert_no_page_overflow(page, "data-populated dashboard")
+    _assert_reachable(
+        page,
+        page.locator("details.insights > summary"),
+        "dashboard More insights action",
+    )
+    if viewport["width"] <= 768:
+        page.get_by_role("button", name="Open navigation", exact=True).click()
+        expect(
+            page.locator("aside[aria-label='Primary navigation']")
+        ).to_have_attribute("aria-hidden", "false")
+        page.wait_for_function(
+            """() => {
+                const sidebar = document.querySelector('[data-sidebar]');
+                return sidebar && Math.abs(sidebar.getBoundingClientRect().left) < 0.5;
+            }"""
+        )
+        _assert_no_page_overflow(page, "data-populated dashboard with drawer open")
+        page.locator("aside[aria-label='Primary navigation']").get_by_role(
+            "button", name="Close navigation", exact=True
+        ).click()
 
     _navigate_admin(page, "Users", viewport["width"])
     expect(page).to_have_url(f"{live_server_url}/users")

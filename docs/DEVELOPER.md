@@ -448,8 +448,10 @@ language, failing serious findings. A locally vendored axe-core distribution
 can replace that scanner later without changing the covered routes or browser
 journeys.
 
-In CI, install the project with `pip install -e '.[dev]'`, run
-`playwright install chromium`, and execute
-`pytest -m browser tests/browser/` in a separate browser-verification job. Keep
-the default test job unmarked so it continues to exercise the non-browser suite
-without downloading or launching Chromium.
+CI is implemented in `.github/workflows/ci.yml` as two Ubuntu jobs. **Unit**
+installs with `pip install -e '.[dev]'` and runs `pytest -q`. **Browser**
+performs the same install, adds Chromium runner dependencies with
+`playwright install-deps chromium`, installs the browser with
+`playwright install chromium`, and runs
+`pytest -m browser tests/browser/`. Keeping the jobs separate lets the default
+suite remain unmarked and avoids downloading or launching Chromium in Unit.

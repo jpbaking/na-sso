@@ -1,18 +1,19 @@
-# phase-0004 — Password journeys and user access truth
+# phase-0004 — Dashboard drawer overflow fix at 390px
 
 - Status: done
-- Depends on: phase-0001
-- Goal: Cover the password-journey contracts (temporary, normal, reset, expired-change, expired-keep each state their outcome before redirecting) and the managed user's Account page truth (assigned targets and accurate propagation state).
-- Done when: browser tests walk all five password journeys asserting the stated outcome before redirect, and a managed user's Account page shows assigned targets with propagation state matching the seeded backend state.
+- Depends on: phase-0002, phase-0003
+- Goal: Eliminate the document scrollWidth overflow produced by the open mobile drawer over the data-populated dashboard at 390px, and add the dashboard to the responsive journey's asserted surfaces so the fix is enforced.
+- Done when: opening the drawer on a data-populated dashboard at 390px leaves document scrollWidth <= innerWidth; tests/browser/test_responsive_a11y.py asserts the dashboard surface (drawer open and closed) at all three viewports; unit + browser suites pass.
 
 ## Sub-tasks
-1. [done] Five password journeys (delegate: codex) — done when: temporary, normal, reset, expired-change, and expired-keep each assert their outcome notice before redirect.
-2. [done] User Account access-truth journey — done when: assigned targets and propagation/retry/mode states on the Account page match seeded reality, including a failing target.
+1. [done] CSS/layout fix (delegate: codex) — done when: the drawer no longer widens the document over the dashboard at 390px.
+2. [done] Extend the responsive journey — done when: dashboard (with seeded data, drawer open + closed) is asserted at 390/768/1440.
+3. [done] Regression: existing viewport assertions unchanged — done when: prior surfaces still pass.
 
 ## Log
 - (append-only, one line per event)
-- codex (same session) delivered six journeys in tests/browser/test_passwords.py; no fixture/config change needed (fixture PasswordPolicy already: 90d expiry, grace mode, 14d, limit 1); expired arrangements mirror expire_due() persisted state with 120d-old password and model-computed due assertion
-- P1.8 keep journey verifies DB truth: hash age unchanged, password_keep_until equals the UI-promised date, acknowledgement 1 of 1, restriction cleared; My-access journey computes expected payload from committed rows via the shared presentation contract and asserts login mutated nothing
-- product findings reported, NOT fixed: (3) admin-reset post-save notice is generic ("Changes saved") — does not state a temporary password was set/CHPW required; (4) legacy env-connector mode: My access headings fall back to raw target IDs (display names resolve only from YAML definitions). Queued for acceptance
-- orchestrator verification: browser suite 14 passed twice consecutively (45.3s/44.8s); scope = one new test file only
-- phase check: full unit suite 294 passed, 14 deselected (orchestrator run)
+- ROOT CAUSE CORRECTED (vs the recorded finding): the drawer was never causal — charts.js's accessible fallback `<table class=sr-only>` (Expiry horizon, 3 series) overrode the 1px sr-only box via native intrinsic column widths, measuring 385px wide; the 39px overflow existed with the drawer CLOSED and body overflow:hidden while open merely masked it. Failing measurement (scrollWidth 429 vs innerWidth 390) reproduced before the fix
+- fix scoped in app.css only: .chart table.sr-only { max-width:1px; table-layout:fixed } + cell overflow hidden — table stays in the accessibility tree; design-system bundle untouched; no drawer/sidebar/body rule changed
+- responsive journey now seeds a deterministic populated dashboard (incl. 80-day-old credential to force the Expiry horizon chart) and asserts document width at 390/768/1440 with drawer closed, and open at 390/768, with bounded diagnostic geometry on failure
+- phase-0005 must record the corrected root cause in the roadmap (the original observation blamed the drawer)
+- orchestrator verification: browser 19 passed twice; full unit 294 passed, 19 deselected

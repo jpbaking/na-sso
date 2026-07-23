@@ -153,7 +153,8 @@ def test_admin_reset_states_handoff_then_user_completes_temporary_flow(
     expect(reset_notice).to_be_visible()
     expect(reset_notice.locator(".alert-title")).to_have_text("Changes saved")
     expect(reset_notice).to_contain_text(
-        "admin-reset was updated and target synchronization has started."
+        "admin-reset was updated; a temporary password was set and the user "
+        "must change it at next sign-in. Target synchronization has started."
     )
 
     page.context.clear_cookies()
@@ -302,7 +303,7 @@ def test_my_access_matches_assigned_db_states_and_hides_unassigned_target(
     expect(page.get_by_role("heading", name="Assigned targets", exact=True)).to_be_visible()
 
     ok_card = page.locator("article.card").filter(
-        has=page.get_by_role("heading", name="opnsense", exact=True)
+        has=page.get_by_role("heading", name="OPNsense", exact=True)
     )
     ok_presentation = expected["opnsense"]["presentation"]
     expect(ok_card.locator("span.badge")).to_have_text(ok_presentation["label"])
@@ -313,7 +314,7 @@ def test_my_access_matches_assigned_db_states_and_hides_unassigned_target(
     expect(ok_card.locator(".card-desc")).to_have_text(ok_presentation["description"])
 
     failed_card = page.locator("article.card").filter(
-        has=page.get_by_role("heading", name="nexus", exact=True)
+        has=page.get_by_role("heading", name="Nexus Repository", exact=True)
     )
     failed_presentation = expected["nexus"]["presentation"]
     expect(failed_card.locator("span.badge")).to_have_text(
@@ -336,7 +337,7 @@ def test_my_access_matches_assigned_db_states_and_hides_unassigned_target(
     expect(guidance).to_contain_text("Contact your NA-SSO administrator")
 
     expect(
-        page.get_by_role("heading", name="nextcloud", exact=True)
+        page.get_by_role("heading", name="Nextcloud", exact=True)
     ).to_have_count(0)
     with get_session() as db:
         states = {

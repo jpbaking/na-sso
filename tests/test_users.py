@@ -1,4 +1,15 @@
+import re
+
 import pytest
+
+
+def _assert_invalid_field(html: str, input_id: str, error_id: str) -> None:
+    field = re.search(rf'<input\b[^>]*\bid="{re.escape(input_id)}"[^>]*>', html)
+    assert field is not None
+    assert 'aria-invalid="true"' in field.group()
+    describedby = re.search(r'aria-describedby="([^"]+)"', field.group())
+    assert describedby is not None and error_id in describedby.group(1).split()
+    assert f'class="field-error" id="{error_id}"' in html
 
 
 def test_unauthenticated_redirects_to_login(client):
@@ -193,6 +204,7 @@ def test_generated_user_password_requires_confirmed_handoff(admin_client):
     rejected = admin_client.post("/users/new", data=data)
     assert rejected.status_code == 422
     assert "confirm the handoff before creating the user" in rejected.text
+    _assert_invalid_field(rejected.text, "password", "password-error")
     assert 'value="V4lid!Copper-Zebra-2026"' not in rejected.text
 
     accepted = admin_client.post("/users/new", data={
@@ -209,6 +221,11 @@ def test_admin_manual_password_requires_matching_confirmation(admin_client):
     })
     assert response.status_code == 422
     assert "Password confirmation does not match." in response.text
+    _assert_invalid_field(
+        response.text,
+        "confirm-password",
+        "confirm-password-error",
+    )
 
 
 def test_rejected_create_preserves_safe_fields_targets_and_focuses_error(
@@ -239,6 +256,7 @@ def test_rejected_create_preserves_safe_fields_targets_and_focuses_error(
     assert 'value="preserved@example.test"' in response.text
     assert 'value="safe-target" checked' in response.text
     assert 'value="short"' not in response.text
+    _assert_invalid_field(response.text, "password", "password-error")
 
 
 def test_user_create_feedback_is_explicit_and_one_time(admin_client):
@@ -289,6 +307,7 @@ def test_rejected_update_preserves_safe_profile_and_assignment(admin_client, mon
     assert 'value="after@example.test"' in response.text
     assert 'value="safe-target" checked' in response.text
     assert 'value="short"' not in response.text
+    _assert_invalid_field(response.text, "password", "password-error")
 
 
 def test_user_crud_roundtrip(admin_client):
@@ -314,6 +333,27 @@ def test_user_crud_roundtrip(admin_client):
     assert r.status_code == 303
     r = c.get("/users")
     assert "disabled" in r.text and "Changes saved" in r.text
+    assert "jdoe was updated and target synchronization has started." in r.text
+    assert "a temporary password was set" not in r.text
+
+    reset_password = "V4lid!Saturn-Comet-2027"
+    r = c.post(
+        "/users/1",
+        data={
+            "display_name": "Jane Doe",
+            "email": "j@d.oe",
+            "password": reset_password,
+            "confirm_password": reset_password,
+            "status": "disabled",
+        },
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    r = c.get("/users")
+    assert (
+        "jdoe was updated; a temporary password was set and the user must "
+        "change it at next sign-in. Target synchronization has started."
+    ) in r.text
 
     confirmation = c.get("/users/1/delete")
     assert confirmation.status_code == 200
@@ -353,6 +393,11 @@ def test_soft_deleted_user_can_restore_with_new_password(admin_client):
     })
     assert mismatch.status_code == 422
     assert "Password confirmation does not match." in mismatch.text
+    _assert_invalid_field(
+        mismatch.text,
+        "restore-password-confirm",
+        "restore-password-confirm-error",
+    )
     assert 'value="V4lid!New-Secret-2026"' not in mismatch.text
     response = admin_client.post("/users/1/restore", data={
         "password": "V4lid!New-Secret-2026",
@@ -449,6 +494,7 @@ def test_username_rejects_non_portable_names(admin_client, username):
     })
     assert response.status_code == 422
     assert "portable Unix name" in response.text
+    _assert_invalid_field(response.text, "username", "username-error")
 
 
 def test_email_required_universally(admin_client):
@@ -458,6 +504,7 @@ def test_email_required_universally(admin_client):
     })
     assert response.status_code == 422
     assert "Email is required" in response.text
+    _assert_invalid_field(response.text, "email", "email-error")
 
 
 def test_display_name_required_universally(admin_client):
@@ -467,6 +514,7 @@ def test_display_name_required_universally(admin_client):
     })
     assert response.status_code == 422
     assert "Display name is required" in response.text
+    _assert_invalid_field(response.text, "display_name", "display-name-error")
 
 
 @pytest.mark.parametrize("username", [

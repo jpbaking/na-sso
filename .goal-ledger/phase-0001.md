@@ -1,19 +1,17 @@
-# phase-0001 — Playwright harness: dependency, live-server fixture, browser marker, smoke journey
+# phase-0001 — CI workflow: two-job GitHub Actions pipeline, locally validated
 
 - Status: done
 - Depends on: none
-- Goal: Add pytest-playwright with headless Chromium, a live uvicorn app-server fixture backed by the in-process mock targets, and a `browser` pytest marker that keeps the default unit run unchanged; prove it with one smoke journey.
-- Done when: `pytest -m browser tests/browser/` runs a root sign-in smoke journey green against a live app on an ephemeral port with mock targets; `pytest -q` (default) collects zero browser tests and stays as fast as before; chromium installs reproducibly (documented command); the dependency is declared in pyproject.
+- Goal: Add a GitHub Actions workflow with separate unit and browser jobs whose commands exactly mirror docs/DEVELOPER.md, validated locally (the live run is confirmed post-merge in phase-0005).
+- Done when: `.github/workflows/*.yml` defines a unit job (`pip install -e '.[dev]'`, `pytest -q`) and a browser job (adds `playwright install chromium`, runs `pytest -m browser tests/browser/`) on push/PR to main with Python 3.12+; the workflow passes local validation (actionlint if available, else yamllint/python-yaml parse + orchestrator review); commands are character-identical to the documented ones.
 
 ## Sub-tasks
-1. [done] Inventory existing fixtures/mock-target boot path relevant to a live-server fixture (delegate: agy, read-only) — done when: a report shows how conftest.py boots the app/mocks today and what a uvicorn-based fixture must reuse.
-2. [done] Add pytest-playwright dependency + chromium install path (delegate: codex) — done when: pyproject declares it and the install command is verified locally.
-3. [done] Live-server + mock-targets fixture and `browser` marker (delegate: codex, same task) — done when: browser tests get a base URL to a live app seeded like the unit fixtures; default runs deselect them.
-4. [done] Root sign-in smoke journey — done when: `pytest -m browser` passes the smoke test headlessly.
+1. [done] Author the two-job workflow (delegate: codex) — done when: the YAML exists with unit + browser jobs, pip caching, and push/PR triggers on main.
+2. [done] Local validation — done when: actionlint or an equivalent local check passes and the orchestrator has reviewed the YAML line by line.
+3. [done] Command parity check — done when: workflow commands match docs/DEVELOPER.md exactly (no drift between docs and CI).
 
 ## Log
-- agy inventory verified by spot-check: per-test env/DB reset (tests/conftest.py:8-20), threaded-uvicorn precedent (tests/test_mock_targets.py:36-50), no custom markers before this phase; key tension identified: per-test tmp DBs vs long-lived server — later phases must seed/reset against the session server
-- codex (session 019f8c3a-78a3-7772-b36b-b155677efbb5) delivered: playwright>=1.49 + pytest-playwright>=0.6 in dev extras; addopts "-m 'not browser'" + registered marker; _UvicornThread with pre-bound sockets; session-scoped live_server_url running real app + mock targets on loopback; root sign-in smoke with role/label selectors; install commands: pip install -e '.[dev]' && playwright install chromium
-- fixture uses the LEGACY env-connector path (NA_SSO_OPNSENSE_ENABLED etc.), not YAML targets + UI credentials — fine for smoke; phases 0002/0003 need the modern target path (flagged for those prompts)
-- orchestrator gates: smoke 1 passed (6.2s); collect-only exactly 294/295 (1 deselected)
-- phase check: full default suite 294 passed, 1 deselected (233s, orchestrator run) — default run unaffected
+- (append-only, one line per event)
+- codex authored .github/workflows/ci.yml: unit (15m) + browser (20m) jobs, ubuntu-latest, Python 3.12, pip cache keyed on pyproject.toml, contents:read permissions, concurrency cancellation, checkout@v7 + setup-python@v6; playwright install-deps chromium split from playwright install chromium to keep documented commands literally unchanged
+- orchestrator validation: PyYAML parse + structural assertions run personally; run-command parity with docs/DEVELOPER.md verified by grep (identical)
+- noted live-run risk: pinned action majors are proven only by the post-merge run (phase-0005 sub-task 4)

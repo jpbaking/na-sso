@@ -111,6 +111,16 @@ def test_invalid_create_and_restore_keep_context_and_focus_visible_errors(
     expect(summary).to_be_visible()
     expect(summary).to_contain_text("Password")
     expect(summary).to_be_focused()
+    password = page.locator("#password")
+    password_error = page.locator("#password-error")
+    expect(password_error).to_be_visible()
+    expect(password_error).to_contain_text("Password")
+    expect(password).to_have_attribute("aria-invalid", "true")
+    password_descriptions = password.get_attribute("aria-describedby")
+    assert password_descriptions is not None
+    assert {"password-checks", "password-error"} <= set(
+        password_descriptions.split()
+    )
     expect(page.get_by_label("Username", exact=True)).to_have_value("preserved-browser")
     expect(page.get_by_label("Display name", exact=True)).to_have_value("Preserved Browser")
     expect(page.get_by_label("Email", exact=True)).to_have_value(
@@ -137,6 +147,16 @@ def test_invalid_create_and_restore_keep_context_and_focus_visible_errors(
     expect(restore_error).to_be_visible()
     expect(restore_error).to_contain_text("Password")
     expect(restore_error).to_be_focused()
+    restore_password = page.locator("#restore-password")
+    restore_password_error = page.locator("#restore-password-error")
+    expect(restore_password_error).to_be_visible()
+    expect(restore_password_error).to_contain_text("Password")
+    expect(restore_password).to_have_attribute("aria-invalid", "true")
+    restore_descriptions = restore_password.get_attribute("aria-describedby")
+    assert restore_descriptions is not None
+    assert {"password-checks", "restore-password-error"} <= set(
+        restore_descriptions.split()
+    )
     expect(page.get_by_role("heading", name="Restore user", exact=True)).to_be_visible()
 
 

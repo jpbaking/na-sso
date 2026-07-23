@@ -227,6 +227,7 @@ NA-SSO: an admin console (FastAPI) that manages local user accounts across exter
 - **Reconciliation & unmanaged discovery** — read-only drift detection with approval-bound repair; discovery/adoption of target-local accounts. Start: `na_sso/reconciliation.py`. Files: `na_sso/reconcile.py`, `na_sso/unmanaged.py`. Detail in ./na_sso.
 - **Demo environment** — Compose-driven demo with in-process mock targets. Start: `docker-compose-demo.yaml`. Files: `na_sso/mock_targets/`, `demo-ssh.sh`, `docs/DEMO.md`.
 - **Container deployment** — Dockerfiles and Compose for real and demo runs. Start: `docker-compose.yaml`. Files: `Dockerfile`, `Dockerfile.demo-ssh`, `compose-helper.sh`, `compose-helper.env`, `docs/PRODUCTION.md`.
+- **Continuous integration** — GitHub Actions with separate unit and headless-browser jobs on push/PR to main. Start: `.github/workflows/ci.yml`. Files: `docs/DEVELOPER.md` (run instructions).
 
 ## Child DOX Index
 

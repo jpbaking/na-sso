@@ -1,40 +1,39 @@
-# GOAL — In-tree browser verification suite
+# GOAL — CI pipeline and browser-suite findings polish
 
 ## Goal
-- Goal ID: 20260723-in-tree-browser-verification
-- Outcome: The 11 end-to-end contracts in the roadmap's Verification backlog are covered by an in-tree, headless Playwright suite that runs the real app against the in-process mock targets, making the browser journeys that caught the original audit's defects durable regression tests.
-- Done when: `pytest -m browser` runs a Playwright suite covering all 11 backlog contracts against a live app instance backed by mock targets; the suite is deterministic (no live demo stack or network needed); the fast unit suite stays unaffected by default; docs record how to run it; the roadmap's backlog section records delivery; the full suite (unit + browser) passes.
+- Goal ID: 20260723-ci-and-findings-polish
+- Outcome: The unit and browser suites run automatically in CI on every push/PR, and the four product findings recorded by the browser-verification goal are fixed with their browser-test assertions tightened so the suite enforces each fix.
+- Done when: a GitHub Actions workflow runs two jobs (unit `pytest -q`; browser chromium install + `pytest -m browser tests/browser/`) and validates locally with commands mirroring docs/DEVELOPER.md; the four findings are fixed — (1) server password errors programmatically associated beside the field, (2) admin-reset notice names the temporary-password/CHPW handoff, (3) My-access headings show display names in legacy env-connector mode, (4) no document overflow from the 390px dashboard drawer — each verified by an extended browser assertion; roadmap observations updated to resolved; full unit + browser suites pass; first live CI run confirmed green after merge+push.
 - Goal status: completed
 - Goal status meaning: drafting | approved | executing | blocked-on-human | awaiting-acceptance | completed | abandoned
-- Last completed phase: phase-0006
+- Last completed phase: phase-0005
 
 ## Git
 - Repository: yes
 - Strategy: isolated-branch
 - Starting branch: main
-- Work branch: goal/20260723-in-tree-browser-verification
-- Baseline commit: 09b57fec1dc94e5d218ff2b6807ad327caf933c5
-- Starting upstream at start: origin/main@622d16ddc014ff60006dd9c1c5535a949675615b
+- Work branch: goal/20260723-ci-and-findings-polish
+- Baseline commit: c233d6398db2c02039e03ec78f063bf82e68ba26
+- Starting upstream at start: origin/main@c233d6398db2c02039e03ec78f063bf82e68ba26
 - Work upstream at start: none
 
 ## Phases
-- [done] phase-0001 — Playwright harness: dependency, live-server fixture, browser marker, smoke journey
-- [done] phase-0002 — Lifecycle and state-truth journeys
-- [done] phase-0003 — Safety and handoff journeys
-- [done] phase-0004 — Password journeys and user access truth
-- [done] phase-0005 — Responsive and accessibility journeys
-- [done] phase-0006 — Docs, DOX pass, and full verification
+- [done] phase-0001 — CI workflow: two-job GitHub Actions pipeline, locally validated
+- [done] phase-0002 — P1.5 fix: beside-field server-error association
+- [done] phase-0003 — Notice and naming fixes: admin-reset handoff wording; legacy-mode display names
+- [done] phase-0004 — Dashboard drawer overflow fix at 390px
+- [done] phase-0005 — Docs, DOX pass, full verification; post-merge live CI check
 
 ## Handoff
-- Current position: completed — user accepted 2026-07-23; 13 goal commits squashed into one snapshot, merged to main, branch deleted, pushed
-- Next action: none
-- Last verified evidence: final orchestrator runs — unit 294 passed 19 deselected, browser 19 passed; all 11 backlog contracts mapped to committed test files in docs/NEXT-PHASE.md
+- Current position: completed — user accepted 2026-07-23; 11 goal commits squashed, merged to main, branch deleted, pushed
+- Next action: none (the first live CI run's result is recorded in the Log by a follow-up ledger commit — the run can only start after this snapshot is pushed)
+- Last verified evidence: none; repo has NO CI today (.github absent, verified); live CI green can only be confirmed after the final merge+push (goal branch stays unpublished to preserve squash preconditions)
 - Blockers: none
 
 ## Log
-- created ledger with 6 phases
-- supersedes completed goal 20260723-contract-declared-unsupported-ops (retained in Git history)
-- Gate A approved by user 2026-07-23 ("approved, create the branch, and go" — covers Gates A–C) after user reviewed the disposition of the two smaller items (env-creds finding removal 09b57fe; email/SMS precondition recorded in NEXT-PHASE.md)
-- delegation directive (standing, from previous goal): codex strong-tier implements phases 1–5 (Playwright is in its routing profile); agy fast-tier for bounded read-only inventories; orchestrator keeps ledger bookkeeping, diff review, gate runs, commits; phase-0005 accessibility claims get independent orchestrator verification
-- scope source: docs/NEXT-PHASE.md "Verification backlog" — 11 contracts; baseline note: origin/main is behind local main (622d16d vs 09b57fe) because recent main commits are unpushed
-- user accepted 2026-07-23 ("clean-up and down; commit and squash then merge into main (delete branch), then push"); demo compose stacks brought down per instruction; all squash preconditions verified (13/13 Goal-ID, no merges, branch unpublished); squashed, ff-merged to main, branch deleted, pushed; .goal-ledger retained
+- created ledger with 5 phases
+- supersedes completed goal 20260723-in-tree-browser-verification (retained in Git history)
+- Gate A approved by user 2026-07-23 ("approved, create the branch, and go" — covers Gates A–C) after choosing this over email/SMS notifications (queued as the next feature goal) and self-service requests (blocked behind email/SMS by recorded decision)
+- delegation directive (standing): codex strong-tier implements slices; orchestrator keeps ledger bookkeeping, diff review, gate runs, commits; live CI confirmation is orchestrator-owned
+- findings source: docs/NEXT-PHASE.md "Future product review observations" (recorded 2026-07-23 by the browser-verification goal)
+- user accepted 2026-07-23; squash preconditions verified (11/11 Goal-ID, no merges, branch unpublished); squashed to one snapshot, ff-merged to main, branch deleted, pushed; .goal-ledger retained; the deferred phase-0005 live-CI check is recorded below by a follow-up commit once the run finishes (it cannot precede the push that triggers it)

@@ -444,16 +444,29 @@ The parity journey also forced a product fix: markers `data-sync-cell`,
 `na_sso/templates/user_detail.html`, restoring the production SSE update path
 lost in regression commit `639c37d`.
 
-Future product review observations, not delivery commitments:
+CI was added 2026-07-23 in `.github/workflows/ci.yml`, with separate unit and
+headless Chromium browser jobs for pushes and pull requests to `main`.
 
-- P1.5 server-side password errors are focused in the summary but are not yet
-  programmatically associated with a beside-field error;
-- the administrator-reset completion notice is generic and does not name the
-  temporary-password/CHPW handoff;
-- legacy environment-connector mode can show raw target IDs as My access
-  headings; and
-- opening the mobile Dashboard drawer at 390 px can increase document
-  `scrollWidth` to 429 px, although the required core surfaces fit.
+Resolved product review record (2026-07-23):
+
+- P1.5 field-specific server errors now render beside the user-form and restore
+  inputs with `aria-invalid`/`aria-describedby`, while retaining the focused
+  summary (`na_sso/templates/user_form.html`,
+  `na_sso/templates/user_action.html`, `tests/browser/test_safety.py`,
+  `tests/test_users.py`).
+- Administrator edits that reset a password now state the temporary-password
+  and next-sign-in CHPW handoff; edits without a reset retain the generic notice
+  (`na_sso/users.py`, `tests/browser/test_passwords.py`,
+  `tests/test_users.py`).
+- Legacy environment-connector My access headings now fall back to each
+  connector's `display_name` instead of its raw target ID (`na_sso/auth.py`,
+  `tests/browser/test_passwords.py`).
+- The 390 px Dashboard overflow came from the `charts.js` `.sr-only` fallback
+  table's intrinsic width and was present with the drawer closed; the drawer
+  merely masked it through `body.sidebar-open { overflow: hidden; }`, so the
+  chart table is now constrained in `na_sso/static/app.css` and the seeded
+  Dashboard is enforced with the drawer closed and open in
+  `tests/browser/test_responsive_a11y.py`.
 
 ## Delivery traceability
 
@@ -478,7 +491,7 @@ federate identities, or broker target sessions.
 | P2.10 Missing My access | Managed users see assigned targets, plain propagation/retry/mode guidance, configurable support, and complete named SSH-key lifecycle metadata/actions. | `na_sso/auth.py`, `na_sso/templates/account.html`, `tests/test_security.py`, `tests/test_ssh_keys.py` |
 | P2.11 Raw audit dump | Bounded investigation adds actor/subject/target/action/outcome/time/operation filters, friendly summaries, technical detail, correlation drill-down, retention, and CSV/JSON export with explicit timezone. | `na_sso/audit_query.py`, `na_sso/templates/audit.html`, `tests/test_audit.py` |
 | P2.12 Hidden broad roles | Central capabilities expose User operator, Target operator, Auditor, and protected Root roles with root-only assignment, descriptions, audit, and last-recovery-path protection. Target ownership is enforced at the target-operator capability boundary; record-level target grants are intentionally not invented for the current single-control-plane model. | `na_sso/permissions.py`, `na_sso/users.py`, `tests/test_permissions.py` |
-| P2.13 Responsive/accessibility gaps | A distinctly iconed, capability-aware collapsible desktop and off-canvas mobile sidebar keeps destinations usable in every state; workflow ordering, the account-only header menu, cards, bounded table scrolling, persistent labels, text-equivalent states, focused errors, responsive layouts, and expanded password-change wording are covered at 390/768/1440 px. | `na_sso/static/app.css`, `na_sso/templates/base.html`, `na_sso/templates/_admin_nav.html`, release-verification browser journeys (run at delivery, not kept in-tree), `tests/test_users.py`, `tests/test_security.py` |
+| P2.13 Responsive/accessibility gaps | A distinctly iconed, capability-aware collapsible desktop and off-canvas mobile sidebar keeps destinations usable in every state; workflow ordering, the account-only header menu, cards, bounded table scrolling, persistent labels, text-equivalent states, focused errors, responsive layouts, and expanded password-change wording are covered at 390/768/1440 px. | `na_sso/static/app.css`, `na_sso/templates/base.html`, `na_sso/templates/_admin_nav.html`, `tests/browser/test_responsive_a11y.py`, `tests/test_users.py`, `tests/test_security.py` |
 
 ### Prioritised expansion
 

@@ -315,10 +315,19 @@ async def account_page(request: Request):
         active_ssh_keys = [key for key in ssh_keys if key["status"] == "active"]
         ssh_fingerprint = active_ssh_keys[-1]["fingerprint"] if active_ssh_keys else None
     definitions = {target.id: target for target in settings.file.targets}
+    from na_sso.connectors import get_connectors
+    connectors = {target.target_id: target for target in get_connectors()}
     access = []
     for state in assigned_states:
         target = definitions.get(state.target)
-        target_type = target.type if target else (state.target_type or "target")
+        connector = connectors.get(state.target)
+        target_type = (
+            target.type
+            if target
+            else connector.target_type
+            if connector
+            else (state.target_type or "target")
+        )
         if target_type == "ssh":
             mode = getattr(target, "mode", "password_and_key") if target else "password_and_key"
             credential_mode = {
@@ -337,7 +346,13 @@ async def account_page(request: Request):
         )
         access.append({
             "id": state.target,
-            "name": target.display_name if target else state.target,
+            "name": (
+                target.display_name
+                if target
+                else connector.display_name
+                if connector
+                else state.target
+            ),
             "type": target_type,
             "credential_mode": credential_mode,
             "view": view,

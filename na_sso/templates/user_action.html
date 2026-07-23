@@ -50,13 +50,20 @@
     <div>The restored user must sign in and replace this password before assigned remote accounts are provisioned again.</div>
   </div>
   <form method="post" class="stack-3">
+    {% set password_error = field_errors.get('password') %}
     <div class="field">
       <label class="label" for="restore-password">New temporary password</label>
-      <input class="input" id="restore-password" name="password" type="password" required autocomplete="new-password">
+      <input class="input{{ ' input-error' if password_error else '' }}" id="restore-password" name="password" type="password" required autocomplete="new-password"
+             aria-describedby="password-checks{% if password_error %} restore-password-error{% endif %}"
+             {% if password_error %}aria-invalid="true"{% endif %}>
+      {% if password_error %}<div class="field-error" id="restore-password-error">{{ password_error }}</div>{% endif %}
     </div>
+    {% set confirm_password_error = field_errors.get('confirm_password') %}
     <div class="field">
       <label class="label" for="restore-password-confirm">Confirm temporary password</label>
-      <input class="input" id="restore-password-confirm" name="confirm_password" type="password" required autocomplete="new-password">
+      <input class="input{{ ' input-error' if confirm_password_error else '' }}" id="restore-password-confirm" name="confirm_password" type="password" required autocomplete="new-password"
+             {% if confirm_password_error %}aria-invalid="true" aria-describedby="restore-password-confirm-error"{% endif %}>
+      {% if confirm_password_error %}<div class="field-error" id="restore-password-confirm-error">{{ confirm_password_error }}</div>{% endif %}
     </div>
     <div class="data-list" id="password-checks" aria-live="polite"></div>
     <div class="hero-actions">

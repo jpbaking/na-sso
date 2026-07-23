@@ -82,12 +82,31 @@ def _render(request: Request, name: str, ctx: dict, **kw):
     ctx.setdefault("password_policy", get_settings().file.password_policy)
     ctx.setdefault("admin_area", True)
     ctx.setdefault("form_values", {})
+    ctx.setdefault("field_errors", {})
     principal = current_user(request)
     role = principal["role"] if principal else "user"
     ctx.setdefault("permissions", permission_context(role))
     ctx.setdefault("assignable_roles", ASSIGNABLE_ROLES)
     ctx.setdefault("role_definition", role_definition)
     return template_response(templates, request, name, ctx, **kw)
+
+
+def _form_error(message: str, field: str | None = None) -> dict:
+    return {
+        "error": message,
+        "field_errors": {field: message} if field else {},
+    }
+
+
+def _identity_error_field(message: str, *, editing: bool = False) -> str | None:
+    lowered = message.lower()
+    if "email" in lowered:
+        return "email"
+    if "display name" in lowered:
+        return "display_name"
+    if "username" in lowered and not editing:
+        return "username"
+    return None
 
 
 def _user_form_values(
@@ -298,13 +317,17 @@ async def create_user(
         return _render(request, "user_form.html", {
             "user": None,
             "admin": admin,
-            "error": "Generate the password again, save the full value, and confirm the handoff before creating the user.",
+            **_form_error(
+                "Generate the password again, save the full value, and confirm "
+                "the handoff before creating the user.",
+                "password",
+            ),
             "form_values": form_values,
         }, status_code=422)
     if confirm_password is not None and password_generated != "true" and password != confirm_password:
         return _render(request, "user_form.html", {
             "user": None, "admin": admin, "suggested": "",
-            "error": "Password confirmation does not match.",
+            **_form_error("Password confirmation does not match.", "confirm_password"),
             "form_values": form_values,
             "targets": _targets_context(),
             "password_policy": get_settings().file.password_policy,
@@ -315,7 +338,11 @@ async def create_user(
             "user_form.html",
             {"user": None, "admin": admin, "suggested": password,
              "form_values": form_values,
-             "error": "Username must use lowercase letters, digits, underscores, dots or hyphens; separators cannot be first or last."},
+             **_form_error(
+                 "Username must use lowercase letters, digits, underscores, "
+                 "dots or hyphens; separators cannot be first or last.",
+                 "username",
+             )},
             status_code=422,
         )
     with get_session() as db:
@@ -325,14 +352,18 @@ async def create_user(
                 "user_form.html",
                 {"user": None, "admin": admin, "suggested": password,
                  "form_values": form_values,
-                 "error": f"Username '{username}' already exists."},
+                 **_form_error(
+                     f"Username '{username}' already exists.",
+                     "username",
+                 )},
                 status_code=422,
             )
         validation = validate_password(password, username=username, email=email, display_name=display_name)
         if not validation.valid:
+            message = " ".join(validation.errors)
             return _render(request, "user_form.html", {"user": None, "admin": admin,
                 "suggested": password, "form_values": form_values,
-                "error": " ".join(validation.errors)}, status_code=422)
+                **_form_error(message, "password")}, status_code=422)
         connectors = {item.target_id: item for item in get_connectors()}
         if any(item not in connectors for item in target_ids):
             return RedirectResponse("/users/new", status_code=303)
@@ -350,7 +381,11 @@ async def create_user(
         if not identity.ok:
             return _render(request, "user_form.html", {"user": None, "admin": admin,
                 "suggested": "", "form_values": form_values,
-                "error": identity.detail, "targets": list(connectors.values()),
+                **_form_error(
+                    identity.detail,
+                    _identity_error_field(identity.detail),
+                ),
+                "targets": list(connectors.values()),
                 "password_policy": get_settings().file.password_policy}, status_code=422)
         user.desired_action = "ensure"
         db.add(user)
@@ -671,6 +706,7 @@ async def update_user(
     admin = _guard(request)
     if isinstance(admin, Response):
         return admin
+    password_reset = bool(password.strip())
     with get_session() as db:
         user = db.get(ManagedUser, user_id)
         if not user or user.desired_action == "delete" or not _can_manage_subject(request, user):
@@ -688,7 +724,11 @@ async def update_user(
             return _render(request, "user_form.html", {
                 "user": user,
                 "admin": admin,
-                "error": "Generate the password again, save the full value, and confirm the handoff before saving the reset.",
+                **_form_error(
+                    "Generate the password again, save the full value, and "
+                    "confirm the handoff before saving the reset.",
+                    "password",
+                ),
                 "form_values": form_values,
                 "targets": list(connectors.values()),
             }, status_code=422)
@@ -699,7 +739,11 @@ async def update_user(
         if not identity.ok:
             return _render(request, "user_form.html", {"user": user, "admin": admin,
                 "suggested": "", "form_values": form_values,
-                "error": identity.detail, "targets": list(connectors.values()),
+                **_form_error(
+                    identity.detail,
+                    _identity_error_field(identity.detail, editing=True),
+                ),
+                "targets": list(connectors.values()),
                 "password_policy": get_settings().file.password_policy}, status_code=422)
         user.display_name = proposed.display_name
         user.email = proposed.email
@@ -712,12 +756,15 @@ async def update_user(
             user.role = role
         if user.role != old_role:
             user.session_version += 1
-        if password.strip():
+        if password_reset:
             if confirm_password is not None and password_generated != "true" and password.strip() != confirm_password:
                 return _render(request, "user_form.html", {
                     "user": user, "admin": admin, "suggested": "",
                     "form_values": form_values,
-                    "error": "Password confirmation does not match.",
+                    **_form_error(
+                        "Password confirmation does not match.",
+                        "confirm_password",
+                    ),
                     "targets": list(connectors.values()),
                     "password_policy": get_settings().file.password_policy,
                 }, status_code=422)
@@ -725,9 +772,10 @@ async def update_user(
             validation = validate_password(password.strip(), username=user.username, email=user.email,
                                            display_name=user.display_name, history_hashes=history)
             if not validation.valid:
+                message = " ".join(validation.errors)
                 return _render(request, "user_form.html", {"user": user, "admin": admin,
                     "suggested": password, "form_values": form_values,
-                    "error": " ".join(validation.errors)}, status_code=422)
+                    **_form_error(message, "password")}, status_code=422)
             if user.password_hash:
                 db.add(PasswordHistory(user_id=user.id, password_hash=user.password_hash))
             user.password_hash = hash_password(password.strip())
@@ -756,7 +804,7 @@ async def update_user(
             )
         user.desired_action = "ensure"
         _set_pending(db, user, password.strip() or None, None if not get_settings().config_file and not target_ids else set(target_ids),
-                     require_password_change=bool(password.strip()), assignment_actor=admin)
+                     require_password_change=password_reset, assignment_actor=admin)
         record_audit(db, admin, "user.update", user.username, operation_id=operation.id)
         if user.role != old_role:
             record_audit(
@@ -768,7 +816,13 @@ async def update_user(
     return redirect_with_feedback(
         "/users",
         title="Changes saved",
-        message=f"{user.username} was updated and target synchronization has started.",
+        message=(
+            f"{user.username} was updated; a temporary password was set and "
+            "the user must change it at next sign-in. Target synchronization "
+            "has started."
+            if password_reset
+            else f"{user.username} was updated and target synchronization has started."
+        ),
     )
 
 
@@ -780,6 +834,7 @@ def _lifecycle_action_page(
     action_kind: str,
     title: str,
     error: str = "",
+    error_field: str | None = None,
     status_code: int = 200,
 ):
     with get_session() as db:
@@ -819,6 +874,7 @@ def _lifecycle_action_page(
             ),
             "operation": operation,
             "error": error,
+            "field_errors": {error_field: error} if error and error_field else {},
             "error_title": f"{title} not confirmed",
         },
         status_code=status_code,
@@ -991,17 +1047,20 @@ async def restore_user(
                 action_kind="restore",
                 title="Restore user",
                 error="Password confirmation does not match.",
+                error_field="confirm_password",
                 status_code=422,
             )
         validation = validate_password(password.strip(), username=user.username, email=user.email, display_name=user.display_name)
         if not validation.valid:
+            message = " ".join(validation.errors)
             return _lifecycle_action_page(
                 request,
                 admin,
                 user,
                 action_kind="restore",
                 title="Restore user",
-                error=" ".join(validation.errors),
+                error=message,
+                error_field="password",
                 status_code=422,
             )
         try:

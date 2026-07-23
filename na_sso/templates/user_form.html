@@ -12,37 +12,53 @@
   {% endif %}
   <form method="post" action="{{ '/users/' ~ user.id if user else '/users/new' }}" class="stack-3">
     {% if not user %}
+    {% set username_error = field_errors.get('username') %}
     <div class="field">
       <label class="label" for="username">Username</label>
-      <input class="input" id="username" name="username" required maxlength="32"
+      <input class="input{{ ' input-error' if username_error else '' }}" id="username" name="username" required maxlength="32"
              pattern="[a-z](?:[a-z0-9_\-]{0,30}[a-z0-9])?"
              value="{{ form_values.get('username', '') }}"
-             autocapitalize="none" spellcheck="false">
+             autocapitalize="none" spellcheck="false"
+             {% if username_error %}aria-invalid="true" aria-describedby="username-error"{% endif %}>
+      {% if username_error %}<div class="field-error" id="username-error">{{ username_error }}</div>{% endif %}
       <div class="field-hint">Portable Unix name, valid on every supported target: starts with a letter; lowercase letters, digits, underscores and hyphens; ends with a letter or digit; at most 32 characters.</div>
     </div>
     {% endif %}
+    {% set display_name_error = field_errors.get('display_name') %}
     <div class="field">
       <label class="label" for="display_name">Display name</label>
-      <input class="input" id="display_name" name="display_name" required
-             value="{{ form_values.get('display_name', user.display_name if user else '') }}">
+      <input class="input{{ ' input-error' if display_name_error else '' }}" id="display_name" name="display_name" required
+             value="{{ form_values.get('display_name', user.display_name if user else '') }}"
+             {% if display_name_error %}aria-invalid="true" aria-describedby="display-name-error"{% endif %}>
+      {% if display_name_error %}<div class="field-error" id="display-name-error">{{ display_name_error }}</div>{% endif %}
     </div>
+    {% set email_error = field_errors.get('email') %}
     <div class="field">
       <label class="label" for="email">Email</label>
-      <input class="input" id="email" name="email" type="email" required
-             value="{{ form_values.get('email', user.email if user else '') }}">
+      <input class="input{{ ' input-error' if email_error else '' }}" id="email" name="email" type="email" required
+             value="{{ form_values.get('email', user.email if user else '') }}"
+             {% if email_error %}aria-invalid="true" aria-describedby="email-error"{% endif %}>
+      {% if email_error %}<div class="field-error" id="email-error">{{ email_error }}</div>{% endif %}
     </div>
+    {% set password_error = field_errors.get('password') %}
     <div class="field">
       <label class="label" for="password">{{ "New password (leave blank to keep)" if user else "Password" }}</label>
-      <input class="input" id="password" name="password" type="password" {{ '' if user else 'required' }}>
+      <input class="input{{ ' input-error' if password_error else '' }}" id="password" name="password" type="password" {{ '' if user else 'required' }}
+             aria-describedby="password-checks{% if password_error %} password-error{% endif %}"
+             {% if password_error %}aria-invalid="true"{% endif %}>
+      {% if password_error %}<div class="field-error" id="password-error">{{ password_error }}</div>{% endif %}
       <input id="password-generated" name="password_generated" type="hidden" value="false">
       <input id="credential-handoff-confirmed" name="credential_handoff_confirmed" type="hidden" value="false">
       <button class="btn btn-secondary btn-sm" type="button" id="generate-password">Generate</button>
       <div class="field-hint">Password history is checked securely when you submit.</div>
       <div class="data-list" id="password-checks" aria-live="polite"></div>
     </div>
-    <div class="field" id="confirm-password-field" hidden>
+    {% set confirm_password_error = field_errors.get('confirm_password') %}
+    <div class="field" id="confirm-password-field" {% if not confirm_password_error %}hidden{% endif %}>
       <label class="label" for="confirm-password">Confirm password</label>
-      <input class="input" id="confirm-password" name="confirm_password" type="password" autocomplete="new-password">
+      <input class="input{{ ' input-error' if confirm_password_error else '' }}" id="confirm-password" name="confirm_password" type="password" autocomplete="new-password"
+             {% if confirm_password_error %}aria-invalid="true" aria-describedby="confirm-password-error"{% endif %}>
+      {% if confirm_password_error %}<div class="field-error" id="confirm-password-error">{{ confirm_password_error }}</div>{% endif %}
     </div>
     <div class="field">
       <div class="label">Target assignments</div>
