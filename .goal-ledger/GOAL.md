@@ -39,3 +39,4 @@
 - Gate A + B + C approved by user 2026-07-24 ("I approve, proceed as you see fit"; "Good on delegation")
 - all 5 phases delivered via codex strong-tier slices with independent orchestrator gate runs; phase-0004 live-verified the end-to-end path by capturing a real end-user message in the self-contained Mailpit demo inbox
 - user accepted 2026-07-24; squash preconditions verified (11/11 Goal-ID, no merges, branch unpublished); squashed to one snapshot, ff-merged to main, branch deleted, pushed; .goal-ledger retained; the deferred phase-0005 live-CI check is recorded below by a follow-up commit once the run finishes (it cannot precede the push that triggers it)
+- deferred phase-0005 check SATISFIED 2026-07-24: live CI run 30047834479 on main GREEN — Unit 3m51s, Browser 1m29s (https://github.com/jpbaking/na-sso/actions/runs/30047834479); email-channel + Mailpit-demo changes verified in CI

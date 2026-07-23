@@ -17,3 +17,4 @@
 - orchestrator DOX pass: na_sso/DOX.md Notifications entry already current (end-user email + email_delivery.py); root DOX.md Demo entry already names the Mailpit inbox (phase-0004); notifications were never a root-map top-level entry (webhooks aren't either — detail lives in na_sso/DOX.md), so no root-map email row added; tests/DOX.md is convention-based (test_<module>.py one-to-one) and the new tests/test_email_delivery.py conforms — unaffected; all DOX current
 - orchestrator final local verification: full unit 302 passed, 19 deselected; browser 19 passed; validator (with git) clean
 - sub-task 4 deferred to the completion procedure with user-visible reason (the first live run on main can only start after the acceptance push); the check is deferred, not dropped
+- sub-task 4 SATISFIED 2026-07-24: post-acceptance CI run 30047834479 on main GREEN (Unit 3m51s, Browser 1m29s) — https://github.com/jpbaking/na-sso/actions/runs/30047834479
