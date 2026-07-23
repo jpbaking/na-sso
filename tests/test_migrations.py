@@ -65,6 +65,54 @@ def test_legacy_database_gets_retry_and_soft_delete_columns(tmp_path, monkeypatc
     config.get_settings.cache_clear()
 
 
+def test_legacy_webhook_deliveries_gain_channel_and_recipient(tmp_path, monkeypatch):
+    path = tmp_path / "legacy-webhook-deliveries.db"
+    _legacy_db(path)
+    with sqlite3.connect(path) as connection:
+        connection.executescript("""
+        CREATE TABLE webhook_deliveries (
+            id VARCHAR(36) PRIMARY KEY,
+            endpoint_id VARCHAR(64) NOT NULL,
+            event_type VARCHAR(64) NOT NULL,
+            dedupe_key VARCHAR(256) NOT NULL,
+            payload TEXT NOT NULL,
+            status VARCHAR(24) NOT NULL,
+            attempt_count INTEGER NOT NULL,
+            next_attempt_at DATETIME,
+            last_error VARCHAR(300) NOT NULL,
+            created_at DATETIME NOT NULL,
+            delivered_at DATETIME,
+            UNIQUE (endpoint_id, dedupe_key)
+        );
+        INSERT INTO webhook_deliveries VALUES (
+            'legacy-delivery', 'ops_hook', 'password.expired', 'legacy-key',
+            '{}', 'pending', 0, CURRENT_TIMESTAMP, '', CURRENT_TIMESTAMP, NULL
+        );
+        """)
+
+    monkeypatch.setenv("NA_SSO_DATABASE_PATH", str(path))
+    import na_sso.config as config
+    import na_sso.db as db
+
+    config.get_settings.cache_clear()
+    db._engine = db._session_factory = None
+    db.init_db()
+
+    with sqlite3.connect(path) as connection:
+        columns = {
+            row[1]: row
+            for row in connection.execute("PRAGMA table_info(webhook_deliveries)")
+        }
+        assert columns["channel"][2:] == ("VARCHAR(16)", 1, "'webhook'", 0)
+        assert columns["recipient"][2:] == ("VARCHAR(254)", 0, None, 0)
+        assert connection.execute(
+            "SELECT channel, recipient FROM webhook_deliveries"
+        ).fetchone() == ("webhook", None)
+
+    db._engine = db._session_factory = None
+    config.get_settings.cache_clear()
+
+
 def test_legacy_database_gains_target_openvpn_configs_table(tmp_path, monkeypatch):
     path = tmp_path / "legacy-openvpn.db"
     _legacy_db(path)

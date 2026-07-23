@@ -248,6 +248,10 @@ class WebhookDelivery(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     endpoint_id: Mapped[str] = mapped_column(String(64), index=True)
+    channel: Mapped[str] = mapped_column(
+        String(16), default="webhook", server_default="webhook"
+    )
+    recipient: Mapped[str | None] = mapped_column(String(254), default=None)
     event_type: Mapped[str] = mapped_column(String(64), index=True)
     dedupe_key: Mapped[str] = mapped_column(String(256))
     payload: Mapped[str] = mapped_column(Text)

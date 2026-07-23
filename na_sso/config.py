@@ -178,6 +178,29 @@ NotificationEvent = Literal[
 ]
 
 
+class EmailChannel(StrictModel):
+    enabled: bool = False
+    host: str = ""
+    port: int = Field(default=25, ge=1, le=65535)
+    from_address: str = ""
+    tls_mode: Literal["none", "starttls", "tls"] = "starttls"
+    username: str | None = None
+    password: SecretStr | None = None
+    events: list[NotificationEvent] = []
+
+    @model_validator(mode="after")
+    def validate_channel(self) -> "EmailChannel":
+        if self.enabled and not self.host.strip():
+            raise ValueError("enabled email channel requires a non-empty host")
+        if self.enabled and not self.from_address.strip():
+            raise ValueError("enabled email channel requires a non-empty from_address")
+        if self.from_address and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", self.from_address):
+            raise ValueError("email channel from_address must look like an email address")
+        if len(self.events) != len(set(self.events)):
+            raise ValueError("email channel events must contain unique supported values")
+        return self
+
+
 class WebhookEndpoint(StrictModel):
     id: str = Field(pattern=r"^[a-z][a-z0-9_-]{1,63}$")
     url: str = Field(max_length=1000)
@@ -204,6 +227,7 @@ class NotificationPolicy(StrictModel):
     retry_max_seconds: int = Field(default=3600, ge=1, le=604800)
     delivery_scan_seconds: int = Field(default=10, ge=1, le=3600)
     endpoints: list[WebhookEndpoint] = []
+    email_channel: EmailChannel | None = None
 
     @model_validator(mode="after")
     def validate_notifications(self) -> "NotificationPolicy":

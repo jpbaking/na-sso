@@ -68,6 +68,12 @@ services:
       timeout: 2s
       retries: 15
 
+  mailpit:
+    image: axllent/mailpit:v1.30.5
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+
   na-sso-demo:
     image: na-sso:local
     restart: unless-stopped
@@ -79,6 +85,8 @@ services:
         condition: service_healthy
       demo-ssh-combined:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     ports:
       - "8001:8000"
     volumes:

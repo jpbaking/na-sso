@@ -72,6 +72,10 @@ def init_db() -> None:
         "lifecycle_operations": {
             "parent_id": "VARCHAR(36)",
         },
+        "webhook_deliveries": {
+            "channel": "VARCHAR(16) NOT NULL DEFAULT 'webhook'",
+            "recipient": "VARCHAR(254)",
+        },
     }
     with get_engine().begin() as connection:
         for table, columns in upgrades.items():

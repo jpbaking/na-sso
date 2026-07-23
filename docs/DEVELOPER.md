@@ -28,7 +28,7 @@ for the complete demo. Follow the nearest `AGENTS.md` before editing any path.
 | Application startup | `na_sso/main.py` | Lifespan, database initialization, retry/retention/notification/reconciliation/governance workers, routes, and static mounts. |
 | Configuration | `na_sso/config.py` | Strict YAML models, environment references, policies, and target registry. |
 | Lifecycle contract | `na_sso/lifecycle.py` | Typed commands, states, conflicts, terminal checks, and UI presentation. |
-| Persistence | `na_sso/models.py` | Managed users, correlated operations/attempts, sync state, encrypted target credentials/TOTP, public WebAuthn credentials, retention-governed audit events, and webhook delivery state. |
+| Persistence | `na_sso/models.py` | Managed users, correlated operations/attempts, sync state, encrypted target credentials/TOTP, public WebAuthn credentials, retention-governed audit events, and notification delivery state. |
 | Authentication | `na_sso/auth.py`, `na_sso/request_security.py` | Same-origin request boundary, hardened sessions/headers, login, password actions, scoped permission gates, administrator MFA/recovery, and SSH enrollment. |
 | SSH key lifecycle | `na_sso/ssh_keys.py` | Named public keys, validation, add-before-revoke rotation, revocation, expiry, and audited synchronization. |
 | User lifecycle | `na_sso/users.py` | Create, edit, assign, disable, delete, restore, purge, and manual retry. |
@@ -43,7 +43,7 @@ for the complete demo. Follow the nearest `AGENTS.md` before editing any path.
 | Access governance | `na_sso/governance.py` | Effective-date/inactivity policy, automation worker, access review drafts, reviewer attestations, and reminders. |
 | UI feedback | `na_sso/feedback.py` | Signed one-time mutation outcomes and safe template rendering across redirects. |
 | Operations | `na_sso/operations.py` | Durable operation creation, conflict handling, progress, target attempts, and completion. |
-| Notifications | `na_sso/notifications.py` | Redacted event enqueue, signed webhook delivery/retry, and root destination controls. |
+| Notifications | `na_sso/notifications.py` | Redacted event enqueue, signed webhook and end-user email delivery/retry, and root destination controls. |
 | Synchronization | `na_sso/sync.py` | Serialized fan-out, operation correlation, encrypted pending secrets, retry scheduling, and recovery worker. |
 | Target onboarding | `na_sso/target_credentials.py` | Encrypted credential revisions, credential proof, current reachability, sanitized probe history, and connection retry. |
 | Connectors | `na_sso/connectors/` | Target-specific API and pinned-host SSH adapters. |
@@ -363,12 +363,15 @@ real options, cookies, storage, scopes, TOTP, and recovery behavior.
 `notifications.py` owns both event enqueue and delivery. Producers provide only
 the allowlisted actor, subject, operation, target, and outcome fields plus a
 stable dedupe key; they never pass connector detail. One delivery row is
-created per active subscribed endpoint. The worker reconstructs endpoint
-secrets from strict YAML, signs the exact stored JSON body, does not follow
-redirects, and records a safe HTTP status or exception class for retry. Runtime
-disable state is separate from immutable configuration. New notification event
-sources must add a stable dedupe contract and tests proving the payload cannot
-carry source detail or secrets.
+created per active subscribed webhook endpoint, plus one email row when the
+event has an end-user template and the managed user has an email address. The
+worker reconstructs webhook or SMTP configuration from strict YAML. Webhooks
+sign the exact stored JSON body and do not follow redirects; email uses the
+stored human-readable subject/body and recipient. Both paths retain only a safe
+status or exception class for retry. Runtime webhook disable state is separate
+from immutable configuration; the email channel is configuration-controlled.
+New notification event sources must add a stable dedupe contract and tests
+proving the payload cannot carry source detail or secrets.
 
 ## Connector contracts
 
@@ -407,6 +410,10 @@ Tests use temporary SQLite databases, mocked HTTP responses, or loopback mock
 servers and do not contact real targets by default. Container-affecting changes
 also require an image build and bounded log inspection through
 `compose-helper.sh`.
+
+SMTP delivery tests run against an in-process `aiosmtpd` server, so the suite
+does not require an external SMTP service. The self-contained demo instead
+captures messages in Mailpit; see the [demo email workflow](DEMO.md#inspect-demo-email).
 
 ### Browser verification
 

@@ -110,6 +110,15 @@ notification_policy:
   #   secret: ${IDENTITY_ALERTS_WEBHOOK_SECRET}
   #   enabled: true
   #   events: [sync.persistent_failure, password.expired, lifecycle.completed, approval.completed, access_review.reminder]
+  # email_channel:
+  #   enabled: true
+  #   host: smtp.example.lan
+  #   port: 587
+  #   from_address: na-sso@example.lan
+  #   tls_mode: starttls  # none, starttls, or tls
+  #   username: na-sso
+  #   password: ${NA_SSO_SMTP_PASSWORD}
+  #   events: [sync.persistent_failure, password.expired, lifecycle.completed, approval.completed, access_review.reminder]
 
 # Target management credentials are saved in the Targets UI, where they are
 # encrypted in SQLite and never rendered back. They are not configured in this

@@ -388,11 +388,11 @@ Prioritize these feature additions:
     conformance tests, capability discovery, and a safe dry-run mode.
 
 Consider self-service access requests only after delegated administration and
-approval exist, and after notifications can reach end users directly over
-email/SMS — today's outbound notifications are operator webhooks only, and a
-request/approval workflow must be able to tell requesters and approvers what
-happened without them polling the console. Keep final provisioning authority
-with operators and continue to leave authentication on each target.
+approval exist. End-user SMTP email delivery was delivered on 2026-07-24, so a
+future request/approval workflow can tell requesters and approvers what happened
+without requiring them to poll the console. SMS remains an optional deferred
+channel. Keep final provisioning authority with operators and continue to leave
+authentication on each target.
 
 ## Verification backlog
 
@@ -509,17 +509,24 @@ federate identities, or broker target sessions.
 | Connector contract | Contract 1.1 publishes machine-readable capabilities, typed retry-aware errors, bounded timeouts, inspection-only dry-run, discovery, per-operation support declarations, conformance tests, and third-party extension guidance. | `na_sso/connectors/base.py`, `docs/CONNECTORS.md`, `tests/test_connector_contract.py` |
 | Capability-declared unsupported operations (deferred item) | Default-supported ensure, disable, and delete declarations are checked before mutation; unsupported work becomes a terminal outcome without a target attempt, while dry-run, reconciliation, operator decision surfaces, and the targets API expose the limitation in advance. | `na_sso/connectors/base.py`, `na_sso/sync.py`, `na_sso/reconciliation.py`, `na_sso/users.py`, `tests/test_connector_contract.py`, `tests/test_sync.py` |
 | Notifications and webhooks (Phase 3 plan item) | Policy-driven outbound notifications with per-endpoint event allowlists (`sync.persistent_failure`, `password.expired`, `lifecycle.completed`, `approval.completed`, `access_review.reminder`), HMAC-signed deliveries with retry/disable states, and no connector detail or secrets in payloads. | `na_sso/notifications.py`, `tests/test_notifications.py`, `.config/na-sso.yaml.example` |
+| SMTP end-user email | A second durable delivery channel resolves recipients from managed-user email addresses, renders allowlisted lifecycle/password/approval messages, shares webhook retry/backoff/audit state, exposes safe admin visibility and retry, and is demo-verified through the self-contained Mailpit inbox. SMS is deferred. | `na_sso/email_delivery.py`, `na_sso/config.py` (`EmailChannel`), `na_sso/notifications.py`, `tests/test_email_delivery.py`, `tests/test_notifications.py`, `tests/test_migrations.py`, `docker-compose-demo.yaml`, `docs/DEMO.md` |
 
 Self-service access requests remain outside this delivered phase. This follows
 the original sequencing recommendation rather than deferring a committed item:
 operators retain final provisioning authority, and no end-user request workflow
-was included in the prioritised capability list. Decision 2026-07-23: direct
-end-user notification delivery (email/SMS) is an additional precondition for
-any future self-service request workflow.
+was included in the prioritised capability list. Decision 2026-07-23, updated
+2026-07-24: direct end-user reachability remains a precondition for any future
+self-service request workflow. SMTP email delivery satisfies that precondition
+and was demo-verified through the self-contained Mailpit inbox. SMS is explicitly
+deferred because no local-mock equivalent exists and a live demonstration would
+require an external provider, conflicting with the demo's no-external-dependency
+constraint. Self-service access requests are therefore no longer blocked on
+end-user reachability.
 
 ## Deferred future work
 
 The sole deferred item, capability-declared unsupported operations, was
 delivered on 2026-07-23 as Connector Contract 1.1. Its outcome and primary
-evidence are recorded in **Prioritised expansion** above; no deferred entries
-remain.
+evidence are recorded in **Prioritised expansion** above. SMS is separately
+deferred as an optional additional notification channel; SMTP email now provides
+the required end-user reachability without an external demo dependency.

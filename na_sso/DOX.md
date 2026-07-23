@@ -37,7 +37,7 @@ Owns all Python modules, templates, and static assets under `na_sso/`. Connector
 - **Service accounts** — scoped expiring Bearer credentials with overlap rotation. Start: `service_accounts.py`.
 - **CLI (`na-ssoctl`)** — scripted preview/apply/status/export over API v1. Start: `cli.py`.
 - **Audit** — retention-governed audit events, query, and export. Start: `audit.py`. Files: `audit_query.py`, `audit_retention.py`.
-- **Notifications** — redacted events, signed webhook delivery/retry, root destination controls. Start: `notifications.py`.
+- **Notifications** — durable redacted webhook and end-user email delivery with shared retry/audit handling, safe admin visibility, and root destination controls. Start: `notifications.py`. Files: `email_delivery.py`, `models.py`, `db.py`, `templates/notifications.html`.
 - **Target onboarding** — encrypted credential revisions, probes, reachability. Start: `target_credentials.py`.
 - **OpenVPN target configuration and self-service** — per-OPNsense discovery and export-preset verification, plus assigned-user profile downloads that are never persisted. Start: `status.py`. Files: `auth.py`, `models.py`, `templates/status.html`, `templates/account.html`.
 - **Admin UI** — server-rendered templates with live state updates. Start: `templates/base.html`. Files: `templates/`, `static/app.css`, `feedback.py`.

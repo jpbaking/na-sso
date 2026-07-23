@@ -15,6 +15,15 @@ version: 1
 password_policy: {min_length: 14, history_size: 3, expires_after_days: 90, expiry_acknowledgement_mode: grace, expiry_acknowledgement_grace_days: 14, expiry_acknowledgement_limit: 1}
 ssh_key_policy: {allowed_algorithms: [ed25519, rsa], rsa_min_bits: 3072, browser_generation: true, allow_server_fallback: true}
 support_policy: {label: Contact the demo operator, url: null, guidance: Share the affected demo target name; never share passwords or private keys.}
+notification_policy:
+  enabled: true
+  email_channel:
+    enabled: true
+    host: mailpit
+    port: 1025
+    from_address: na-sso@demo.local
+    tls_mode: none
+    events: [lifecycle.completed, password.expired, approval.completed]
 targets:
   - {id: ssh_password, type: ssh, display_name: Debian SSH password, host: demo-ssh-password, port: 22, host_key_sha256: ${password_fp}, platform: debian, allow_relaxed_usernames: false, mode: password}
   - {id: ssh_combined, type: ssh, display_name: Debian SSH key and password, host: demo-ssh-combined, port: 22, host_key_sha256: ${combined_fp}, platform: debian, allow_relaxed_usernames: true, mode: password_and_key, default_groups: [developers]}

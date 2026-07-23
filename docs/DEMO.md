@@ -24,6 +24,21 @@ The demo uses `docker-compose-demo.yaml`, the `<normal-project>-demo` Compose
 project, and public bootstrap settings from `.config-demo/.env`. It does not
 read `.config/` and can run alongside the normal application on port 8000.
 
+## Inspect demo email
+
+The demo includes a self-contained Mailpit inbox, so end-user notifications
+never leave the Compose network or require an external mail server. Its web UI
+is available at <http://127.0.0.1:8025>.
+
+1. Bring up the demo with `./compose-helper.sh demo-rebuild`.
+2. Trigger an end-user event, such as provisioning or assigning a demo user
+   whose email address is set, or performing an administrator password reset.
+3. Open the Mailpit web UI and watch the message arrive.
+
+Stop the demo without deleting its database or generated files with
+`./compose-helper.sh demo-stop`. Use `demo-down` only when intentionally wiping
+all demo data.
+
 ## Configure the demo targets
 
 Target management credentials are intentionally not preloaded. Enter them on

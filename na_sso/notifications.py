@@ -15,7 +15,12 @@ from na_sso.auth import permission_guard
 from na_sso.config import NotificationPolicy, WebhookEndpoint, get_settings
 from na_sso.db import get_session
 from na_sso.feedback import redirect_with_feedback, template_response
-from na_sso.models import AuditEvent, WebhookDelivery, WebhookEndpointState
+from na_sso.models import (
+    AuditEvent,
+    ManagedUser,
+    WebhookDelivery,
+    WebhookEndpointState,
+)
 from na_sso.permissions import MANAGE_SECURITY, permission_context
 
 
@@ -36,6 +41,31 @@ def _endpoint_active(db, endpoint: WebhookEndpoint) -> bool:
     return endpoint.enabled and not (state and state.disabled)
 
 
+def _render_email_notification(
+    event_type: str,
+    *,
+    subject: str,
+) -> tuple[str, str] | None:
+    templates = {
+        "lifecycle.completed": (
+            "Your NA-SSO account is ready",
+            f"Hello {subject},\n\n"
+            "Your NA-SSO account has been provisioned or updated and is ready "
+            "to use.",
+        ),
+        "password.expired": (
+            "Your NA-SSO password has expired",
+            f"Hello {subject},\n\n"
+            "Your NA-SSO password has expired. Sign in and set a new password.",
+        ),
+        "approval.completed": (
+            "Your NA-SSO access request was approved",
+            f"Hello {subject},\n\nYour access request was approved.",
+        ),
+    }
+    return templates.get(event_type)
+
+
 def enqueue_notification(
     db,
     event_type: str,
@@ -47,7 +77,7 @@ def enqueue_notification(
     target_id: str | None = None,
     outcome: str | None = None,
 ) -> int:
-    """Queue allowlisted webhook payloads without connector detail or secrets."""
+    """Queue allowlisted webhook and email payloads without sensitive detail."""
     policy = get_settings().file.notification_policy
     if not policy.enabled:
         return 0
@@ -86,6 +116,54 @@ def enqueue_notification(
             next_attempt_at=_now(),
         ))
         queued += 1
+
+    email_channel = policy.email_channel
+    if (
+        email_channel is None
+        or not email_channel.enabled
+        or event_type not in email_channel.events
+    ):
+        return queued
+    email_content = _render_email_notification(event_type, subject=subject)
+    if email_content is None:
+        db.add(AuditEvent(
+            actor=actor,
+            action="email.skipped_no_template",
+            subject=subject,
+            detail=f"event={event_type}",
+        ))
+        return queued
+    user = db.query(ManagedUser).filter_by(username=subject).one_or_none()
+    if user is None or not user.email:
+        db.add(AuditEvent(
+            actor=actor,
+            action="email.skipped_no_recipient",
+            subject=subject,
+            detail=f"event={event_type}",
+        ))
+        return queued
+    email_key = f"{event_type}:{dedupe_key}:{user.email}"[:256]
+    if db.query(WebhookDelivery).filter_by(
+        endpoint_id="email", dedupe_key=email_key
+    ).first():
+        return queued
+    email_subject, email_body = email_content
+    db.add(WebhookDelivery(
+        id=str(uuid4()),
+        endpoint_id="email",
+        channel="email",
+        recipient=user.email,
+        event_type=event_type,
+        dedupe_key=email_key,
+        payload=json.dumps(
+            {"body": email_body, "subject": email_subject},
+            separators=(",", ":"),
+            sort_keys=True,
+        ),
+        status="pending",
+        next_attempt_at=_now(),
+    ))
+    queued += 1
     return queued
 
 
@@ -102,6 +180,68 @@ def _retry_at(policy: NotificationPolicy, attempt_count: int) -> datetime:
         policy.retry_max_seconds,
     )
     return _now() + timedelta(seconds=seconds)
+
+
+async def _deliver_email(db, delivery: WebhookDelivery, policy: NotificationPolicy) -> None:
+    email_channel = policy.email_channel
+    if email_channel is None or not email_channel.enabled:
+        delivery.status = "disabled"
+        delivery.next_attempt_at = None
+        delivery.last_error = "destination disabled or no longer configured"
+        db.commit()
+        return
+
+    try:
+        from na_sso.email_delivery import send_email
+
+        payload = json.loads(delivery.payload)
+        if not delivery.recipient:
+            raise ValueError("email delivery has no recipient")
+        await send_email(
+            email_channel,
+            to=delivery.recipient,
+            subject=payload["subject"],
+            body=payload["body"],
+        )
+        succeeded = True
+        failure = ""
+    except Exception as error:
+        succeeded = False
+        failure = type(error).__name__
+
+    delivery.attempt_count += 1
+    if succeeded:
+        delivery.status = "delivered"
+        delivery.delivered_at = _now()
+        delivery.next_attempt_at = None
+        delivery.last_error = ""
+        db.add(AuditEvent(
+            actor="email-worker",
+            action="email.delivered",
+            subject=delivery.recipient or "",
+            detail=(
+                f"event={delivery.event_type}; delivery={delivery.id}; "
+                f"attempt={delivery.attempt_count}"
+            ),
+        ))
+    elif delivery.attempt_count >= policy.max_attempts:
+        delivery.status = "failed"
+        delivery.next_attempt_at = None
+        delivery.last_error = failure[:300]
+        db.add(AuditEvent(
+            actor="email-worker",
+            action="email.failed",
+            subject=delivery.recipient or "",
+            detail=(
+                f"event={delivery.event_type}; delivery={delivery.id}; "
+                f"attempts={delivery.attempt_count}; error={failure[:80]}"
+            ),
+        ))
+    else:
+        delivery.status = "retrying"
+        delivery.next_attempt_at = _retry_at(policy, delivery.attempt_count)
+        delivery.last_error = failure[:300]
+    db.commit()
 
 
 async def deliver_due_once(*, client: httpx.AsyncClient | None = None) -> int:
@@ -127,6 +267,10 @@ async def deliver_due_once(*, client: httpx.AsyncClient | None = None) -> int:
                 delivery = db.get(WebhookDelivery, delivery_id)
                 endpoint = endpoints.get(delivery.endpoint_id) if delivery else None
                 if not delivery or delivery.status not in {"pending", "retrying"}:
+                    continue
+                if delivery.channel == "email":
+                    await _deliver_email(db, delivery, policy)
+                    processed += 1
                     continue
                 if endpoint is None or not _endpoint_active(db, endpoint):
                     delivery.status = "disabled"
@@ -284,6 +428,28 @@ async def notification_delivery_retry(request: Request, delivery_id: str):
         delivery = db.get(WebhookDelivery, delivery_id)
         if not delivery or delivery.status not in {"failed", "disabled"}:
             return RedirectResponse("/notifications", status_code=303)
+        if delivery.channel == "email":
+            email_channel = get_settings().file.notification_policy.email_channel
+            if email_channel is None or not email_channel.enabled:
+                return redirect_with_feedback(
+                    "/notifications", title="Retry unavailable",
+                    message="Enable the configured destination before retrying.",
+                    level="danger",
+                )
+            delivery.status = "pending"
+            delivery.attempt_count = 0
+            delivery.next_attempt_at = _now()
+            delivery.last_error = ""
+            db.add(AuditEvent(
+                actor=principal["username"], action="email.retry_requested",
+                subject=delivery.recipient or "",
+                detail=f"delivery={delivery.id}",
+            ))
+            db.commit()
+            return redirect_with_feedback(
+                "/notifications", title="Delivery queued",
+                message=f"Delivery {delivery_id[:8]} will be attempted again.",
+            )
         endpoint = next((
             item for item in get_settings().file.notification_policy.endpoints
             if item.id == delivery.endpoint_id

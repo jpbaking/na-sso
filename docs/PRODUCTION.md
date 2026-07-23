@@ -234,6 +234,39 @@ audited and can be manually requeued from **Notifications**; successful
 deliveries also create audit evidence. Tune `persistent_failure_attempts`,
 `max_attempts`, retry bounds, and scan interval to the receiver's capacity.
 
+### Email notifications
+
+Set `notification_policy.enabled: true` and configure
+`notification_policy.email_channel` to deliver human-readable end-user
+messages:
+
+- `enabled` turns SMTP delivery on for the configured channel.
+- `host` and `port` identify the SMTP server.
+- `from_address` supplies the message's From header.
+- `tls_mode` is `none`, `starttls`, or `tls`; use `none` only for a trusted
+  internal development path, `starttls` for an upgraded connection, and `tls`
+  for implicit TLS.
+- `username` and `password` provide optional SMTP authentication. Use an exact
+  `${ENV_NAME}` reference for `password`; it is write-only and is never
+  rendered on **Notifications**.
+- `events` selects from the end-user templates for `lifecycle.completed`,
+  `password.expired`, and `approval.completed`.
+
+The recipient is resolved from the managed user's email address. If the user
+does not exist or has no email address, no message is queued and
+`email.skipped_no_recipient` is audited. Email deliveries reuse the same durable
+queue, capped retry/backoff, terminal failure, manual retry, and audit machinery
+as webhooks; success and exhaustion create `email.delivered` and `email.failed`
+evidence. The **Notifications** page identifies the email channel, shows its
+recipient in the **Channel**-aware delivery list, and permits failed email
+deliveries to be requeued while the configured channel remains enabled.
+
+The signed webhook guarantee above remains unchanged: webhook JSON never
+contains passwords, keys, connector detail, email addresses, target
+credentials, or response bodies. Email is intentionally different: it sends a
+small human-readable subject and body to the user's own configured address, but
+still contains no passwords, keys, SMTP credentials, or raw connector detail.
+
 The Users inventory accepts at most 100 accounts per bulk confirmation. Every
 bulk assignment, unassignment, disable, or retry has a preview, a durable parent
 correlation ID, per-account audit events, partial validation reporting, and an

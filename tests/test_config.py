@@ -83,6 +83,7 @@ def test_defaults_are_safe_and_complete():
     assert config.admin_mfa_policy.allowed_methods == ["webauthn", "totp"]
     assert config.notification_policy.enabled is False
     assert config.notification_policy.endpoints == []
+    assert config.notification_policy.email_channel is None
     assert config.reconciliation_policy.enabled is False
     assert config.reconciliation_policy.max_users_per_run == 100
     assert config.lifecycle_automation_policy.default_review_interval_days == 90
@@ -209,6 +210,47 @@ def test_notification_policy_requires_signed_safe_unique_bounded_destinations():
     for values in invalid:
         with pytest.raises(ValidationError):
             FileConfig.model_validate({"notification_policy": values})
+
+
+def test_email_channel_requires_enabled_fields_and_valid_values():
+    channel = FileConfig.model_validate({
+        "notification_policy": {
+            "email_channel": {
+                "enabled": True,
+                "host": "smtp.example.test",
+                "port": 587,
+                "from_address": "na-sso@example.test",
+                "tls_mode": "starttls",
+                "username": "na-sso",
+                "password": "write-only",
+                "events": ["password.expired", "lifecycle.completed"],
+            },
+        },
+    }).notification_policy.email_channel
+
+    assert channel is not None
+    assert channel.host == "smtp.example.test"
+    assert channel.tls_mode == "starttls"
+    assert channel.password is not None
+    assert channel.password.get_secret_value() == "write-only"
+
+    invalid = (
+        {"enabled": True, "from_address": "na-sso@example.test"},
+        {"enabled": True, "host": "smtp.example.test"},
+        {
+            "enabled": True,
+            "host": "smtp.example.test",
+            "from_address": "na-sso@example.test",
+            "tls_mode": "implicit",
+        },
+        {"from_address": "not-an-email"},
+        {"events": ["password.expired", "password.expired"]},
+    )
+    for values in invalid:
+        with pytest.raises(ValidationError):
+            FileConfig.model_validate({
+                "notification_policy": {"email_channel": values},
+            })
 
 
 def test_password_expiry_acknowledgement_modes_are_explicit_and_validated():
