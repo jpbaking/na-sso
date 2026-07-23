@@ -3,6 +3,10 @@ name = "na-sso"
 version = "0.1.0"
 description = "Not Another SSO: admin-managed users propagated to local accounts on external targets"
 requires-python = ">=3.12"
+license = { text = "MIT" }
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+]
 dependencies = [
     "aiosmtplib>=3.0",
     "fastapi>=0.115",

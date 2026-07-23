@@ -130,3 +130,9 @@ Start where you fit:
 NA-SSO is intentionally not SSO. It is a practical control plane for
 environments where important systems still own local users and those accounts
 must remain consistent, observable, and recoverable.
+
+## License
+
+Released under the [MIT License](LICENSE). Third-party dependencies are fetched
+at install time and remain under their own licenses — see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
